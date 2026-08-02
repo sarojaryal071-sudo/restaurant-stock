@@ -7,7 +7,7 @@
 <link rel="apple-touch-icon" href="assets/stock-logo.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Stock Counter v2</title>
+<title>Stock Counter</title>
 <style>
 :root{
   --charcoal-0:#121113;--charcoal-1:#1a1819;--charcoal-2:#221f20;--charcoal-3:#2b2728;
@@ -142,12 +142,13 @@ button{font-family:inherit}
 .qty-value.zero{color:var(--qty-zero)}
 .qty-value.low{color:var(--qty-low)}
 .qty-value.good{color:var(--qty-good)}
+.qty-value.negative{color:var(--danger);font-weight:800}
 .item-menu-btn{width:28px;height:28px;background:none;border:none;cursor:pointer;color:var(--paper-faint);display:flex;align-items:center;justify-content:center;border-radius:50%;transition:background 0.15s ease,color 0.15s ease;flex-shrink:0;opacity:0}
 .item-row:hover .item-menu-btn,.item-menu-btn.context-open{opacity:1}
 .item-menu-btn:hover{background:rgba(212,175,55,0.08);color:var(--paper-dim)}
 .item-menu-btn svg{width:14px;height:14px}
 
-.recipe-detail{padding:var(--space-2) var(--space-4);border-top:1px solid var(--line);font-size:0.85rem;color:var(--paper-dim);line-height:1.5}
+.recipe-detail{padding:var(--space-2) var(--space-4);font-size:0.85rem;color:var(--paper-dim);line-height:1.5}
 .recipe-detail strong{color:var(--paper)}
 .recipe-detail .ingredient-row{display:flex;align-items:center;gap:var(--space-2);padding:4px 0}
 .recipe-detail .ingredient-row span{flex:1}
@@ -213,6 +214,23 @@ button{font-family:inherit}
 .ingredient-delete-btn svg{width:16px;height:16px}
 .add-ingredient-btn{width:100%;min-height:40px;background:transparent;border:1px dashed var(--line-strong);border-radius:var(--radius-sm);color:var(--paper-dim);font-size:0.82rem;cursor:pointer;margin-top:8px;transition:background 0.12s ease}
 .add-ingredient-btn:hover{background:rgba(212,175,55,0.05)}
+
+/* Pending Allocations section */
+.pending-allocations-title{display:flex;align-items:center;gap:8px;font-family:var(--font-display);font-size:1rem;font-weight:700;color:var(--paper);margin-bottom:var(--space-3)}
+.pending-badge{background:var(--danger);color:#fff;border-radius:999px;padding:2px 10px;font-size:0.7rem;font-weight:700}
+.pending-alloc-list{display:flex;flex-direction:column;gap:var(--space-3);margin-bottom:var(--space-4)}
+.pending-alloc-card{background:var(--charcoal-1);border:1px solid var(--line);border-radius:var(--radius-md);padding:var(--space-3) var(--space-4);box-shadow:var(--shadow-card)}
+.pending-alloc-card .alloc-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.pending-alloc-card .alloc-name{font-weight:700;color:var(--paper)}
+.pending-alloc-card .alloc-short{color:var(--paper-dim);font-size:0.85rem}
+.pending-alloc-card .alloc-count{color:var(--paper-faint);font-size:0.8rem}
+
+#resolveAllocationModal .modal-card{max-width:500px}
+.replace-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--line)}
+.replace-row:first-child{border-top:none}
+.replace-row .cocktail-name{flex:1;font-size:0.9rem;color:var(--paper)}
+.replace-row select{min-width:160px;background:var(--charcoal-1);border:1px solid var(--line-strong);border-radius:var(--radius-sm);padding:8px 10px;color:var(--paper);font-size:0.82rem}
+.modal-card .btn-gold{margin-left:auto}
 
 .reset-wrap{margin:var(--space-5) 0 var(--space-4)}
 .btn-reset{width:100%;min-height:52px;background:transparent;border:1.5px solid var(--gold-deep);color:var(--gold-bright);border-radius:var(--radius-md);font-weight:700;letter-spacing:0.04em;font-size:0.9rem;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:background 0.15s ease,transform 0.1s ease}
@@ -304,6 +322,15 @@ button{font-family:inherit}
       </div>
       <div class="categories" id="recipesRoot"></div>
       <div class="empty-state" id="recipeEmptyState"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><div>No recipes match your search.</div></div>
+      <!-- Pending Allocations Section -->
+      <div id="pendingAllocationsContainer" class="hidden">
+        <div class="pending-allocations-title">
+          <span>⚠ Pending Allocations</span>
+          <span class="pending-badge hidden" id="pendingBadge">0</span>
+        </div>
+        <div class="pending-alloc-list" id="pendingAllocationsList"></div>
+        <div class="empty-state" id="pendingEmptyState"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg><div>No pending allocations.</div></div>
+      </div>
     </div>
   </div>
 
@@ -383,6 +410,17 @@ button{font-family:inherit}
   </div>
 </div>
 
+<div class="modal-overlay" id="resolveAllocationModal">
+  <div class="modal-card">
+    <div class="modal-title">Resolve Pending Allocation</div>
+    <div id="resolveModalContent"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="resolveCancel">Cancel</button>
+      <button class="btn btn-gold" id="resolveConfirm" disabled>Resolve</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast-stack" id="toastStack"></div>
 
 <script>
@@ -421,10 +459,13 @@ button{font-family:inherit}
   let recipeState = { recipes: [] };
   let editingRecipeId = null;
   let currentPage = 'inventory';
+  let pendingAllocations = [];
+  let currentAllocationDetails = null;
+  let shouldOpenAllocations = false;
 
   function escapeHtml(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
   function cssEscape(s) { return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/[^a-zA-Z0-9_-]/g, '\\$&'); }
-  function qtyClass(q) { if (q <= 0) return 'zero'; if (q <= 5) return 'low'; return 'good'; }
+  function qtyClass(q) { if (q < 0) return 'negative'; if (q <= 0) return 'zero'; if (q <= 5) return 'low'; return 'good'; }
   function fmtTime(d) { return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); }
   function fmtDate(d) { return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }); }
   function uid() { return 'tmp_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
@@ -522,7 +563,12 @@ button{font-family:inherit}
     recordSale: (recipeId, quantity) => apiCall('POST', '/', { action: 'recordSale', recipeId, quantity }),
     getConfig: () => apiCall('GET', '/?action=getConfig'),
     exportInventory: () => apiCall('GET', '/?action=exportInventory', null, 'blob'),
-    resetStock: () => apiCall('POST', '/', { action: 'resetStock' })
+    resetStock: () => apiCall('POST', '/', { action: 'resetStock' }),
+
+    // Pending Allocations
+    listPendingAllocations: () => apiCall('GET', '/?action=listPendingAllocations'),
+    getPendingAllocationDetails: (allocationId) => apiCall('GET', '/?action=getPendingAllocationDetails&allocationId=' + encodeURIComponent(allocationId)),
+    resolvePendingAllocation: (allocationId, mappings) => apiCall('POST', '/', { action: 'resolvePendingAllocation', allocationId, mappings })
   };
 
   function toast(msg, err = false) {
@@ -546,15 +592,30 @@ button{font-family:inherit}
 
   function switchPage(p) {
     currentPage = p;
-    if (p === 'inventory') { pgInv.classList.remove('hidden'); pgRec.classList.add('hidden'); navInv.classList.add('active'); navRec.classList.remove('active'); fabLbl.textContent = 'Actions'; if (isDirty) svBtn.classList.remove('hidden'); else svBtn.classList.add('hidden'); }
-    else { pgInv.classList.add('hidden'); pgRec.classList.remove('hidden'); navInv.classList.remove('active'); navRec.classList.add('active'); fabLbl.textContent = 'Add Recipe'; svBtn.classList.add('hidden'); }
+    if (p === 'inventory') {
+      pgInv.classList.remove('hidden'); pgRec.classList.add('hidden');
+      navInv.classList.add('active'); navRec.classList.remove('active');
+      fabLbl.textContent = 'Actions';
+      if (isDirty) svBtn.classList.remove('hidden'); else svBtn.classList.add('hidden');
+    } else {
+      pgInv.classList.add('hidden'); pgRec.classList.remove('hidden');
+      navInv.classList.remove('active'); navRec.classList.add('active');
+      fabLbl.textContent = 'Add Recipe';
+      svBtn.classList.add('hidden');
+      if (recipeState.recipes.length === 0) loadRecipes();
+      loadPendingAllocations();
+    }
   }
   navInv.addEventListener('click', () => switchPage('inventory'));
-  navRec.addEventListener('click', () => { switchPage('recipes'); if (recipeState.recipes.length === 0) loadRecipes(); });
+  navRec.addEventListener('click', () => switchPage('recipes'));
 
   fab.addEventListener('click', () => {
-    if (currentPage === 'inventory') { if (!state.categories.length) { toast('No categories loaded.', true); return; } openModal(document.getElementById('actionSheetOverlay')); }
-    else openRecipeModal(null);
+    if (currentPage === 'inventory') {
+      if (!state.categories.length) { toast('No categories loaded.', true); return; }
+      openModal(document.getElementById('actionSheetOverlay'));
+    } else {
+      openRecipeModal(null);
+    }
   });
 
   function refreshItem(id) { const f = findItem(id); if (!f) return; const { item } = f; const row = document.querySelector(`.item-row[data-item-id="${cssEscape(id)}"]`); if (!row) return; row.querySelector('.item-name').innerHTML = escapeHtml(item.name) + (item.custom ? '<span class="custom-tag">Custom</span>' : ''); const q = row.querySelector('.qty-value'); q.textContent = item.qty; q.className = 'qty-value ' + qtyClass(item.qty); row.classList.toggle('is-pending', item.qty !== item.lastConfirmedQty); row.dataset.itemName = item.name.toLowerCase(); }
@@ -580,7 +641,61 @@ button{font-family:inherit}
   const rootEl = document.getElementById('categoriesRoot');
   function render() { rootEl.innerHTML = ''; state.categories.forEach(c => rootEl.appendChild(renderCat(c))); updateOverview(); applySearchFilter(); updateDirty(); }
   function renderCat(c) { const card = document.createElement('div'); card.className = 'cat-card' + (expandedState[c.id] ? ' expanded' : ''); card.dataset.catId = c.id; const h = document.createElement('button'); h.className = 'cat-header'; h.setAttribute('aria-expanded', expandedState[c.id] ? 'true' : 'false'); h.innerHTML = `<div class="cat-icon">${ICONS[c.icon] || ICONS.default}</div><div class="cat-title-wrap"><div class="cat-name">${escapeHtml(c.name)}</div><div class="cat-count"><b>${c.items.length}</b> item${c.items.length === 1 ? '' : 's'}</div></div><svg class="cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>`; const mb = document.createElement('button'); mb.className = 'cat-menu-btn'; mb.setAttribute('aria-label', 'Category menu'); mb.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>'; mb.addEventListener('click', ev => { ev.stopPropagation(); openCtx(mb, [{ label: 'Rename Category', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>', action: () => openCatDialog('rename', c) }, { label: 'Delete Category', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>', danger: true, action: () => delCat(c) }]); }); h.appendChild(mb); h.addEventListener('click', ev => { if (ev.target.closest('.cat-menu-btn')) return; expandedState[c.id] = !expandedState[c.id]; card.classList.toggle('expanded'); h.setAttribute('aria-expanded', expandedState[c.id] ? 'true' : 'false'); try { localStorage.setItem(EXPANDED_KEY, JSON.stringify(expandedState)); } catch (e) {} }); const body = document.createElement('div'); body.className = 'cat-body'; const bi = document.createElement('div'); bi.className = 'cat-body-inner'; c.items.forEach(it => bi.appendChild(renderItemRow(c, it))); body.appendChild(bi); card.appendChild(h); card.appendChild(body); return card; }
-  function renderItemRow(c, it) { const row = document.createElement('div'); row.className = 'item-row' + (it.qty !== it.lastConfirmedQty ? ' is-pending' : ''); row.dataset.itemId = it.id; row.dataset.itemName = it.name.toLowerCase(); row.addEventListener('click', e => { if (e.target.closest('button')) return; setActive(it.id); }); const ne = document.createElement('div'); ne.className = 'item-name'; ne.innerHTML = escapeHtml(it.name) + (it.custom ? '<span class="custom-tag">Custom</span>' : ''); const ctrls = document.createElement('div'); ctrls.className = 'qty-controls'; const mb = document.createElement('button'); mb.className = 'qty-btn minus'; mb.setAttribute('aria-label', 'Decrease'); mb.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14"/></svg>'; mb.addEventListener('click', e => { e.stopPropagation(); changeQty(it.id, -1); }); const qe = document.createElement('div'); qe.className = 'qty-value ' + qtyClass(it.qty); qe.textContent = it.qty; const pb = document.createElement('button'); pb.className = 'qty-btn plus'; pb.setAttribute('aria-label', 'Increase'); pb.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>'; pb.addEventListener('click', e => { e.stopPropagation(); changeQty(it.id, 1); }); ctrls.appendChild(mb); ctrls.appendChild(qe); ctrls.appendChild(pb); const editable = it.editable !== false && it.locked !== true; const mnb = document.createElement('button'); mnb.className = 'item-menu-btn'; mnb.setAttribute('aria-label', 'Item menu'); mnb.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>'; if (!editable) mnb.style.display = 'none'; mnb.addEventListener('click', e => { e.stopPropagation(); setActive(it.id); openCtx(mnb, [{ label: 'Edit Item', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>', action: () => openEditItem(it) }, { label: 'Delete Item', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>', danger: true, action: () => delItem(it) }]); }); row.appendChild(ne); row.appendChild(ctrls); row.appendChild(mnb); return row; }
+
+  // Original renderItemRow – we will wrap it later to add the warning
+  function renderItemRowOrig(c, it) {
+    const row = document.createElement('div');
+    row.className = 'item-row' + (it.qty !== it.lastConfirmedQty ? ' is-pending' : '');
+    row.dataset.itemId = it.id;
+    row.dataset.itemName = it.name.toLowerCase();
+    row.addEventListener('click', e => { if (e.target.closest('button')) return; setActive(it.id); });
+    const ne = document.createElement('div');
+    ne.className = 'item-name';
+    ne.innerHTML = escapeHtml(it.name) + (it.custom ? '<span class="custom-tag">Custom</span>' : '');
+    const ctrls = document.createElement('div');
+    ctrls.className = 'qty-controls';
+    const mb = document.createElement('button');
+    mb.className = 'qty-btn minus';
+    mb.setAttribute('aria-label', 'Decrease');
+    mb.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14"/></svg>';
+    mb.addEventListener('click', e => { e.stopPropagation(); changeQty(it.id, -1); });
+    const qe = document.createElement('div');
+    qe.className = 'qty-value ' + qtyClass(it.qty);
+    qe.textContent = it.qty;
+    const pb = document.createElement('button');
+    pb.className = 'qty-btn plus';
+    pb.setAttribute('aria-label', 'Increase');
+    pb.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+    pb.addEventListener('click', e => { e.stopPropagation(); changeQty(it.id, 1); });
+    ctrls.appendChild(mb); ctrls.appendChild(qe); ctrls.appendChild(pb);
+    const editable = it.editable !== false && it.locked !== true;
+    const mnb = document.createElement('button');
+    mnb.className = 'item-menu-btn';
+    mnb.setAttribute('aria-label', 'Item menu');
+    mnb.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>';
+    if (!editable) mnb.style.display = 'none';
+    mnb.addEventListener('click', e => { e.stopPropagation(); setActive(it.id); openCtx(mnb, [{ label: 'Edit Item', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>', action: () => openEditItem(it) }, { label: 'Delete Item', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>', danger: true, action: () => delItem(it) }]); });
+    row.appendChild(ne); row.appendChild(ctrls); row.appendChild(mnb);
+    return row;
+  }
+
+  // Override renderItemRow to add pending allocation warning
+  function renderItemRow(c, it) {
+    const row = renderItemRowOrig(c, it);
+    if (it.qty < 0) {
+      const warning = document.createElement('span');
+      warning.className = 'pending-warning';
+      warning.innerHTML = '⚠ Pending Allocation';
+      warning.addEventListener('click', (e) => {
+        e.stopPropagation();
+        shouldOpenAllocations = true;
+        switchPage('recipes');
+      });
+      row.querySelector('.item-name').appendChild(warning);
+    }
+    return row;
+  }
+
   function updateOverview() { let t = 0, inS = 0, out = 0; state.categories.forEach(c => c.items.forEach(it => { t++; if (it.qty > 0) inS++; else out++; })); document.getElementById('statTotalItems').textContent = t; document.getElementById('statInStock').textContent = inS; document.getElementById('statOutStock').textContent = out; }
 
   function changeQty(iid, delta) { const f = findItem(iid); if (!f) return; const { item } = f; const nq = Math.max(0, item.qty + delta); if (nq === item.qty) return; item.qty = nq; updateItemRowUI(iid, item); updateOverview(); updateDirty(); setActive(iid); }
@@ -638,8 +753,8 @@ button{font-family:inherit}
 
   function openModal(o) { o.classList.add('open'); }
   function closeModal(o) { o.classList.remove('open'); }
-  [ao, ro, eio, co, cdo, aso, document.getElementById('recipeModalOverlay')].forEach(o => { if (o) o.addEventListener('click', e => { if (e.target === o) closeModal(o); }); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') { [ao, ro, eio, co, cdo, aso, document.getElementById('recipeModalOverlay')].forEach(closeModal); } });
+  [ao, ro, eio, co, cdo, aso, document.getElementById('recipeModalOverlay'), document.getElementById('resolveAllocationModal')].forEach(o => { if (o) o.addEventListener('click', e => { if (e.target === o) closeModal(o); }); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { [ao, ro, eio, co, cdo, aso, document.getElementById('recipeModalOverlay'), document.getElementById('resolveAllocationModal')].forEach(closeModal); } });
 
   async function loadRecipes() { try { const d = await api.listRecipes(); recipeState.recipes = (d && Array.isArray(d.recipes)) ? d.recipes : (d && Array.isArray(d) ? d : []); renderRecipes(); } catch (e) { toast('Could not load recipes.', true); } }
   function renderRecipes() { const root = document.getElementById('recipesRoot'); root.innerHTML = ''; const sorted = [...recipeState.recipes].sort((a, b) => (a.name || '').localeCompare(b.name || '')); sorted.forEach(r => root.appendChild(renderRecipeCard(r))); applyRecipeSearch(); }
@@ -691,6 +806,134 @@ button{font-family:inherit}
     catch (e) { toast(e.message || 'Failed to save recipe.', true); } finally { rmf.disabled = false; rmf.textContent = 'Save Recipe'; }
   });
 
+  // ==================== PENDING ALLOCATIONS ====================
+  async function loadPendingAllocations() {
+    try {
+      const data = await api.listPendingAllocations();
+      pendingAllocations = (data && Array.isArray(data.allocations)) ? data.allocations : (Array.isArray(data) ? data : []);
+      renderPendingAllocations();
+    } catch (e) {
+      toast('Could not load pending allocations.', true);
+    }
+  }
+
+  function renderPendingAllocations() {
+    const container = document.getElementById('pendingAllocationsContainer');
+    const list = document.getElementById('pendingAllocationsList');
+    const badge = document.getElementById('pendingBadge');
+    const emptyState = document.getElementById('pendingEmptyState');
+
+    list.innerHTML = '';
+    if (pendingAllocations.length === 0) {
+      container.classList.add('hidden');
+      badge.classList.add('hidden');
+      emptyState.classList.add('show');
+      return;
+    }
+
+    container.classList.remove('hidden');
+    badge.textContent = pendingAllocations.length;
+    badge.classList.remove('hidden');
+    emptyState.classList.remove('show');
+
+    pendingAllocations.forEach(alloc => {
+      const card = document.createElement('div');
+      card.className = 'pending-alloc-card';
+      card.innerHTML = `
+        <div class="alloc-header">
+          <span class="alloc-name">${escapeHtml(alloc.categoryName || 'Unknown Category')}</span>
+          <button class="btn btn-gold btn-small resolve-alloc-btn">Resolve</button>
+        </div>
+        <div class="alloc-short">${Math.abs(alloc.totalShortage || 0)} ${escapeHtml(alloc.unit || 'ml')} shortage</div>
+        <div class="alloc-count">${alloc.affectedCocktails || 0} cocktail${alloc.affectedCocktails !== 1 ? 's' : ''} affected</div>
+      `;
+      card.querySelector('.resolve-alloc-btn').addEventListener('click', () => openResolveModal(alloc));
+      list.appendChild(card);
+    });
+
+    if (shouldOpenAllocations) {
+      shouldOpenAllocations = false;
+      document.getElementById('pendingAllocationsContainer').scrollIntoView({ behavior: 'smooth' });
+    }
+  }
+
+  const resolveModal = document.getElementById('resolveAllocationModal');
+  const resolveContent = document.getElementById('resolveModalContent');
+  const resolveConfirmBtn = document.getElementById('resolveConfirm');
+  const resolveCancelBtn = document.getElementById('resolveCancel');
+
+  function openResolveModal(allocation) {
+    api.getPendingAllocationDetails(allocation.allocationId).then(details => {
+      currentAllocationDetails = details;
+      buildResolveUI(details, allocation);
+      openModal(resolveModal);
+      resolveConfirmBtn.disabled = true;
+    }).catch(e => toast(e.message || 'Failed to load allocation details', true));
+  }
+
+  function buildResolveUI(details, allocation) {
+    const cocktails = details && Array.isArray(details) ? details : (details && details.cocktails || []);
+    resolveContent.innerHTML = '';
+
+    cocktails.forEach(cocktail => {
+      const row = document.createElement('div');
+      row.className = 'replace-row';
+      row.innerHTML = `
+        <div class="cocktail-name">${escapeHtml(cocktail.recipeName)}<br><small style="color:var(--paper-faint)">Needs ${cocktail.amountNeeded} ${escapeHtml(cocktail.unit || 'ml')} (current: ${escapeHtml(cocktail.currentIngredient)})</small></div>
+      `;
+      const select = document.createElement('select');
+      select.innerHTML = '<option value="">-- Select replacement --</option>';
+      const alternatives = cocktail.alternatives || [];
+      alternatives.forEach(alt => {
+        const opt = document.createElement('option');
+        opt.value = alt.itemId;
+        opt.textContent = `${alt.itemName} (${alt.availableQuantity} ${alt.unit || 'ml'})`;
+        if (alt.availableQuantity <= 0) opt.disabled = true;
+        select.appendChild(opt);
+      });
+      select.addEventListener('change', () => validateResolveForm());
+      row.appendChild(select);
+      resolveContent.appendChild(row);
+    });
+
+    resolveContent.dataset.allocationId = allocation.allocationId;
+  }
+
+  function validateResolveForm() {
+    const selects = resolveContent.querySelectorAll('select');
+    let allSelected = true;
+    selects.forEach(s => { if (!s.value) allSelected = false; });
+    resolveConfirmBtn.disabled = !allSelected;
+  }
+
+  resolveCancelBtn.addEventListener('click', () => closeModal(resolveModal));
+  resolveConfirmBtn.addEventListener('click', async () => {
+    const selects = resolveContent.querySelectorAll('select');
+    const mappings = [];
+    selects.forEach(s => {
+      if (s.value) mappings.push({ itemId: s.value });
+    });
+    const allocationId = resolveContent.dataset.allocationId;
+
+    resolveConfirmBtn.disabled = true;
+    resolveConfirmBtn.textContent = 'Resolving…';
+    try {
+      await api.resolvePendingAllocation(allocationId, mappings);
+      closeModal(resolveModal);
+      toast('Allocation resolved. Inventory updated.');
+      // Reload all data
+      await loadInventory();
+      await loadRecipes();
+      await loadPendingAllocations();
+    } catch (e) {
+      toast(e.message || 'Resolution failed', true);
+    } finally {
+      resolveConfirmBtn.disabled = false;
+      resolveConfirmBtn.textContent = 'Resolve';
+    }
+  });
+
+  // ==================== AUTH ====================
   const authSc = document.getElementById('authScreen'), appEl = document.getElementById('app');
   const pinEl = document.getElementById('pinInput'), loginBtn = document.getElementById('loginBtn'), authErr = document.getElementById('authError');
 
