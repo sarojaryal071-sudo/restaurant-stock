@@ -214,6 +214,19 @@ button{font-family:inherit}
 .ingredient-delete-btn svg{width:16px;height:16px}
 .add-ingredient-btn{width:100%;min-height:40px;background:transparent;border:1px dashed var(--line-strong);border-radius:var(--radius-sm);color:var(--paper-dim);font-size:0.82rem;cursor:pointer;margin-top:8px;transition:background 0.12s ease}
 .add-ingredient-btn:hover{background:rgba(212,175,55,0.05)}
+.ing-mode-btn.active {
+  background: linear-gradient(135deg, var(--gold-bright), var(--gold-deep));
+  color: #1c1305;
+  border: none;
+}
+.ing-mode-btn:not(.active) {
+  background: var(--charcoal-3);
+  color: var(--paper-dim);
+  border: 1px solid var(--line-strong);
+}
+.ing-mode-btn {
+  transition: all 0.15s ease;
+}
 
 /* Pending Allocations section */
 .pending-allocations-title{display:flex;align-items:center;gap:8px;font-family:var(--font-display);font-size:1rem;font-weight:700;color:var(--paper);margin-bottom:var(--space-3)}
@@ -771,16 +784,145 @@ button{font-family:inherit}
   const ril = document.getElementById('recipeIngredientsList'), rmf = document.getElementById('recipeModalConfirm');
 
   function buildIngRow(ing = null) {
-    const row = document.createElement('div'); row.className = 'ingredient-editor-row';
-    const sel = document.createElement('select'); sel.innerHTML = '<option value="">-- Custom ingredient --</option>';
-    state.categories.forEach(c => c.items.forEach(it => { const o = document.createElement('option'); o.value = it.id; o.textContent = it.name; sel.appendChild(o); }));
-    const ci = document.createElement('input'); ci.type = 'text'; ci.placeholder = 'Custom name'; ci.style.display = 'none';
-    const ai = document.createElement('input'); ai.type = 'number'; ai.min = '0'; ai.placeholder = 'Amt';
-    const us = document.createElement('select'); us.className = 'unit-select'; UNITS.forEach(u => { const o = document.createElement('option'); o.value = u; o.textContent = u; us.appendChild(o); });
-    const db = document.createElement('button'); db.className = 'ingredient-delete-btn'; db.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>'; db.addEventListener('click', () => row.remove());
-    if (ing) { if (ing.inventoryItemId) { sel.value = ing.inventoryItemId; } else { sel.value = ''; ci.style.display = 'inline-block'; ci.value = ing.customName || ''; } ai.value = ing.amount || ''; us.value = ing.unit || 'ml'; }
-    sel.addEventListener('change', () => { if (sel.value === '') { ci.style.display = 'inline-block'; } else { ci.style.display = 'none'; ci.value = ''; } });
-    row.appendChild(sel); row.appendChild(ci); row.appendChild(ai); row.appendChild(us); row.appendChild(db);
+    const row = document.createElement('div');
+    row.className = 'ingredient-editor-row';
+    row.style.flexWrap = 'wrap';
+    row.style.alignItems = 'flex-start';
+
+    // --- Mode toggle (Inventory / Recipe Ingredient) ---
+    const modeWrap = document.createElement('div');
+    modeWrap.style.display = 'flex'; modeWrap.style.gap = '4px'; modeWrap.style.flex = '1 1 100%';
+    const invBtn = document.createElement('button');
+    invBtn.type = 'button'; invBtn.className = 'ing-mode-btn btn btn-gold btn-small active';
+    invBtn.textContent = 'Inventory';
+    invBtn.style.flex = '1'; invBtn.style.fontSize = '0.7rem'; invBtn.style.minHeight = '30px';
+    const recBtn = document.createElement('button');
+    recBtn.type = 'button'; recBtn.className = 'ing-mode-btn btn btn-ghost btn-small';
+    recBtn.textContent = 'Recipe Ingredient';
+    recBtn.style.flex = '1'; recBtn.style.fontSize = '0.7rem'; recBtn.style.minHeight = '30px';
+    modeWrap.appendChild(invBtn); modeWrap.appendChild(recBtn);
+
+    // --- Category dropdown ---
+    const catSel = document.createElement('select');
+    catSel.className = 'ing-cat-select';
+    catSel.style.minWidth = '120px'; catSel.style.flex = '1';
+    catSel.innerHTML = '<option value="">-- Category --</option>';
+    state.categories.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; catSel.appendChild(o); });
+
+    // --- Item dropdown (filtered) ---
+    const itemSel = document.createElement('select');
+    itemSel.className = 'ing-item-select';
+    itemSel.style.minWidth = '120px'; itemSel.style.flex = '2';
+    itemSel.innerHTML = '<option value="">-- Select item --</option>';
+
+    // Populate item dropdown based on selected category
+    function populateItemSel(catId, selectedItemId = null) {
+      itemSel.innerHTML = '<option value="">-- Select item --</option>';
+      if (!catId) return;
+      const cat = state.categories.find(c => c.id === catId);
+      if (!cat) return;
+      cat.items.forEach(it => {
+        const o = document.createElement('option');
+        o.value = it.id;
+        o.textContent = it.name;
+        if (selectedItemId && it.id === selectedItemId) o.selected = true;
+        itemSel.appendChild(o);
+      });
+    }
+    catSel.addEventListener('change', () => {
+      populateItemSel(catSel.value);
+    });
+
+    // --- Custom name input (for Recipe Ingredient mode) ---
+    const customInput = document.createElement('input');
+    customInput.type = 'text';
+    customInput.className = 'ing-custom-name';
+    customInput.placeholder = 'Ingredient name';
+    customInput.style.flex = '2';
+    customInput.style.display = 'none';
+
+    // --- Amount & Unit ---
+    const ai = document.createElement('input');
+    ai.type = 'number'; ai.min = '0'; ai.placeholder = 'Amt'; ai.className = 'ing-amount';
+    ai.style.width = '65px'; ai.style.flex = 'none';
+    const us = document.createElement('select');
+    us.className = 'unit-select';
+    us.style.width = '80px'; us.style.flex = 'none';
+    UNITS.forEach(u => { const o = document.createElement('option'); o.value = u; o.textContent = u; us.appendChild(o); });
+
+    // --- Delete & Convert buttons ---
+    const db = document.createElement('button');
+    db.className = 'ingredient-delete-btn';
+    db.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+    db.addEventListener('click', () => row.remove());
+
+    const convertBtn = document.createElement('button');
+    convertBtn.type = 'button';
+    convertBtn.className = 'btn btn-ghost btn-small';
+    convertBtn.textContent = 'Convert to Inventory';
+    convertBtn.style.display = 'none';
+    convertBtn.style.fontSize = '0.7rem';
+    convertBtn.addEventListener('click', () => {
+      recBtn.classList.remove('active'); recBtn.classList.add('btn-ghost'); recBtn.classList.remove('btn-gold');
+      invBtn.classList.add('active'); invBtn.classList.add('btn-gold'); invBtn.classList.remove('btn-ghost');
+      catSel.style.display = 'inline-block';
+      itemSel.style.display = 'inline-block';
+      customInput.style.display = 'none';
+      convertBtn.style.display = 'none';
+    });
+
+    // --- Mode switching ---
+    invBtn.addEventListener('click', () => {
+      invBtn.classList.add('active'); invBtn.classList.add('btn-gold'); invBtn.classList.remove('btn-ghost');
+      recBtn.classList.remove('active'); recBtn.classList.remove('btn-gold'); recBtn.classList.add('btn-ghost');
+      catSel.style.display = 'inline-block';
+      itemSel.style.display = 'inline-block';
+      customInput.style.display = 'none';
+      convertBtn.style.display = 'none';
+    });
+    recBtn.addEventListener('click', () => {
+      recBtn.classList.add('active'); recBtn.classList.add('btn-gold'); recBtn.classList.remove('btn-ghost');
+      invBtn.classList.remove('active'); invBtn.classList.remove('btn-gold'); invBtn.classList.add('btn-ghost');
+      catSel.style.display = 'none';
+      itemSel.style.display = 'none';
+      customInput.style.display = 'inline-block';
+      convertBtn.style.display = 'none';
+      // clear inventory selections
+      catSel.value = '';
+      itemSel.innerHTML = '<option value="">-- Select item --</option>';
+    });
+
+    // --- Pre-fill if editing ---
+    if (ing) {
+      const hasInventory = ing.inventoryItemId && !ing.customName;
+      if (hasInventory) {
+        invBtn.click(); // ensure active
+        // Find the category of this item
+        const cat = state.categories.find(c => c.items.some(it => it.id === ing.inventoryItemId));
+        if (cat) {
+          catSel.value = cat.id;
+          populateItemSel(cat.id, ing.inventoryItemId);
+        }
+      } else {
+        recBtn.click();
+        customInput.value = ing.customName || '';
+        // If the ingredient is custom, show the Convert button
+        convertBtn.style.display = 'inline-block';
+      }
+      ai.value = ing.amount || '';
+      us.value = ing.unit || 'ml';
+    } else {
+      invBtn.click(); // default
+    }
+
+    row.appendChild(modeWrap);
+    row.appendChild(catSel);
+    row.appendChild(itemSel);
+    row.appendChild(customInput);
+    row.appendChild(ai);
+    row.appendChild(us);
+    row.appendChild(db);
+    row.appendChild(convertBtn);
     return row;
   }
   function resetIngList(ings = []) { ril.innerHTML = ''; if (ings.length === 0) { ril.appendChild(buildIngRow()); } else { ings.forEach(ing => ril.appendChild(buildIngRow(ing))); } }
@@ -794,10 +936,26 @@ button{font-family:inherit}
   document.getElementById('recipeModalCancel').addEventListener('click', () => { closeModal(rmo); editingRecipeId = null; });
   rmf.addEventListener('click', async () => {
     const name = rn.value.trim(); if (!name) { rn.focus(); return; }
-    const ings = []; ril.querySelectorAll('.ingredient-editor-row').forEach(row => {
-      const sel = row.querySelector('select'), ci = row.querySelector('input[type="text"]'), ai = row.querySelector('input[type="number"]'), us = row.querySelector('.unit-select');
-      const iid = sel?.value || null, cn = ci?.value?.trim() || null, amt = parseFloat(ai?.value) || 0, unit = us?.value || 'ml';
-      if (iid || cn) ings.push({ inventoryItemId: iid || null, customName: cn || null, amount: amt, unit });
+    const ings = [];
+    ril.querySelectorAll('.ingredient-editor-row').forEach(row => {
+      const modeBtns = row.querySelectorAll('.ing-mode-btn');
+      const isInventory = modeBtns.length > 0 && modeBtns[0].classList.contains('active');
+      const catSel = row.querySelector('.ing-cat-select');
+      const itemSel = row.querySelector('.ing-item-select');
+      const customInput = row.querySelector('input.ing-custom-name');
+      const ai = row.querySelector('input.ing-amount');
+      const us = row.querySelector('.unit-select');
+
+      const amount = parseFloat(ai?.value) || 0;
+      const unit = us?.value || 'ml';
+
+      if (isInventory) {
+        const iid = itemSel?.value || null;
+        if (iid) ings.push({ inventoryItemId: iid, amount, unit });
+      } else {
+        const cn = customInput?.value?.trim() || null;
+        if (cn) ings.push({ customName: cn, amount, unit });
+      }
     });
     if (ings.length === 0) { toast('Add at least one ingredient.', true); return; }
     const payload = { name, glass: rg.value.trim(), method: rm.value.trim(), garnish: rgr.value.trim(), ingredients: ings };
