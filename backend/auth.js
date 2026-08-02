@@ -75,6 +75,8 @@ async function login(req, res) {
   }
 
   const user = userRes.rows[0];
+  // Default role to "staff" if null/empty
+  const role = user.role || 'staff';
   const restaurant = await getRestaurant(user.restaurant_id);
   if (!restaurant) return res.json({ ok: false, code: 'SERVER_ERROR', error: 'Restaurant not found.' });
 
@@ -89,7 +91,7 @@ async function login(req, res) {
   return res.json({
     ok: true,
     token,
-    user: { id: user.id, name: user.name, role: user.role },
+    user: { id: user.id, name: user.name, role },
     restaurant
   });
 }
@@ -122,10 +124,10 @@ async function requireAuth(req, res, next) {
     try {
       const restRes = await query(`SELECT id FROM restaurants ORDER BY created_at LIMIT 1`);
       const restaurantId = restRes.rows.length > 0 ? restRes.rows[0].id : null;
-      req.auth = { restaurantId, userId: null, role: null };
+      req.auth = { restaurantId, userId: null, role: 'staff' };   // default role when auth off
       return next();
     } catch (err) {
-      req.auth = { restaurantId: null, userId: null, role: null };
+      req.auth = { restaurantId: null, userId: null, role: 'staff' };
       return next();
     }
   }
@@ -141,7 +143,7 @@ async function requireAuth(req, res, next) {
   }
 
   const userRes = await query(`SELECT role FROM users WHERE id = $1`, [session.userId]);
-  const role = userRes.rows.length > 0 ? userRes.rows[0].role : null;
+  const role = userRes.rows.length > 0 ? (userRes.rows[0].role || 'staff') : 'staff';
 
   req.auth = {
     restaurantId: session.restaurantId,
@@ -152,13 +154,13 @@ async function requireAuth(req, res, next) {
 }
 
 // -------------------------------------------------------------------
-// Middleware: requireAdmin
+// Middleware: requireAdmin (kept for backward compatibility, now just requireManager)
 // -------------------------------------------------------------------
 async function requireAdmin(req, res, next) {
   const settingRes = await query(`SELECT value FROM settings WHERE key = 'requireAuth'`);
   const requireAuthSetting = settingRes.rows.length > 0 ? settingRes.rows[0].value : 'false';
   if (requireAuthSetting !== 'true') return next();
-  if (req.auth.role !== 'admin') {
+  if (req.auth.role !== 'admin' && req.auth.role !== 'manager') {
     return res.status(403).json({ ok: false, code: 'FORBIDDEN', error: 'Admin access required.' });
   }
   next();

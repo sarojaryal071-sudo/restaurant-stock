@@ -19,6 +19,7 @@ async function runMigrations() {
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
+    
 
     // --- Users ---
     await tx(`
@@ -216,6 +217,12 @@ async function runMigrations() {
     `);
     await tx(`CREATE INDEX IF NOT EXISTS idx_allocation_logs_parent ON allocation_logs(pending_allocation_id);`);
 
+        // -----------------------------------------------------------------
+    // RBAC: upgrade existing admin roles to manager, ensure default is 'staff'
+    // -----------------------------------------------------------------
+    await tx(`ALTER TABLE users ALTER COLUMN role SET DEFAULT 'staff'`);
+    await tx(`UPDATE users SET role = 'manager' WHERE role = 'admin'`);
+    
     console.log('Migrations completed successfully.');
   });
 }

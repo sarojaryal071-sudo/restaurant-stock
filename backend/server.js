@@ -4,9 +4,11 @@ const cors = require('cors');
 const { runMigrations } = require('./migration');
 const { pool } = require('./database');
 const { login, logout, requireAuth, requireAdmin, validateSession, getRestaurant } = require('./auth');
+const requireManager = require('./src/middleware/requireManager');
 const inventory = require('./inventory');
 const recipes = require('./recipes');
 const allocations = require('./allocations');
+const { simulateSale } = require('./src/pos/simulator');
 
 const app = express();
 
@@ -34,9 +36,6 @@ app.use(cors({
   credentials: true
 }));
 
-// ---------------------------------------------------------------
-// Standard middleware
-// ---------------------------------------------------------------
 app.use(express.json());
 
 // ---------------------------------------------------------------
@@ -55,14 +54,13 @@ app.get('/api/health', async (req, res) => {
         return res.json({
           ok: true,
           initialized: true,
-          user: user ? { id: user.id, name: user.name, role: user.role } : null,
+          user: user ? { id: user.id, name: user.name, role: user.role || 'staff' } : null,
           restaurant
         });
       } else {
         return res.json({ ok: false, code: 'UNAUTHORIZED', error: 'Invalid or expired token.' });
       }
     }
-    // No token – just basic health
     res.json({ ok: true, initialized: true });
   } catch (err) {
     res.status(500).json({ ok: false, initialized: false, error: 'Database unavailable' });
@@ -102,59 +100,63 @@ app.all('/api', async (req, res, next) => {
   try {
     const action = req.body.action || req.query.action || '';
     switch (action) {
-      // Inventory
+      // ---------- Inventory (staff accessible) ----------
       case 'loadStock':
         await requireAuth(req, res, async () => inventory.loadStock(req, res));
         break;
       case 'saveStock':
         await requireAuth(req, res, async () => inventory.saveStock(req, res));
         break;
+
+      // ---------- Inventory management (manager only) ----------
       case 'addCustomItem':
-        await requireAuth(req, res, async () => inventory.addCustomItem(req, res));
+        await requireAuth(req, res, requireManager, async () => inventory.addCustomItem(req, res));
         break;
       case 'updateItem':
-        await requireAuth(req, res, async () => inventory.updateItem(req, res));
+        await requireAuth(req, res, requireManager, async () => inventory.updateItem(req, res));
         break;
       case 'deleteItem':
-        await requireAuth(req, res, async () => inventory.deleteItem(req, res));
+        await requireAuth(req, res, requireManager, async () => inventory.deleteItem(req, res));
         break;
       case 'restoreItem':
-        await requireAuth(req, res, async () => inventory.restoreItem(req, res));
-        break;
-      case 'addCategory':
-        await requireAuth(req, res, async () => inventory.addCategory(req, res));
-        break;
-      case 'updateCategory':
-        await requireAuth(req, res, async () => inventory.updateCategory(req, res));
-        break;
-      case 'deleteCategory':
-        await requireAuth(req, res, async () => inventory.deleteCategory(req, res));
-        break;
-      case 'restoreCategory':
-        await requireAuth(req, res, async () => inventory.restoreCategory(req, res));
+        await requireAuth(req, res, requireManager, async () => inventory.restoreItem(req, res));
         break;
 
-      // Recipes & POS
-      case 'createRecipe':
-        await requireAuth(req, res, async () => recipes.createRecipe(req, res));
+      // ---------- Category management (manager only) ----------
+      case 'addCategory':
+        await requireAuth(req, res, requireManager, async () => inventory.addCategory(req, res));
         break;
-      case 'updateRecipe':
-        await requireAuth(req, res, async () => recipes.updateRecipe(req, res));
+      case 'updateCategory':
+        await requireAuth(req, res, requireManager, async () => inventory.updateCategory(req, res));
         break;
-      case 'deleteRecipe':
-        await requireAuth(req, res, async () => recipes.deleteRecipe(req, res));
+      case 'deleteCategory':
+        await requireAuth(req, res, requireManager, async () => inventory.deleteCategory(req, res));
+        break;
+      case 'restoreCategory':
+        await requireAuth(req, res, requireManager, async () => inventory.restoreCategory(req, res));
+        break;
+
+      // ---------- Recipes (staff can view, manager can manage) ----------
+      case 'listRecipes':
+        await requireAuth(req, res, async () => recipes.listRecipes(req, res));
         break;
       case 'getRecipe':
         await requireAuth(req, res, async () => recipes.getRecipe(req, res));
         break;
-      case 'listRecipes':
-        await requireAuth(req, res, async () => recipes.listRecipes(req, res));
+      case 'createRecipe':
+        await requireAuth(req, res, requireManager, async () => recipes.createRecipe(req, res));
+        break;
+      case 'updateRecipe':
+        await requireAuth(req, res, requireManager, async () => recipes.updateRecipe(req, res));
+        break;
+      case 'deleteRecipe':
+        await requireAuth(req, res, requireManager, async () => recipes.deleteRecipe(req, res));
         break;
       case 'recordSale':
         await requireAuth(req, res, async () => recipes.recordSale(req, res));
         break;
 
-      // --- NEW: Pending Allocations (POS shortage resolution) ---
+      // ---------- Allocations (staff accessible) ----------
       case 'listPendingAllocations':
         await requireAuth(req, res, async () => allocations.listPendingAllocations(req, res));
         break;
@@ -165,11 +167,16 @@ app.all('/api', async (req, res, next) => {
         await requireAuth(req, res, async () => allocations.resolvePendingAllocation(req, res));
         break;
 
-      // Not yet implemented
-      case 'getConfig':
+      // ---------- Admin only (already requireAuth + requireAdmin) ----------
       case 'resetStock':
       case 'initializeDatabase':
       case 'seedDatabase':
+        await requireAuth(req, res, requireAdmin, async () => {
+          return res.json({ ok: false, code: 'NOT_IMPLEMENTED', error: 'Endpoint will be added in a later phase.' });
+        });
+        break;
+
+      case 'getConfig':
       case 'exportInventory':
         res.json({ ok: false, code: 'NOT_IMPLEMENTED', error: 'Endpoint will be added in a later phase.' });
         break;
@@ -177,6 +184,23 @@ app.all('/api', async (req, res, next) => {
       default:
         res.status(400).json({ ok: false, code: 'UNKNOWN_ACTION', error: `Unknown action: ${action}` });
     }
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------
+// POS test endpoint – staff accessible
+// ---------------------------------------------------------------
+app.post('/api/pos/testSale', async (req, res, next) => {
+  try {
+    await requireAuth(req, res, async () => {
+      const { productId, productName, quantity } = req.body;
+      if (!productId || !quantity) {
+        return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'productId and quantity are required' });
+      }
+      await simulateSale(productId, productName, quantity, new Date().toISOString(), req, res);
+    });
   } catch (err) {
     next(err);
   }
@@ -196,7 +220,7 @@ async function start() {
   try {
     await runMigrations();
     app.listen(PORT, () => {
-      console.log(`✅ Server running on port ${PORT}`);
+      console.log(`Server running on port ${PORT}`);
     });
   } catch (err) {
     console.error('Failed to start server:', err);
