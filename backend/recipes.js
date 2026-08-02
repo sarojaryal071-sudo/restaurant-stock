@@ -3,6 +3,40 @@ const { query, transaction } = require('./database');
 const { writeLog } = require('./inventory');  // reuse log helper
 
 // -------------------------------------------------------------------
+// Helper: fetch item name by ID (used when building responses)
+// -------------------------------------------------------------------
+async function getItemName(itemId) {
+  if (!itemId) return null;
+  const res = await query(`SELECT name FROM items WHERE id = $1`, [itemId]);
+  return res.rows.length > 0 ? res.rows[0].name : null;
+}
+
+// -------------------------------------------------------------------
+// Helper: attach item names and custom names to ingredients list
+// -------------------------------------------------------------------
+async function enrichIngredients(ingredients) {
+  const enriched = [];
+  for (const ing of ingredients) {
+    const enrichedIng = {
+      id: ing.id,
+      recipeId: ing.recipe_id,
+      inventoryItemId: ing.inventory_item_id || null,
+      inventoryItemName: null,
+      customName: null,
+      amount: parseFloat(ing.amount),
+      unit: ing.unit
+    };
+    if (ing.inventory_item_id) {
+      enrichedIng.inventoryItemName = await getItemName(ing.inventory_item_id);
+    } else {
+      enrichedIng.customName = ing.ingredient_name;
+    }
+    enriched.push(enrichedIng);
+  }
+  return enriched;
+}
+
+// -------------------------------------------------------------------
 // createRecipe
 // -------------------------------------------------------------------
 async function createRecipe(req, res) {
@@ -23,6 +57,14 @@ async function createRecipe(req, res) {
       if (Array.isArray(ingredients)) {
         for (const ing of ingredients) {
           const invItemId = ing.inventoryItemId || null;
+          const customName = ing.customName || null;
+
+          // Determine the ingredient name to store:
+          // - if inventoryItemId is provided, we can leave ingredient_name empty (or fetch item name)
+          // - if customName is provided, use it as ingredient_name
+          const ingredientName = invItemId ? (await getItemName(invItemId)) : (customName || '');
+
+          // If an inventoryItemId is provided, verify it exists
           if (invItemId) {
             const itemCheck = await tx(`SELECT id FROM items WHERE id = $1 AND restaurant_id = $2`, [invItemId, restaurantId]);
             if (itemCheck.rows.length === 0) {
@@ -36,7 +78,7 @@ async function createRecipe(req, res) {
               uuidv4(),
               recipeId,
               invItemId,
-              ing.name || '',
+              ingredientName,
               parseFloat(ing.amount) || 0,
               ing.unit || 'ml'
             ]
@@ -95,6 +137,9 @@ async function updateRecipe(req, res) {
         await tx(`DELETE FROM recipe_ingredients WHERE recipe_id = $1`, [recipeId]);
         for (const ing of ingredients) {
           const invItemId = ing.inventoryItemId || null;
+          const customName = ing.customName || null;
+          const ingredientName = invItemId ? (await getItemName(invItemId)) : (customName || '');
+
           if (invItemId) {
             const itemCheck = await tx(`SELECT id FROM items WHERE id = $1 AND restaurant_id = $2`, [invItemId, restaurantId]);
             if (itemCheck.rows.length === 0) {
@@ -108,7 +153,7 @@ async function updateRecipe(req, res) {
               uuidv4(),
               recipeId,
               invItemId,
-              ing.name || '',
+              ingredientName,
               parseFloat(ing.amount) || 0,
               ing.unit || 'ml'
             ]
@@ -151,7 +196,7 @@ async function deleteRecipe(req, res) {
 }
 
 // -------------------------------------------------------------------
-// getRecipe – returns full recipe with ingredients
+// getRecipe – returns full recipe with enriched ingredients
 // -------------------------------------------------------------------
 async function getRecipe(req, res) {
   const { restaurantId } = req.auth;
@@ -162,11 +207,13 @@ async function getRecipe(req, res) {
     const recipe = await query(`SELECT * FROM recipes WHERE id = $1 AND restaurant_id = $2`, [recipeId, restaurantId]);
     if (recipe.rows.length === 0) return res.json({ ok: false, code: 'NOT_FOUND', error: 'Recipe not found' });
 
-    const ingredients = await query(
-      `SELECT id, recipe_id AS "recipeId", inventory_item_id AS "inventoryItemId", ingredient_name AS name, amount, unit
+    const ingRows = await query(
+      `SELECT id, recipe_id, inventory_item_id, ingredient_name, amount, unit
        FROM recipe_ingredients WHERE recipe_id = $1`,
       [recipeId]
     );
+
+    const ingredients = await enrichIngredients(ingRows.rows);
 
     res.json({
       ok: true,
@@ -180,7 +227,7 @@ async function getRecipe(req, res) {
         isActive: recipe.rows[0].is_active,
         createdAt: recipe.rows[0].created_at,
         updatedAt: recipe.rows[0].updated_at,
-        ingredients: ingredients.rows
+        ingredients
       }
     });
   } catch (err) {
@@ -190,17 +237,32 @@ async function getRecipe(req, res) {
 }
 
 // -------------------------------------------------------------------
-// listRecipes – returns summary list (no ingredients), scoped to restaurant
+// listRecipes – now includes ingredients for each recipe
 // -------------------------------------------------------------------
 async function listRecipes(req, res) {
   const { restaurantId } = req.auth;
   try {
-    const recipes = await query(
+    const recipeRows = await query(
       `SELECT id, name, description, glass, method, garnish, is_active AS "isActive", created_at AS "createdAt", updated_at AS "updatedAt"
        FROM recipes WHERE restaurant_id = $1 ORDER BY name ASC`,
       [restaurantId]
     );
-    res.json({ ok: true, recipes: recipes.rows });
+
+    const recipes = [];
+    for (const rec of recipeRows.rows) {
+      const ingRows = await query(
+        `SELECT id, recipe_id, inventory_item_id, ingredient_name, amount, unit
+         FROM recipe_ingredients WHERE recipe_id = $1`,
+        [rec.id]
+      );
+      const ingredients = await enrichIngredients(ingRows.rows);
+      recipes.push({
+        ...rec,
+        ingredients
+      });
+    }
+
+    res.json({ ok: true, recipes });
   } catch (err) {
     console.error('listRecipes error:', err);
     res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
@@ -221,7 +283,6 @@ async function recordSale(req, res) {
 
   try {
     await transaction(async (tx) => {
-      // Verify recipe exists and belongs to this restaurant
       const recipe = await tx(`SELECT id, name FROM recipes WHERE id = $1 AND restaurant_id = $2`, [recipeId, restaurantId]);
       if (recipe.rows.length === 0) {
         throw { code: 'NOT_FOUND', error: 'Recipe not found' };
