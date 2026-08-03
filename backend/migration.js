@@ -236,7 +236,116 @@ async function runMigrations() {
       );
     `);
     await tx(`CREATE INDEX IF NOT EXISTS idx_restaurant_settings_restaurant ON restaurant_settings(restaurant_id);`);
-    
+
+        // =================================================================
+    // NEW PERMISSION SYSTEM
+    // =================================================================
+
+    // --- Permission Definitions (master list) ---
+    await tx(`
+      CREATE TABLE IF NOT EXISTS permission_definitions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        module TEXT NOT NULL,
+        permission TEXT NOT NULL,
+        label TEXT NOT NULL,
+        description TEXT DEFAULT '',
+        sort_order INTEGER DEFAULT 0,
+        enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(module, permission)
+      );
+    `);
+    await tx(`ALTER TABLE permission_definitions ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT TRUE`);
+
+    // Seed definitions
+    const seedDefinitions = [
+      ['inventory','view','View Inventory','Ability to view inventory items',1],
+      ['inventory','save','Save Inventory','Ability to save stock quantities',2],
+      ['inventory','add','Add Inventory Item','Ability to add new inventory items',3],
+      ['inventory','edit','Edit Inventory Item','Ability to edit existing items',4],
+      ['inventory','delete','Delete Inventory Item','Ability to delete items',5],
+      ['recipes','view','View Recipes','Ability to view recipes',6],
+      ['recipes','create','Create Recipe','Ability to create new recipes',7],
+      ['recipes','edit','Edit Recipe','Ability to edit existing recipes',8],
+      ['recipes','delete','Delete Recipe','Ability to delete recipes',9],
+      ['categories','add','Add Category','Ability to add new categories',10],
+      ['categories','edit','Edit Category','Ability to rename/reorder categories',11],
+      ['categories','delete','Delete Category','Ability to delete categories',12],
+      ['allocations','list','List Pending Allocations','Ability to view pending shortage allocations',13],
+      ['allocations','details','View Allocation Details','Ability to see per‑cocktail details',14],
+      ['allocations','resolve','Resolve Pending Allocations','Ability to resolve shortages',15],
+      ['pos','sale','Record Sale','Ability to record a sale (POS)',16],
+      ['settings','manage','Manage Settings','Ability to modify restaurant settings',17]
+    ];
+    for (const def of seedDefinitions) {
+      await tx(
+        `INSERT INTO permission_definitions (module, permission, label, description, sort_order)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (module, permission) DO NOTHING`,
+        def
+      );
+    }
+
+    // --- Role Permissions (per restaurant, per role) ---
+    await tx(`
+      CREATE TABLE IF NOT EXISTS role_permissions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        restaurant_id UUID REFERENCES restaurants(id) ON DELETE CASCADE,
+        role TEXT NOT NULL CHECK (role IN ('manager','staff')),
+        module TEXT NOT NULL,
+        permission TEXT NOT NULL,
+        allowed BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(restaurant_id, role, module, permission)
+      );
+    `);
+
+    // Seed default permissions for each restaurant
+    const restaurants = await tx(`SELECT id FROM restaurants`);
+    for (const rest of restaurants.rows) {
+      const restId = rest.id;
+      // Manager → all true
+      const defs = await tx(`SELECT module, permission FROM permission_definitions`);
+      for (const d of defs.rows) {
+        await tx(
+          `INSERT INTO role_permissions (restaurant_id, role, module, permission, allowed)
+           VALUES ($1, 'manager', $2, $3, true)
+           ON CONFLICT (restaurant_id, role, module, permission) DO NOTHING`,
+          [restId, d.module, d.permission]
+        );
+      }
+      // Staff → current production defaults
+      const staffDefaults = {
+        inventory:   ['view','save'],
+        recipes:     ['view'],
+        allocations: ['list','details','resolve'],
+        pos:         ['sale']
+      };
+      for (const module of Object.keys(staffDefaults)) {
+        for (const perm of staffDefaults[module]) {
+          await tx(
+            `INSERT INTO role_permissions (restaurant_id, role, module, permission, allowed)
+             VALUES ($1, 'staff', $2, $3, true)
+             ON CONFLICT (restaurant_id, role, module, permission) DO NOTHING`,
+            [restId, module, perm]
+          );
+        }
+      }
+      // Ensure all other permissions for staff are explicitly false
+      for (const d of defs.rows) {
+        if (!staffDefaults[d.module] || !staffDefaults[d.module].includes(d.permission)) {
+          await tx(
+            `INSERT INTO role_permissions (restaurant_id, role, module, permission, allowed)
+             VALUES ($1, 'staff', $2, $3, false)
+             ON CONFLICT (restaurant_id, role, module, permission) DO NOTHING`,
+            [restId, d.module, d.permission]
+          );
+        }
+      }
+    }
+
     console.log('Migrations completed successfully.');
   });
 }

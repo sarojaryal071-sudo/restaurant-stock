@@ -1923,7 +1923,6 @@
 
   function showSettingsDetail(sectionKey) {
     settingsSubPage = sectionKey;
-    const secData = settingsData[sectionKey] || {};
     const sectionTitle = sectionKey.charAt(0).toUpperCase() + sectionKey.slice(1).replace(/_/g, ' ');
     const container = document.getElementById('settingsContainer');
     if (!container) return;
@@ -1937,7 +1936,76 @@
     `;
 
     document.getElementById('settingsBackBtn').addEventListener('click', showSettingsMenu);
-    buildSectionDetail(sectionKey, secData);
+
+    if (sectionKey === 'permissions') {
+      showPermissionsDetail();
+    } else {
+      const secData = settingsData[sectionKey] || {};
+      buildSectionDetail(sectionKey, secData);
+    }
+  }
+
+    async function showPermissionsDetail() {
+    try {
+      const data = await api.getPermissions();
+      const definitions = data && data.definitions ? data.definitions : [];
+      const perms = data && data.permissions ? data.permissions : { staff: {}, manager: {} };
+      const staffPerms = perms.staff || {};
+      const content = document.getElementById('settingsDetailContent');
+      if (!content) return;
+      content.innerHTML = '';
+
+      // Group definitions by module
+      const moduleMap = {};
+      definitions.forEach(def => {
+        if (!def.enabled) return; // skip disabled definitions in UI
+        if (!moduleMap[def.module]) moduleMap[def.module] = [];
+        moduleMap[def.module].push(def);
+      });
+
+      // Build controls per module
+      Object.keys(moduleMap).forEach(mod => {
+        content.innerHTML += `<div class="field-label">${mod.charAt(0).toUpperCase()+mod.slice(1)}</div>`;
+        moduleMap[mod].forEach(def => {
+          const checked = staffPerms[def.module] && staffPerms[def.module][def.permission] === true;
+          content.innerHTML += `
+            <label style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+              <input type="checkbox" ${checked?'checked':''} data-mod="${def.module}" data-perm="${def.permission}">
+              ${escapeHtml(def.label)}
+            </label>`;
+        });
+      });
+
+      // Save button
+      const btn = document.createElement('button');
+      btn.className = 'btn-gold';
+      btn.textContent = 'Save Permissions';
+      btn.style.marginTop = 'var(--space-3)';
+      btn.addEventListener('click', async () => {
+        btn.disabled = true; btn.textContent = 'Saving…';
+        try {
+          // Build staff permissions boolean map
+          const newStaff = {};
+          content.querySelectorAll('input[data-mod]').forEach(cb => {
+            const mod = cb.dataset.mod;
+            const perm = cb.dataset.perm;
+            if (!newStaff[mod]) newStaff[mod] = {};
+            newStaff[mod][perm] = cb.checked;
+          });
+          // Keep manager permissions unchanged (obtained from the fetched data)
+          const managerPerms = perms.manager || {};
+          await api.updatePermissions('staff', newStaff);
+          toast('Staff permissions updated.');
+        } catch (err) {
+          toast(err.message || 'Failed to save permissions', true);
+        } finally {
+          btn.disabled = false; btn.textContent = 'Save Permissions';
+        }
+      });
+      content.appendChild(btn);
+    } catch (e) {
+      toast('Could not load permissions.', true);
+    }
   }
 
   function buildSectionDetail(sectionKey, secData) {
@@ -1945,23 +2013,8 @@
     if (!content) return;
     content.innerHTML = '';
 
-    if (sectionKey === 'permissions') {
-      // Staff permissions are nested: settingsData.permissions.staff
-      const staffPerms = settingsData.permissions?.staff || {};
-      const managerPerms = settingsData.permissions?.manager || {};
-      const allModules = [...new Set([...Object.keys(managerPerms), ...Object.keys(staffPerms)])];
-      allModules.forEach(mod => {
-        const perms = staffPerms[mod] || [];
-        // Derive available actions from union of manager + staff
-        const availableActions = [...new Set([...(managerPerms[mod] || []), ...(staffPerms[mod] || [])])];
-        let html = `<div class="field-label">${mod.charAt(0).toUpperCase()+mod.slice(1)}</div>`;
-        availableActions.forEach(act => {
-          const checked = perms.includes(act);
-          html += `<label style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><input type="checkbox" ${checked?'checked':''} data-mod="${mod}" data-act="${act}"> ${act}</label>`;
-        });
-        content.innerHTML += html;
-      });
-    } else if (sectionKey === 'about') {
+    // Render section-specific fields (about, restaurant, inventory, etc.)
+    if (sectionKey === 'about') {
       Object.keys(secData).forEach(key => {
         content.innerHTML += `<div class="field-label">${key}</div><div class="field-input" style="background:var(--charcoal-2)">${escapeHtml(secData[key]||'')}</div>`;
       });
@@ -1992,28 +2045,13 @@
     btn.addEventListener('click', async () => {
       btn.disabled = true; btn.textContent = 'Saving…';
       try {
-        let payload;
-          if (sectionKey === 'permissions') {
-            // Build new staff permissions from checkboxes
-            const newStaff = {};
-            document.querySelectorAll('#settingsDetailContent input[data-mod]').forEach(cb => {
-              const mod = cb.dataset.mod;
-              const act = cb.dataset.act;
-              if (!newStaff[mod]) newStaff[mod] = [];
-              if (cb.checked) newStaff[mod].push(act);
-            });
-            // Preserve unchanged manager permissions (from the fetched settings)
-            const managerPerms = settingsData.permissions?.manager || {};
-            payload = { manager: managerPerms, staff: newStaff };
-          } else {
-          payload = {};
-          const sectionFields = document.querySelectorAll(`#settingsDetailContent [id^="set-${sectionKey}-"]`);
-          sectionFields.forEach(field => {
-            const key = field.id.replace(`set-${sectionKey}-`, '');
-            if (field.type === 'checkbox') payload[key] = field.checked;
-            else payload[key] = field.value;
-          });
-        }
+        const payload = {};
+        const sectionFields = document.querySelectorAll(`#settingsDetailContent [id^="set-${sectionKey}-"]`);
+        sectionFields.forEach(field => {
+          const key = field.id.replace(`set-${sectionKey}-`, '');
+          if (field.type === 'checkbox') payload[key] = field.checked;
+          else payload[key] = field.value;
+        });
         await api.updateSettings(sectionKey, payload);
         toast('Settings saved.');
         await loadSettings(); // refresh data
@@ -2048,11 +2086,10 @@
       /**
        * Check a permission path like 'inventory.edit'
        */
-      function can(module, action) {
-        const allowed = userPermissions[module];
-        return Array.isArray(allowed) && allowed.includes(action);
-      }
-
+  function can(module, action) {
+    const modPerms = userPermissions[module];
+    return modPerms && typeof modPerms === 'object' && modPerms[action] === true;
+  }
       /** Hide/show UI elements based on permissions */
       function applyUIPermissions() {
         // Inventory page static buttons
@@ -2184,6 +2221,10 @@
             // Settings
     getSettings: () => apiCall('GET', '/settings'),
     updateSettings: (section, data) => apiCall('PATCH', `/settings/${section}`, data),
+
+        // Permissions (staff management)
+    getPermissions: () => apiCall('GET', '/permissions'),
+    updatePermissions: (role, permissions) => apiCall('PATCH', '/permissions', { role, permissions }),
 
         // Pending Allocations
         listPendingAllocations: () => apiCall('GET', '/?action=listPendingAllocations'),
@@ -2822,6 +2863,7 @@
           const h = await api.health();
           if (h && h.restaurant) {
             userPermissions = h.permissions || loadPermissions();
+            savePermissions(userPermissions);
             applyBranding(h.restaurant); showApp(); await loadInventory(); return;
           }
           clearAuth(); showLogin();
@@ -2829,6 +2871,7 @@
       }
 
       tick(); setInterval(tick, 60000); init();
+      window.api = api;   // temporary – remove after testing
     })();
   </script>
 </body>

@@ -10,6 +10,8 @@ const recipes = require('./recipes');
 const allocations = require('./allocations');
 const { simulateSale } = require('./src/pos/simulator');
 const settingsController = require('./src/settings/settings.controller');
+const permissionsController = require('./src/permissions/permissions.controller');
+const permissionsService = require('./src/permissions/permissions.service');  // for health endpoint
 
 const app = express();
 
@@ -52,9 +54,11 @@ app.get('/api/health', async (req, res) => {
         const userRes = await pool.query(`SELECT id, name, role FROM users WHERE id = $1`, [session.userId]);
         const user = userRes.rows[0] || null;
         const restaurant = await getRestaurant(session.restaurantId);
-        // Resolve permissions for the authenticated user
-        const { resolvePermissions } = require('./auth');
-        const permissions = await resolvePermissions(user ? user.role : 'staff', session.restaurantId);
+        // Resolve permissions for the authenticated user (uses new database-driven service)
+        const permissions = await permissionsService.getEffectivePermissions(
+          session.restaurantId,
+          user ? user.role : 'staff'
+        );
         return res.json({
           ok: true,
           initialized: true,
@@ -247,6 +251,19 @@ app.get('/api/settings', (req, res, next) => {
 app.patch('/api/settings/:section', (req, res, next) => {
   requireAuth(req, res, () => {
     requirePermission('settings', 'manage')(req, res, () => settingsController.patchSection(req, res));
+  });
+});
+
+// ---------- Permission management (manager only) ----------
+app.get('/api/permissions', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => permissionsController.getPermissions(req, res));
+  });
+});
+
+app.patch('/api/permissions', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => permissionsController.patchPermissions(req, res));
   });
 });
 

@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { query } = require('./database');
-const { resolvePermissions } = require('./permissions');
+const permissionsService = require('./src/permissions/permissions.service');
 
 // -------------------------------------------------------------------
 // PIN Hashing
@@ -83,7 +83,7 @@ async function login(req, res) {
   if (!restaurant) return res.json({ ok: false, code: 'SERVER_ERROR', error: 'Restaurant not found.' });
 
   const token = await createSession(user.id, user.restaurant_id);
-  const permissions = await resolvePermissions(role, user.restaurant_id);
+  const permissions = await permissionsService.getEffectivePermissions(user.restaurant_id, role);
 
   await query(
     `INSERT INTO logs (id, action, details, user_id, restaurant_id, timestamp)
@@ -127,7 +127,7 @@ async function requireAuth(req, res, next) {
     try {
       const restRes = await query(`SELECT id FROM restaurants ORDER BY created_at LIMIT 1`);
       const restaurantId = restRes.rows.length > 0 ? restRes.rows[0].id : null;
-      const permissions = await resolvePermissions('staff', restaurantId);
+      const permissions = await permissionsService.getEffectivePermissions(restaurantId, 'staff');
       req.auth = { restaurantId, userId: null, role: 'staff', permissions };
       return next();
     } catch (err) {
@@ -148,7 +148,7 @@ async function requireAuth(req, res, next) {
 
   const userRes = await query(`SELECT role FROM users WHERE id = $1`, [session.userId]);
   const role = userRes.rows.length > 0 ? (userRes.rows[0].role || 'staff') : 'staff';
-  const permissions = await resolvePermissions(role, session.restaurantId);
+  const permissions = await permissionsService.getEffectivePermissions(session.restaurantId, role);
 
   req.auth = {
     restaurantId: session.restaurantId,
