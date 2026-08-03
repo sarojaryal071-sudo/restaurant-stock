@@ -222,6 +222,20 @@ async function runMigrations() {
     // -----------------------------------------------------------------
     await tx(`ALTER TABLE users ALTER COLUMN role SET DEFAULT 'staff'`);
     await tx(`UPDATE users SET role = 'manager' WHERE role = 'admin'`);
+
+        // --- Restaurant Settings ---
+    await tx(`
+      CREATE TABLE IF NOT EXISTS restaurant_settings (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        restaurant_id UUID REFERENCES restaurants(id),
+        key TEXT NOT NULL,
+        value JSONB NOT NULL DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (restaurant_id, key)
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_restaurant_settings_restaurant ON restaurant_settings(restaurant_id);`);
     
     console.log('Migrations completed successfully.');
   });

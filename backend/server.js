@@ -9,6 +9,7 @@ const inventory = require('./inventory');
 const recipes = require('./recipes');
 const allocations = require('./allocations');
 const { simulateSale } = require('./src/pos/simulator');
+const settingsController = require('./src/settings/settings.controller');
 
 const app = express();
 
@@ -227,6 +228,21 @@ app.post('/api/pos/testSale', (req, res, next) => {
       return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'productId and quantity are required' });
     }
     simulateSale(productId, productName, quantity, new Date().toISOString(), req, res);
+  });
+});
+
+const settingsController = require('./src/settings/settings.controller');
+
+// ---------- Settings (manager only) ----------
+app.get('/api/settings', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => settingsController.getAll(req, res));
+  });
+});
+
+app.patch('/api/settings/:section', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => settingsController.patchSection(req, res));
   });
 });
 
