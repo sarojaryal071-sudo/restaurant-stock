@@ -1985,7 +1985,10 @@
     btn.className = 'btn-save btn-gold';
     btn.textContent = 'Save';
     btn.style.marginTop = 'var(--space-3)';
-    btn.style.width = '100%';
+    btn.style.width = 'auto';
+    btn.style.padding = '0 24px';
+    btn.style.display = 'inline-block';
+    btn.style.minWidth = '120px';
     btn.addEventListener('click', async () => {
       btn.disabled = true; btn.textContent = 'Saving…';
       try {
@@ -2019,7 +2022,7 @@
     });
     content.appendChild(btn);
   }
-  
+
       let shouldOpenAllocations = false;
 
       // --- Permissions ---
@@ -2057,11 +2060,13 @@
           // Show FAB only if staff can add items or categories
           const showFab = can('inventory', 'add');
           fab.classList.toggle('hidden', !showFab);
-        } else {
-          // Recipes page: show FAB only if can add recipes
-          fab.classList.toggle('hidden', !can('recipes', 'create'));
-        }
-            // Show Settings tab for managers
+    } else if (currentPage === 'recipes') {
+      // Recipes page: show FAB only if can add recipes
+      fab.classList.toggle('hidden', !can('recipes', 'create'));
+    } else {
+      // Settings or other pages: hide FAB completely
+      fab.classList.add('hidden');
+    }            // Show Settings tab for managers
     navSet.classList.toggle('hidden', !can('settings', 'manage'));
 
         // Reset button (allowed for both roles)
