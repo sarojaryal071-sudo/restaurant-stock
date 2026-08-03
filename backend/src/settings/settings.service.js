@@ -1,5 +1,6 @@
 const repository = require('./settings.repository');
 const DEFAULTS = require('./settings.defaults');
+const { resolveAllPermissions } = require('../../permissions');
 
 /**
  * Get all settings for a restaurant, merging with defaults.
@@ -9,13 +10,17 @@ async function getAllSettings(restaurantId) {
   const merged = {};
 
   for (const section of Object.keys(DEFAULTS)) {
-    merged[section] = stored[section] !== undefined
-      ? stored[section]
-      : DEFAULTS[section];
+    if (section === 'permissions') {
+      // For permissions, return the effective permissions for the restaurant
+      merged.permissions = await resolveAllPermissions(restaurantId);
+    } else {
+      merged[section] = stored[section] !== undefined
+        ? stored[section]
+        : DEFAULTS[section];
+    }
   }
   return merged;
 }
-
 // Individual section getters
 async function getSection(restaurantId, key) {
   const stored = await repository.loadSection(restaurantId, key);

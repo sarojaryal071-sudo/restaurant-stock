@@ -1946,12 +1946,16 @@
     content.innerHTML = '';
 
     if (sectionKey === 'permissions') {
-      const modules = ['inventory','recipes','categories','allocations','pos','settings'];
-      modules.forEach(mod => {
-        const perms = secData[mod] || [];
+      // Staff permissions are nested: settingsData.permissions.staff
+      const staffPerms = settingsData.permissions?.staff || {};
+      const managerPerms = settingsData.permissions?.manager || {};
+      const allModules = [...new Set([...Object.keys(managerPerms), ...Object.keys(staffPerms)])];
+      allModules.forEach(mod => {
+        const perms = staffPerms[mod] || [];
+        // Derive available actions from union of manager + staff
+        const availableActions = [...new Set([...(managerPerms[mod] || []), ...(staffPerms[mod] || [])])];
         let html = `<div class="field-label">${mod.charAt(0).toUpperCase()+mod.slice(1)}</div>`;
-        const actions = (settingsData._meta && settingsData._meta.permissionActions && settingsData._meta.permissionActions[mod]) || ['view','create','edit','delete','add','save','manage','sale','resolve','list','details'];
-        actions.forEach(act => {
+        availableActions.forEach(act => {
           const checked = perms.includes(act);
           html += `<label style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><input type="checkbox" ${checked?'checked':''} data-mod="${mod}" data-act="${act}"> ${act}</label>`;
         });
@@ -1980,28 +1984,28 @@
       });
     }
 
-    // Save button
+    // Save button (reuses existing action button style)
     const btn = document.createElement('button');
-    btn.className = 'btn-save btn-gold';
+    btn.className = 'btn-gold';
     btn.textContent = 'Save';
     btn.style.marginTop = 'var(--space-3)';
-    btn.style.width = 'auto';
-    btn.style.padding = '0 24px';
-    btn.style.display = 'inline-block';
-    btn.style.minWidth = '120px';
     btn.addEventListener('click', async () => {
       btn.disabled = true; btn.textContent = 'Saving…';
       try {
         let payload;
-        if (sectionKey === 'permissions') {
-          payload = {};
-          document.querySelectorAll('#settingsDetailContent input[data-mod]').forEach(cb => {
-            const mod = cb.dataset.mod;
-            const act = cb.dataset.act;
-            if (!payload[mod]) payload[mod] = [];
-            if (cb.checked) payload[mod].push(act);
-          });
-        } else {
+          if (sectionKey === 'permissions') {
+            // Build new staff permissions from checkboxes
+            const newStaff = {};
+            document.querySelectorAll('#settingsDetailContent input[data-mod]').forEach(cb => {
+              const mod = cb.dataset.mod;
+              const act = cb.dataset.act;
+              if (!newStaff[mod]) newStaff[mod] = [];
+              if (cb.checked) newStaff[mod].push(act);
+            });
+            // Preserve unchanged manager permissions (from the fetched settings)
+            const managerPerms = settingsData.permissions?.manager || {};
+            payload = { manager: managerPerms, staff: newStaff };
+          } else {
           payload = {};
           const sectionFields = document.querySelectorAll(`#settingsDetailContent [id^="set-${sectionKey}-"]`);
           sectionFields.forEach(field => {

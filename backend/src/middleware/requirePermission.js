@@ -1,9 +1,15 @@
-const { can } = require('../../permissions');
-
+/**
+ * Middleware that checks whether the authenticated user has the required
+ * module‑action permission.
+ * Must be used after requireAuth.
+ *
+ * Permissions are read from req.auth.permissions (set by requireAuth/login).
+ */
 function requirePermission(module, action) {
   return (req, res, next) => {
-    const role = req.auth.role || 'staff';
-    if (!can(role, module, action)) {
+    const perms = req.auth.permissions || {};
+    const allowedActions = perms[module] || [];
+    if (!allowedActions.includes(action)) {
       return res.json({
         ok: false,
         code: 'FORBIDDEN',

@@ -1,47 +1,70 @@
-// =================================================================
-// CENTRALISED PERMISSION DEFINITIONS
-// =================================================================
-// Roles: manager, staff
-// Modules: inventory, recipes, categories, allocations, pos, settings
+const { query } = require('./database');
 
-const PERMISSIONS = {
+// Static fallback definitions
+const DEFAULTS = {
   manager: {
-    inventory:    ['add', 'edit', 'delete', 'save', 'view'],
-    recipes:      ['create', 'edit', 'delete', 'view'],
-    categories:   ['add', 'edit', 'delete'],
-    allocations:  ['list', 'details', 'resolve'],
-    pos:          ['sale'],
-    settings:     ['manage']
+    inventory:   ['add', 'edit', 'delete', 'save', 'view'],
+    recipes:     ['create', 'edit', 'delete', 'view'],
+    categories:  ['add', 'edit', 'delete'],
+    allocations: ['list', 'details', 'resolve'],
+    pos:         ['sale'],
+    settings:    ['manage']
   },
   staff: {
-    inventory:    ['save', 'view'],
-    recipes:      ['view'],
-    allocations:  ['list', 'details', 'resolve'],
-    pos:          ['sale']
+    inventory:   ['save', 'view'],
+    recipes:     ['view'],
+    allocations: ['list', 'details', 'resolve'],
+    pos:         ['sale']
   }
 };
 
 /**
- * Check if a role can perform an action on a module.
- * @param {string} role - 'manager' or 'staff'
- * @param {string} module - e.g. 'recipes'
- * @param {string} action - e.g. 'create'
- * @returns {boolean}
+ * Load custom permissions from restaurant_settings.
  */
-function can(role, module, action) {
-  const rolePerms = PERMISSIONS[role];
-  if (!rolePerms) return false;
-  const modulePerms = rolePerms[module];
-  if (!modulePerms) return false;
-  return modulePerms.includes(action);
+async function loadCustomPermissions(restaurantId) {
+  try {
+    const res = await query(
+      `SELECT value FROM restaurant_settings WHERE restaurant_id = $1 AND key = 'permissions'`,
+      [restaurantId]
+    );
+    if (res.rows.length > 0 && res.rows[0].value) {
+      return res.rows[0].value;
+    }
+    return null;
+  } catch (err) {
+    console.error('Failed to load custom permissions:', err);
+    return null;
+  }
 }
 
 /**
- * Return the full permissions object for a given role.
- * Used in login response.
+ * Resolve effective permissions for a single role.
  */
-function getPermissions(role) {
-  return PERMISSIONS[role] || {};
+async function resolvePermissions(role, restaurantId) {
+  const custom = await loadCustomPermissions(restaurantId);
+  if (custom && custom[role]) {
+    return custom[role];
+  }
+  return DEFAULTS[role] || {};
 }
 
-module.exports = { can, getPermissions };
+/**
+ * Resolve the full permissions object for a restaurant (both roles).
+ * Used by settings endpoint to display current permissions.
+ */
+async function resolveAllPermissions(restaurantId) {
+  const custom = await loadCustomPermissions(restaurantId);
+  if (custom) {
+    return {
+      manager: custom.manager || DEFAULTS.manager,
+      staff:   custom.staff   || DEFAULTS.staff
+    };
+  }
+  // No custom saved – return static defaults
+  return { ...DEFAULTS };
+}
+
+// Also export the static defaults for backward compatibility
+module.exports = DEFAULTS;
+module.exports.resolvePermissions = resolvePermissions;
+module.exports.resolveAllPermissions = resolveAllPermissions;

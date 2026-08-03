@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { query } = require('./database');
-const { getPermissions } = require('./permissions');
+const { resolvePermissions } = require('./permissions');
 
 // -------------------------------------------------------------------
 // PIN Hashing
@@ -38,6 +38,8 @@ async function validateSession(token) {
 async function deleteSession(token) {
   await query(`DELETE FROM sessions WHERE token = $1`, [token]);
 }
+
+
 
 // -------------------------------------------------------------------
 // Helper: get a restaurant object by ID
@@ -76,11 +78,12 @@ async function login(req, res) {
   }
 
   const user = userRes.rows[0];
-  const role = user.role || 'staff';   // default to staff if missing
+  const role = user.role || 'staff';
   const restaurant = await getRestaurant(user.restaurant_id);
   if (!restaurant) return res.json({ ok: false, code: 'SERVER_ERROR', error: 'Restaurant not found.' });
 
   const token = await createSession(user.id, user.restaurant_id);
+  const permissions = await resolvePermissions(role, user.restaurant_id);
 
   await query(
     `INSERT INTO logs (id, action, details, user_id, restaurant_id, timestamp)
@@ -92,7 +95,7 @@ async function login(req, res) {
     ok: true,
     token,
     user: { id: user.id, name: user.name, role },
-    permissions: getPermissions(role),
+    permissions,
     restaurant
   });
 }
@@ -124,10 +127,11 @@ async function requireAuth(req, res, next) {
     try {
       const restRes = await query(`SELECT id FROM restaurants ORDER BY created_at LIMIT 1`);
       const restaurantId = restRes.rows.length > 0 ? restRes.rows[0].id : null;
-      req.auth = { restaurantId, userId: null, role: 'staff' };
+      const permissions = await resolvePermissions('staff', restaurantId);
+      req.auth = { restaurantId, userId: null, role: 'staff', permissions };
       return next();
     } catch (err) {
-      req.auth = { restaurantId: null, userId: null, role: 'staff' };
+      req.auth = { restaurantId: null, userId: null, role: 'staff', permissions: {} };
       return next();
     }
   }
@@ -144,11 +148,13 @@ async function requireAuth(req, res, next) {
 
   const userRes = await query(`SELECT role FROM users WHERE id = $1`, [session.userId]);
   const role = userRes.rows.length > 0 ? (userRes.rows[0].role || 'staff') : 'staff';
+  const permissions = await resolvePermissions(role, session.restaurantId);
 
   req.auth = {
     restaurantId: session.restaurantId,
     userId: session.userId,
-    role
+    role,
+    permissions
   };
   next();
 }

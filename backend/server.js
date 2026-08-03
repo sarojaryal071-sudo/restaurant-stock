@@ -40,7 +40,7 @@ app.use(cors({
 app.use(express.json());
 
 // ---------------------------------------------------------------
-// Health endpoint
+// Health endpoint – now includes permissions for session restoration
 // ---------------------------------------------------------------
 app.get('/api/health', async (req, res) => {
   try {
@@ -52,11 +52,15 @@ app.get('/api/health', async (req, res) => {
         const userRes = await pool.query(`SELECT id, name, role FROM users WHERE id = $1`, [session.userId]);
         const user = userRes.rows[0] || null;
         const restaurant = await getRestaurant(session.restaurantId);
+        // Resolve permissions for the authenticated user
+        const { resolvePermissions } = require('./auth');
+        const permissions = await resolvePermissions(user ? user.role : 'staff', session.restaurantId);
         return res.json({
           ok: true,
           initialized: true,
           user: user ? { id: user.id, name: user.name, role: user.role || 'staff' } : null,
-          restaurant
+          restaurant,
+          permissions
         });
       } else {
         return res.json({ ok: false, code: 'UNAUTHORIZED', error: 'Invalid or expired token.' });
@@ -69,7 +73,7 @@ app.get('/api/health', async (req, res) => {
 });
 
 // ---------------------------------------------------------------
-// getConfig
+// getConfig – returns restaurant name (global if no auth, or first restaurant)
 // ---------------------------------------------------------------
 app.get('/api/getConfig', async (req, res) => {
   try {
@@ -89,13 +93,13 @@ app.get('/api/getConfig', async (req, res) => {
 });
 
 // ---------------------------------------------------------------
-// Auth routes
+// Auth routes (no action parameter)
 // ---------------------------------------------------------------
 app.post('/api/login', login);
 app.post('/api/logout', logout);
 
 // ---------------------------------------------------------------
-// Main API router
+// Main API router – matches old frontend ?action=... or body.action
 // ---------------------------------------------------------------
 app.all('/api', async (req, res, next) => {
   try {
@@ -231,9 +235,9 @@ app.post('/api/pos/testSale', (req, res, next) => {
   });
 });
 
-
-
-// ---------- Settings (manager only) ----------
+// ---------------------------------------------------------------
+// Settings routes (manager only)
+// ---------------------------------------------------------------
 app.get('/api/settings', (req, res, next) => {
   requireAuth(req, res, () => {
     requirePermission('settings', 'manage')(req, res, () => settingsController.getAll(req, res));
