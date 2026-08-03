@@ -153,14 +153,4 @@ async function requireAuth(req, res, next) {
   next();
 }
 
-// -------------------------------------------------------------------
-// Middleware: requireAdmin (kept for backward compatibility, uses manager role)
-// -------------------------------------------------------------------
-async function requireAdmin(req, res, next) {
-  if (req.auth.role !== 'admin' && req.auth.role !== 'manager') {
-    return res.status(403).json({ ok: false, code: 'FORBIDDEN', error: 'Admin access required.' });
-  }
-  next();
-}
-
-module.exports = { hashPin, createSession, validateSession, deleteSession, login, logout, requireAuth, requireAdmin, getRestaurant };
+module.exports = { hashPin, createSession, validateSession, deleteSession, login, logout, requireAuth, getRestaurant };

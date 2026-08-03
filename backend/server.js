@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const { runMigrations } = require('./migration');
 const { pool } = require('./database');
-const { login, logout, requireAuth, requireAdmin, validateSession, getRestaurant } = require('./auth');
+const { login, logout, requireAuth, validateSession, getRestaurant } = require('./auth');
 const requirePermission = require('./src/middleware/requirePermission');
 const inventory = require('./inventory');
 const recipes = require('./recipes');
@@ -13,7 +13,7 @@ const { simulateSale } = require('./src/pos/simulator');
 const app = express();
 
 // ---------------------------------------------------------------
-// CORS – MUST be the first middleware
+// CORS
 // ---------------------------------------------------------------
 const allowedOrigins = [
   process.env.FRONTEND_URL,
@@ -39,7 +39,7 @@ app.use(cors({
 app.use(express.json());
 
 // ---------------------------------------------------------------
-// Health endpoint – public; with token returns branded session
+// Health endpoint
 // ---------------------------------------------------------------
 app.get('/api/health', async (req, res) => {
   try {
@@ -68,7 +68,7 @@ app.get('/api/health', async (req, res) => {
 });
 
 // ---------------------------------------------------------------
-// getConfig – returns restaurant name (global if no auth, or first restaurant)
+// getConfig
 // ---------------------------------------------------------------
 app.get('/api/getConfig', async (req, res) => {
   try {
@@ -88,13 +88,13 @@ app.get('/api/getConfig', async (req, res) => {
 });
 
 // ---------------------------------------------------------------
-// Auth routes (no action parameter)
+// Auth routes
 // ---------------------------------------------------------------
 app.post('/api/login', login);
 app.post('/api/logout', logout);
 
 // ---------------------------------------------------------------
-// Main API router – matches old frontend ?action=... or body.action
+// Main API router
 // ---------------------------------------------------------------
 app.all('/api', async (req, res, next) => {
   try {
@@ -102,77 +102,105 @@ app.all('/api', async (req, res, next) => {
     switch (action) {
       // ---------- Inventory (staff accessible) ----------
       case 'loadStock':
-        await requireAuth(req, res, async () => inventory.loadStock(req, res));
+        requireAuth(req, res, () => inventory.loadStock(req, res));
         break;
       case 'saveStock':
-        await requireAuth(req, res, async () => inventory.saveStock(req, res));
+        requireAuth(req, res, () => {
+          requirePermission('inventory', 'save')(req, res, () => inventory.saveStock(req, res));
+        });
         break;
 
       // ---------- Inventory management (manager only) ----------
       case 'addCustomItem':
-        await requireAuth(req, res, requirePermission('inventory', 'add'), async () => inventory.addCustomItem(req, res));
+        requireAuth(req, res, () => {
+          requirePermission('inventory', 'add')(req, res, () => inventory.addCustomItem(req, res));
+        });
         break;
       case 'updateItem':
-        await requireAuth(req, res, requirePermission('inventory', 'edit'), async () => inventory.updateItem(req, res));
+        requireAuth(req, res, () => {
+          requirePermission('inventory', 'edit')(req, res, () => inventory.updateItem(req, res));
+        });
         break;
       case 'deleteItem':
-        await requireAuth(req, res, requirePermission('inventory', 'delete'), async () => inventory.deleteItem(req, res));
+        requireAuth(req, res, () => {
+          requirePermission('inventory', 'delete')(req, res, () => inventory.deleteItem(req, res));
+        });
         break;
       case 'restoreItem':
-        await requireAuth(req, res, requirePermission('inventory', 'edit'), async () => inventory.restoreItem(req, res));
+        requireAuth(req, res, () => {
+          requirePermission('inventory', 'edit')(req, res, () => inventory.restoreItem(req, res));
+        });
         break;
 
       // ---------- Category management (manager only) ----------
       case 'addCategory':
-        await requireAuth(req, res, requirePermission('categories', 'add'), async () => inventory.addCategory(req, res));
+        requireAuth(req, res, () => {
+          requirePermission('categories', 'add')(req, res, () => inventory.addCategory(req, res));
+        });
         break;
       case 'updateCategory':
-        await requireAuth(req, res, requirePermission('categories', 'edit'), async () => inventory.updateCategory(req, res));
+        requireAuth(req, res, () => {
+          requirePermission('categories', 'edit')(req, res, () => inventory.updateCategory(req, res));
+        });
         break;
       case 'deleteCategory':
-        await requireAuth(req, res, requirePermission('categories', 'delete'), async () => inventory.deleteCategory(req, res));
+        requireAuth(req, res, () => {
+          requirePermission('categories', 'delete')(req, res, () => inventory.deleteCategory(req, res));
+        });
         break;
       case 'restoreCategory':
-        await requireAuth(req, res, requirePermission('categories', 'edit'), async () => inventory.restoreCategory(req, res));
+        requireAuth(req, res, () => {
+          requirePermission('categories', 'edit')(req, res, () => inventory.restoreCategory(req, res));
+        });
         break;
 
-      // ---------- Recipes (staff can view, manager can manage) ----------
+      // ---------- Recipes ----------
       case 'listRecipes':
-        await requireAuth(req, res, async () => recipes.listRecipes(req, res));
+        requireAuth(req, res, () => recipes.listRecipes(req, res));
         break;
       case 'getRecipe':
-        await requireAuth(req, res, async () => recipes.getRecipe(req, res));
+        requireAuth(req, res, () => recipes.getRecipe(req, res));
         break;
       case 'createRecipe':
-        await requireAuth(req, res, requirePermission('recipes', 'create'), async () => recipes.createRecipe(req, res));
+        requireAuth(req, res, () => {
+          requirePermission('recipes', 'create')(req, res, () => recipes.createRecipe(req, res));
+        });
         break;
       case 'updateRecipe':
-        await requireAuth(req, res, requirePermission('recipes', 'edit'), async () => recipes.updateRecipe(req, res));
+        requireAuth(req, res, () => {
+          requirePermission('recipes', 'edit')(req, res, () => recipes.updateRecipe(req, res));
+        });
         break;
       case 'deleteRecipe':
-        await requireAuth(req, res, requirePermission('recipes', 'delete'), async () => recipes.deleteRecipe(req, res));
+        requireAuth(req, res, () => {
+          requirePermission('recipes', 'delete')(req, res, () => recipes.deleteRecipe(req, res));
+        });
         break;
       case 'recordSale':
-        await requireAuth(req, res, requirePermission('pos', 'sale'), async () => recipes.recordSale(req, res));
+        requireAuth(req, res, () => {
+          requirePermission('pos', 'sale')(req, res, () => recipes.recordSale(req, res));
+        });
         break;
 
       // ---------- Allocations (staff accessible) ----------
       case 'listPendingAllocations':
-        await requireAuth(req, res, async () => allocations.listPendingAllocations(req, res));
+        requireAuth(req, res, () => allocations.listPendingAllocations(req, res));
         break;
       case 'getPendingAllocationDetails':
-        await requireAuth(req, res, async () => allocations.getPendingAllocationDetails(req, res));
+        requireAuth(req, res, () => allocations.getPendingAllocationDetails(req, res));
         break;
       case 'resolvePendingAllocation':
-        await requireAuth(req, res, async () => allocations.resolvePendingAllocation(req, res));
+        requireAuth(req, res, () => allocations.resolvePendingAllocation(req, res));
         break;
 
-      // ---------- Admin only (already requireAuth + requireAdmin) ----------
+      // ---------- Admin only (use requirePermission) ----------
       case 'resetStock':
       case 'initializeDatabase':
       case 'seedDatabase':
-        await requireAuth(req, res, requireAdmin, async () => {
-          return res.json({ ok: false, code: 'NOT_IMPLEMENTED', error: 'Endpoint will be added in a later phase.' });
+        requireAuth(req, res, () => {
+          requirePermission('settings', 'manage')(req, res, () => {
+            res.json({ ok: false, code: 'NOT_IMPLEMENTED', error: 'Endpoint will be added in a later phase.' });
+          });
         });
         break;
 
@@ -190,20 +218,16 @@ app.all('/api', async (req, res, next) => {
 });
 
 // ---------------------------------------------------------------
-// POS test endpoint – staff accessible
+// POS test endpoint
 // ---------------------------------------------------------------
-app.post('/api/pos/testSale', async (req, res, next) => {
-  try {
-    await requireAuth(req, res, async () => {
-      const { productId, productName, quantity } = req.body;
-      if (!productId || !quantity) {
-        return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'productId and quantity are required' });
-      }
-      await simulateSale(productId, productName, quantity, new Date().toISOString(), req, res);
-    });
-  } catch (err) {
-    next(err);
-  }
+app.post('/api/pos/testSale', (req, res, next) => {
+  requireAuth(req, res, () => {
+    const { productId, productName, quantity } = req.body;
+    if (!productId || !quantity) {
+      return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'productId and quantity are required' });
+    }
+    simulateSale(productId, productName, quantity, new Date().toISOString(), req, res);
+  });
 });
 
 // ---------------------------------------------------------------
