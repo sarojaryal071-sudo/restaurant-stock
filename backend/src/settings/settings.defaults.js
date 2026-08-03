@@ -6,14 +6,14 @@ const DEFAULTS = {
     showNegativeWarning: true
   },
   posIntegration: {
-    provider: 'flatpay',        // placeholder
-    status: 'disconnected',     // connected | disconnected
-    lastSync: null,
+    provider: 'None',
+    status: 'Disconnected',
+    last_sync: null,
+    configuration: {},
     statistics: {
       totalSales: 0,
       lastSaleAt: null
-    },
-    connectStatus: 'not_configured'
+    }
   }
 };
 

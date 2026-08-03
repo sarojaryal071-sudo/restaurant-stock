@@ -12,6 +12,7 @@ const { simulateSale } = require('./src/pos/simulator');
 const settingsController = require('./src/settings/settings.controller');
 const permissionsController = require('./src/permissions/permissions.controller');
 const permissionsService = require('./src/permissions/permissions.service');  // for health endpoint
+const posActions = require('./src/posIntegration/posIntegration.actions');
 
 const app = express();
 
@@ -236,6 +237,27 @@ app.post('/api/pos/testSale', (req, res, next) => {
       return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'productId and quantity are required' });
     }
     simulateSale(productId, productName, quantity, new Date().toISOString(), req, res);
+  });
+});
+
+// ---------------------------------------------------------------
+// POS Integration – backend‑owned actions (manager only)
+// ---------------------------------------------------------------
+app.post('/api/pos/connect', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => posActions.connect(req, res));
+  });
+});
+
+app.post('/api/pos/disconnect', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => posActions.disconnect(req, res));
+  });
+});
+
+app.post('/api/pos/sync', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => posActions.sync(req, res));
   });
 });
 
