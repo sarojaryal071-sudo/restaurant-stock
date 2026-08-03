@@ -19,7 +19,7 @@ async function runMigrations() {
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
-
+    
 
     // --- Users ---
     await tx(`
@@ -143,15 +143,15 @@ async function runMigrations() {
     `);
 
     // Insert default settings if missing
-    await tx(`
-      INSERT INTO settings (key, value)
-      VALUES ('requireAuth', 'false')
-      ON CONFLICT (key) DO NOTHING;
-    `);
+    await tx(
+      `INSERT INTO settings (key, value)
+       VALUES ($1, $2)
+       ON CONFLICT (key) DO NOTHING`,
+      ['requireAuth', 'false']
+    );
 
     // -----------------------------------------------------------------
     // FIX: allow recipe_ingredients.inventory_item_id to be set to NULL
-    //      when the referenced item is deleted (instead of blocking deletion).
     // -----------------------------------------------------------------
     const constraintCheck = await tx(`
       SELECT confdeltype
@@ -167,8 +167,6 @@ async function runMigrations() {
     // =================================================================
     // NEW TABLES for POS shortage resolution
     // =================================================================
-
-    // --- Pending Allocations (grouped shortages) ---
     await tx(`
       CREATE TABLE IF NOT EXISTS pending_allocations (
         id UUID PRIMARY KEY,
@@ -187,7 +185,6 @@ async function runMigrations() {
     `);
     await tx(`CREATE INDEX IF NOT EXISTS idx_pending_allocations_restaurant ON pending_allocations(restaurant_id, resolved);`);
 
-    // --- Pending Allocation Details (per cocktail) ---
     await tx(`
       CREATE TABLE IF NOT EXISTS pending_allocation_details (
         id UUID PRIMARY KEY,
@@ -203,7 +200,6 @@ async function runMigrations() {
     `);
     await tx(`CREATE INDEX IF NOT EXISTS idx_pending_alloc_details_parent ON pending_allocation_details(pending_allocation_id);`);
 
-    // --- Allocation Logs (audit trail) ---
     await tx(`
       CREATE TABLE IF NOT EXISTS allocation_logs (
         id UUID PRIMARY KEY,
@@ -222,6 +218,10 @@ async function runMigrations() {
     // -----------------------------------------------------------------
     await tx(`ALTER TABLE users ALTER COLUMN role SET DEFAULT 'staff'`);
     await tx(`UPDATE users SET role = 'manager' WHERE role = 'admin'`);
+
+    // -----------------------------------------------------------------
+    // Staff Management: is_active column
+    // -----------------------------------------------------------------
     await tx(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`);
 
     // --- Restaurant Settings ---
@@ -239,7 +239,7 @@ async function runMigrations() {
     await tx(`CREATE INDEX IF NOT EXISTS idx_restaurant_settings_restaurant ON restaurant_settings(restaurant_id);`);
 
     // =================================================================
-    // POS Integration table (one per restaurant) – simplified schema
+    // POS Integration table (simplified schema)
     // =================================================================
     await tx(`
       CREATE TABLE IF NOT EXISTS pos_integrations (
@@ -257,21 +257,18 @@ async function runMigrations() {
     `);
     await tx(`CREATE INDEX IF NOT EXISTS idx_pos_integrations_restaurant ON pos_integrations(restaurant_id);`);
 
-    // Migrate old columns if they still exist (safe upgrade)
-    const cols = await tx(`
+    // Migrate old columns if they still exist
+    const posCols = await tx(`
       SELECT column_name
       FROM information_schema.columns
       WHERE table_name = 'pos_integrations'
         AND column_name IN ('provider_id','provider_name','connection_status','connect_status')
     `);
-    if (cols.rows.length > 0) {
-      // Add new columns if missing
+    if (posCols.rows.length > 0) {
       await tx(`ALTER TABLE pos_integrations ADD COLUMN IF NOT EXISTS provider TEXT DEFAULT 'None'`);
       await tx(`ALTER TABLE pos_integrations ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Disconnected'`);
-      // Copy values
       await tx(`UPDATE pos_integrations SET provider = COALESCE(provider_name, provider_id, 'None')`);
       await tx(`UPDATE pos_integrations SET status = COALESCE(connection_status, 'Disconnected')`);
-      // Drop old columns
       await tx(`ALTER TABLE pos_integrations DROP COLUMN IF EXISTS provider_id`);
       await tx(`ALTER TABLE pos_integrations DROP COLUMN IF EXISTS provider_name`);
       await tx(`ALTER TABLE pos_integrations DROP COLUMN IF EXISTS connection_status`);
@@ -312,26 +309,26 @@ async function runMigrations() {
 
     // Seed definitions
     const seedDefinitions = [
-      ['inventory', 'view', 'View Inventory', 'Ability to view inventory items', 1],
-      ['inventory', 'save', 'Save Inventory', 'Ability to save stock quantities', 2],
-      ['inventory', 'add', 'Add Inventory Item', 'Ability to add new inventory items', 3],
-      ['inventory', 'edit', 'Edit Inventory Item', 'Ability to edit existing items', 4],
-      ['inventory', 'delete', 'Delete Inventory Item', 'Ability to delete items', 5],
-      ['recipes', 'view', 'View Recipes', 'Ability to view recipes', 6],
-      ['recipes', 'create', 'Create Recipe', 'Ability to create new recipes', 7],
-      ['recipes', 'edit', 'Edit Recipe', 'Ability to edit existing recipes', 8],
-      ['recipes', 'delete', 'Delete Recipe', 'Ability to delete recipes', 9],
-      ['categories', 'add', 'Add Category', 'Ability to add new categories', 10],
-      ['categories', 'edit', 'Edit Category', 'Ability to rename/reorder categories', 11],
-      ['categories', 'delete', 'Delete Category', 'Ability to delete categories', 12],
-      ['allocations', 'list', 'List Pending Allocations', 'Ability to view pending shortage allocations', 13],
-      ['allocations', 'details', 'View Allocation Details', 'Ability to see per‑cocktail details', 14],
-      ['allocations', 'resolve', 'Resolve Pending Allocations', 'Ability to resolve shortages', 15],
-      ['pos', 'sale', 'Record Sale', 'Ability to record a sale (POS)', 16],
-      ['settings', 'manage', 'Manage Settings', 'Ability to modify restaurant settings', 17]
+      ['inventory','view','View Inventory','Ability to view inventory items',1],
+      ['inventory','save','Save Inventory','Ability to save stock quantities',2],
+      ['inventory','add','Add Inventory Item','Ability to add new inventory items',3],
+      ['inventory','edit','Edit Inventory Item','Ability to edit existing items',4],
+      ['inventory','delete','Delete Inventory Item','Ability to delete items',5],
+      ['recipes','view','View Recipes','Ability to view recipes',6],
+      ['recipes','create','Create Recipe','Ability to create new recipes',7],
+      ['recipes','edit','Edit Recipe','Ability to edit existing recipes',8],
+      ['recipes','delete','Delete Recipe','Ability to delete recipes',9],
+      ['categories','add','Add Category','Ability to add new categories',10],
+      ['categories','edit','Edit Category','Ability to rename/reorder categories',11],
+      ['categories','delete','Delete Category','Ability to delete categories',12],
+      ['allocations','list','List Pending Allocations','Ability to view pending shortage allocations',13],
+      ['allocations','details','View Allocation Details','Ability to see per‑cocktail details',14],
+      ['allocations','resolve','Resolve Pending Allocations','Ability to resolve shortages',15],
+      ['pos','sale','Record Sale','Ability to record a sale (POS)',16],
+      ['settings','manage','Manage Settings','Ability to modify restaurant settings',17],
       ['staff','view','View Staff','Ability to view staff members',18],
       ['staff','create','Create Staff','Ability to create new staff accounts',19],
-      ['staff','edit','Edit Staff','Ability to edit staff details',20],
+      ['staff','edit','Edit Staff','Ability to edit staff details',20]
     ];
     for (const def of seedDefinitions) {
       await tx(
@@ -373,10 +370,10 @@ async function runMigrations() {
       }
       // Staff → current production defaults
       const staffDefaults = {
-        inventory: ['view', 'save'],
-        recipes: ['view'],
-        allocations: ['list', 'details', 'resolve'],
-        pos: ['sale']
+        inventory:   ['view','save'],
+        recipes:     ['view'],
+        allocations: ['list','details','resolve'],
+        pos:         ['sale']
       };
       for (const module of Object.keys(staffDefaults)) {
         for (const perm of staffDefaults[module]) {
