@@ -662,7 +662,11 @@ button{font-family:inherit}
       navInv.classList.remove('active'); navRec.classList.add('active');
       fabLbl.textContent = 'Add Recipe';
       svBtn.classList.add('hidden');
-      if (recipeState.recipes.length === 0) loadRecipes();
+      if (recipeState.recipes.length === 0) {
+        loadRecipes();
+      } else {
+        renderRecipes();
+      }
       loadPendingAllocations();
       applyUIPermissions();
     }
