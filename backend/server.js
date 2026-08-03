@@ -231,7 +231,7 @@ app.post('/api/pos/testSale', (req, res, next) => {
   });
 });
 
-const settingsController = require('./src/settings/settings.controller');
+
 
 // ---------- Settings (manager only) ----------
 app.get('/api/settings', (req, res, next) => {
