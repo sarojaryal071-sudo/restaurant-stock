@@ -1560,6 +1560,7 @@
 .settings-body .field-input,.settings-body .field-select{width:100%;background:var(--charcoal-1);border:1px solid var(--line-strong);border-radius:var(--radius-sm);padding:12px 14px;color:var(--paper);font-size:0.95rem}
 .settings-body .btn-save{margin-top:var(--space-3);min-height:var(--tap);border-radius:var(--radius-sm);border:none;cursor:pointer;font-weight:700;font-size:0.9rem;background:linear-gradient(135deg,var(--gold-bright),var(--gold-deep));color:#1c1305;width:100%}
 .settings-body .btn-save:disabled{opacity:0.5;cursor:not-allowed}
+#settingsBackBtn { display: inline-flex; align-items: center; gap: 6px; margin-bottom: var(--space-3); font-size: 0.85rem; }
   </style>
 </head>
 
@@ -1708,9 +1709,7 @@
     </div>
 
     <div id="pageSettings" class="hidden">
-      <div class="container">
-        <div id="settingsRoot"></div>
-      </div>
+      <div class="container" id="settingsContainer"></div>
     </div>
 
   <nav class="bottom-nav">
@@ -1876,81 +1875,151 @@
       let currentPage = 'inventory';
       let pendingAllocations = [];
       let currentAllocationDetails = null;
-        let settingsData = null;
+  let settingsData = null;
+  let settingsSubPage = null; // 'menu' or a section key like 'restaurant'
 
   async function loadSettings() {
     try {
       const data = await api.getSettings();
       settingsData = (data && data.settings) ? data.settings : data;
-      renderSettings();
+      showSettingsMenu();
     } catch (e) { toast('Could not load settings.', true); }
   }
 
-  function renderSettings() {
-    const root = document.getElementById('settingsRoot');
-    if (!settingsData) return;
-    root.innerHTML = '';
+  function showSettingsMenu() {
+    settingsSubPage = 'menu';
+    const container = document.getElementById('settingsContainer');
+    if (!container) return;
+    container.innerHTML = '';
 
     const sections = [
-      { key: 'restaurant', title: 'Restaurant', fields: ['name','displayName','logoUrl','themeColor','address','phone'] },
-      { key: 'permissions', title: 'Staff Permissions', type: 'permissions' },
-      { key: 'inventory', title: 'Inventory', fields: ['negativeStockAllowed','showNegativeWarning','defaultBottleSize','defaultUnit'] },
-      { key: 'recipe', title: 'Recipes', fields: [] },
-      { key: 'pos', title: 'POS Integration', fields: ['provider','webhookUrl','simulationMode'] },
-      { key: 'backup', title: 'Backup & Restore', fields: ['autoBackupEnabled','backupFrequency'] },
-      { key: 'about', title: 'About System', type: 'readonly', fields: ['version','databaseVersion','apiVersion','build','currentUser','currentRole','lastLogin'] }
+      { key: 'restaurant', title: 'Restaurant', icon: '🏪', desc: 'Manage restaurant information' },
+      { key: 'permissions', title: 'Staff Permissions', icon: '👥', desc: 'Control staff access' },
+      { key: 'inventory', title: 'Inventory', icon: '📦', desc: 'Inventory behaviour' },
+      { key: 'recipe', title: 'Recipes', icon: '🍸', desc: 'Recipe configuration' },
+      { key: 'pos', title: 'POS Integration', icon: '🖥', desc: 'POS connection & synchronization' },
+      { key: 'backup', title: 'Backup & Restore', icon: '💾', desc: 'Export & backup' },
+      { key: 'about', title: 'About System', icon: 'ℹ', desc: 'System information' }
     ];
 
     sections.forEach(sec => {
-      const secData = settingsData[sec.key] || {};
       const card = document.createElement('div');
-      card.className = 'settings-card';
-      card.innerHTML = `<button class="settings-header"><span class="section-title">${escapeHtml(sec.title)}</span><svg class="cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></button>`;
-      const body = document.createElement('div');
-      body.className = 'settings-body';
-      body.innerHTML = buildSectionBody(sec, secData);
-      card.appendChild(body);
-      card.querySelector('.settings-header').addEventListener('click', () => {
-        card.classList.toggle('expanded');
-        const chev = card.querySelector('.cat-chevron');
-        chev.style.transform = card.classList.contains('expanded') ? 'rotate(180deg)' : '';
-      });
-      root.appendChild(card);
+      card.className = 'cat-card';
+      card.style.marginBottom = 'var(--space-3)';
+      card.innerHTML = `
+        <button class="cat-header" style="justify-content:flex-start; gap:var(--space-3);">
+          <span style="font-size:1.4rem;">${sec.icon}</span>
+          <div class="cat-title-wrap" style="flex:1; text-align:left;">
+            <div class="cat-name">${escapeHtml(sec.title)}</div>
+            <div class="cat-count" style="font-size:0.72rem; color:var(--paper-dim);">${escapeHtml(sec.desc)}</div>
+          </div>
+          <svg class="cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
+      `;
+      card.querySelector('.cat-header').addEventListener('click', () => showSettingsDetail(sec.key));
+      container.appendChild(card);
     });
   }
 
-  function buildSectionBody(section, secData) {
-    let html = '';
-    if (section.key === 'permissions') {
+  function showSettingsDetail(sectionKey) {
+    settingsSubPage = sectionKey;
+    const secData = settingsData[sectionKey] || {};
+    const sectionTitle = sectionKey.charAt(0).toUpperCase() + sectionKey.slice(1).replace(/_/g, ' ');
+    const container = document.getElementById('settingsContainer');
+    if (!container) return;
+
+    container.innerHTML = `
+      <button class="btn btn-ghost btn-small" id="settingsBackBtn" style="margin-bottom:var(--space-3);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M15 18l-6-6 6-6"/></svg> Back
+      </button>
+      <div class="modal-title" style="margin-bottom:var(--space-3);">${escapeHtml(sectionTitle)}</div>
+      <div id="settingsDetailContent"></div>
+    `;
+
+    document.getElementById('settingsBackBtn').addEventListener('click', showSettingsMenu);
+    buildSectionDetail(sectionKey, secData);
+  }
+
+  function buildSectionDetail(sectionKey, secData) {
+    const content = document.getElementById('settingsDetailContent');
+    if (!content) return;
+    content.innerHTML = '';
+
+    if (sectionKey === 'permissions') {
       const modules = ['inventory','recipes','categories','allocations','pos','settings'];
       modules.forEach(mod => {
         const perms = secData[mod] || [];
-        html += `<div class="field-label">${mod.charAt(0).toUpperCase()+mod.slice(1)}</div>`;
+        let html = `<div class="field-label">${mod.charAt(0).toUpperCase()+mod.slice(1)}</div>`;
         const actions = (settingsData._meta && settingsData._meta.permissionActions && settingsData._meta.permissionActions[mod]) || ['view','create','edit','delete','add','save','manage','sale','resolve','list','details'];
         actions.forEach(act => {
           const checked = perms.includes(act);
           html += `<label style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><input type="checkbox" ${checked?'checked':''} data-mod="${mod}" data-act="${act}"> ${act}</label>`;
         });
+        content.innerHTML += html;
       });
-      html += `<button class="btn-save" data-section="${section.key}">Save Permissions</button>`;
-    } else if (section.type === 'readonly') {
+    } else if (sectionKey === 'about') {
       Object.keys(secData).forEach(key => {
-        html += `<div class="field-label">${key}</div><div class="field-input" style="background:var(--charcoal-2)">${escapeHtml(secData[key]||'')}</div>`;
+        content.innerHTML += `<div class="field-label">${key}</div><div class="field-input" style="background:var(--charcoal-2)">${escapeHtml(secData[key]||'')}</div>`;
       });
     } else {
-      section.fields.forEach(field => {
+      const fieldsMap = {
+        restaurant: ['name','displayName','logoUrl','themeColor','address','phone'],
+        inventory: ['negativeStockAllowed','showNegativeWarning','defaultBottleSize','defaultUnit'],
+        recipe: Object.keys(secData),
+        pos: ['provider','webhookUrl','simulationMode'],
+        backup: ['autoBackupEnabled','backupFrequency']
+      };
+      const fields = fieldsMap[sectionKey] || Object.keys(secData);
+      fields.forEach(field => {
         const val = secData[field] ?? '';
         if (typeof val === 'boolean') {
-          html += `<label style="display:flex;align-items:center;gap:8px;margin-top:var(--space-2)"><input type="checkbox" ${val?'checked':''} id="set-${section.key}-${field}"> ${field}</label>`;
+          content.innerHTML += `<label style="display:flex;align-items:center;gap:8px;margin-top:var(--space-2)"><input type="checkbox" ${val?'checked':''} id="set-${sectionKey}-${field}"> ${field}</label>`;
         } else {
-          html += `<div class="field-label">${field}</div><input class="field-input" id="set-${section.key}-${field}" value="${escapeHtml(val)}">`;
+          content.innerHTML += `<div class="field-label">${field}</div><input class="field-input" id="set-${sectionKey}-${field}" value="${escapeHtml(val)}">`;
         }
       });
-      html += `<button class="btn-save" data-section="${section.key}">Save</button>`;
     }
-    return html;
-  }
 
+    // Save button
+    const btn = document.createElement('button');
+    btn.className = 'btn-save btn-gold';
+    btn.textContent = 'Save';
+    btn.style.marginTop = 'var(--space-3)';
+    btn.style.width = '100%';
+    btn.addEventListener('click', async () => {
+      btn.disabled = true; btn.textContent = 'Saving…';
+      try {
+        let payload;
+        if (sectionKey === 'permissions') {
+          payload = {};
+          document.querySelectorAll('#settingsDetailContent input[data-mod]').forEach(cb => {
+            const mod = cb.dataset.mod;
+            const act = cb.dataset.act;
+            if (!payload[mod]) payload[mod] = [];
+            if (cb.checked) payload[mod].push(act);
+          });
+        } else {
+          payload = {};
+          const sectionFields = document.querySelectorAll(`#settingsDetailContent [id^="set-${sectionKey}-"]`);
+          sectionFields.forEach(field => {
+            const key = field.id.replace(`set-${sectionKey}-`, '');
+            if (field.type === 'checkbox') payload[key] = field.checked;
+            else payload[key] = field.value;
+          });
+        }
+        await api.updateSettings(sectionKey, payload);
+        toast('Settings saved.');
+        await loadSettings(); // refresh data
+        showSettingsMenu();   // back to menu
+      } catch (err) {
+        toast(err.message || 'Save failed', true);
+      } finally {
+        btn.disabled = false; btn.textContent = 'Save';
+      }
+    });
+    content.appendChild(btn);
+  }
+  
       let shouldOpenAllocations = false;
 
       // --- Permissions ---
@@ -2155,7 +2224,7 @@
       pgSet.classList.remove('hidden');
       navSet.classList.add('active');
       fab.classList.add('hidden');
-      if (!settingsData) loadSettings();
+      if (!settingsData) { loadSettings(); } else { showSettingsMenu(); }
     }
     applyUIPermissions();
   }    
@@ -2538,40 +2607,6 @@
         catch (e) { toast(e.message || 'Failed to save recipe.', true); } finally { rmf.disabled = false; rmf.textContent = 'Save Recipe'; }
       });
 
-        // Settings save delegation
-  document.getElementById('settingsRoot')?.addEventListener('click', async (e) => {
-    const btn = e.target.closest('.btn-save');
-    if (!btn) return;
-    const section = btn.dataset.section;
-    btn.disabled = true; btn.textContent = 'Saving…';
-    try {
-      if (section === 'permissions') {
-        const payload = {};
-        document.querySelectorAll('#settingsRoot input[data-mod]').forEach(cb => {
-          const mod = cb.dataset.mod;
-          const act = cb.dataset.act;
-          if (!payload[mod]) payload[mod] = [];
-          if (cb.checked) payload[mod].push(act);
-        });
-        await api.updateSettings(section, payload);
-      } else {
-        const payload = {};
-        const sectionFields = document.querySelectorAll(`#settingsRoot [id^="set-${section}-"]`);
-        sectionFields.forEach(field => {
-          const key = field.id.replace(`set-${section}-`, '');
-          if (field.type === 'checkbox') payload[key] = field.checked;
-          else payload[key] = field.value;
-        });
-        await api.updateSettings(section, payload);
-      }
-      toast('Settings saved.');
-      await loadSettings();
-    } catch (err) {
-      toast(err.message || 'Save failed', true);
-    } finally {
-      btn.disabled = false; btn.textContent = section === 'permissions' ? 'Save Permissions' : 'Save';
-    }
-  });
   
       // ==================== PENDING ALLOCATIONS ====================
       async function loadPendingAllocations() {
