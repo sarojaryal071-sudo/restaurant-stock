@@ -235,14 +235,21 @@ async function runMigrations() {
     await tx(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS restaurant_code TEXT`);
     await tx(`CREATE INDEX IF NOT EXISTS idx_restaurants_code ON restaurants(restaurant_code)`);
 
-    // Generate restaurant_code for existing restaurants (simple lowercase, replace spaces with nothing)
+    // Generate restaurant_code for existing restaurants (simple lowercase, keep only a-z0-9)
     const restRows = await tx(`SELECT id, name FROM restaurants WHERE restaurant_code IS NULL`);
     for (const row of restRows.rows) {
       const code = row.name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30) || 'restaurant';
       await tx(`UPDATE restaurants SET restaurant_code = $1 WHERE id = $2`, [code, row.id]);
     }
-    // Ensure uniqueness for future inserts (add unique constraint after data is fixed)
-    await tx(`ALTER TABLE restaurants ADD CONSTRAINT IF NOT EXISTS unique_restaurant_code UNIQUE (restaurant_code)`);
+
+    // Add unique constraint on restaurant_code only if it does not already exist
+    const restCodeCon = await tx(`
+      SELECT 1 FROM pg_constraint
+      WHERE conname = 'unique_restaurant_code' AND conrelid = 'restaurants'::regclass
+    `);
+    if (restCodeCon.rows.length === 0) {
+      await tx(`ALTER TABLE restaurants ADD CONSTRAINT unique_restaurant_code UNIQUE (restaurant_code)`);
+    }
 
     // Generate username for existing users
     const userRows = await tx(`
@@ -263,10 +270,18 @@ async function runMigrations() {
       }
       await tx(`UPDATE users SET username = $1 WHERE id = $2`, [username, user.id]);
     }
-    // Make username NOT NULL and UNIQUE (now that all rows have values)
-    await tx(`ALTER TABLE users ALTER COLUMN username SET NOT NULL`);
-    await tx(`ALTER TABLE users ADD CONSTRAINT IF NOT EXISTS unique_username UNIQUE (username)`);
 
+    // Make username NOT NULL and add unique constraint (safe check)
+    await tx(`ALTER TABLE users ALTER COLUMN username SET NOT NULL`);
+
+    const usernameCon = await tx(`
+      SELECT 1 FROM pg_constraint
+      WHERE conname = 'unique_username' AND conrelid = 'users'::regclass
+    `);
+    if (usernameCon.rows.length === 0) {
+      await tx(`ALTER TABLE users ADD CONSTRAINT unique_username UNIQUE (username)`);
+    }
+    
     // --- Restaurant Settings ---
     await tx(`
       CREATE TABLE IF NOT EXISTS restaurant_settings (
