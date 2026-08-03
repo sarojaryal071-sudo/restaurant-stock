@@ -484,7 +484,9 @@ button{font-family:inherit}
     try { const v = localStorage.getItem(PERMISSIONS_KEY); return v ? JSON.parse(v) : {}; } catch(e) { return {}; }
   }
   function savePermissions(perms) {
-    try { localStorage.setItem(PERMISSIONS_KEY, JSON.stringify(perms)); } catch(e) {}
+    try { localStorage.setItem(PERMISSIONS_KEY, JSON.stringify(perms)); } catch(e) {
+      console.error('Failed to save permissions:', e);  // ← add this line}
+  }
   }
   function clearPermissions() {
     try { localStorage.removeItem(PERMISSIONS_KEY); } catch(e) {}
