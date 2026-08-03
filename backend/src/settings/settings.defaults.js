@@ -1,40 +1,19 @@
-// Default configuration for every settings section.
-// When a restaurant has no saved settings, the backend returns these.
-
+// Default values for the remaining Settings sections.
+// Only inventoryBehaviour and posIntegration are currently managed.
 const DEFAULTS = {
-  permissions: {
-    // No defaults needed – permissions are managed by the backend RBAC system.
-  },
-  restaurant: {
-    name: '',
-    displayName: '',
-    logoUrl: '',
-    themeColor: '#D4AF37',
-    address: '',
-    phone: ''
-  },
-  inventory: {
+  inventoryBehaviour: {
     negativeStockAllowed: false,
-    showNegativeWarning: true,
-    defaultBottleSize: 700,
-    defaultUnit: 'ml'
+    showNegativeWarning: true
   },
-  recipe: {
-    defaultGlass: '',
-    defaultGarnish: '',
-    showIngredients: true
-  },
-  pos: {
-    autoResolveShortages: false,
-    enableTestSales: true
-  },
-  backup: {
-    autoBackup: false,
-    backupFrequency: 'daily'
-  },
-  about: {
-    version: '1.0.0',
-    lastUpdated: ''
+  posIntegration: {
+    provider: 'flatpay',        // placeholder
+    status: 'disconnected',     // connected | disconnected
+    lastSync: null,
+    statistics: {
+      totalSales: 0,
+      lastSaleAt: null
+    },
+    connectStatus: 'not_configured'
   }
 };
 

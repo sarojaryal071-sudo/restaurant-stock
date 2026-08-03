@@ -9,8 +9,20 @@ function validateSettings(section, data) {
     return errors;
   }
 
-  // Optional: deeper per‑section validation can be added later.
-  // For now, we accept any valid JSON.
+  if (section === 'inventoryBehaviour') {
+    if (typeof data.negativeStockAllowed !== 'boolean') {
+      errors.push('inventoryBehaviour.negativeStockAllowed must be a boolean.');
+    }
+    if (typeof data.showNegativeWarning !== 'boolean') {
+      errors.push('inventoryBehaviour.showNegativeWarning must be a boolean.');
+    }
+  }
+
+  if (section === 'posIntegration') {
+    // Accept any valid JSON object for POS integration settings.
+    // The frontend will manage the exact structure.
+  }
+
   return errors;
 }
 

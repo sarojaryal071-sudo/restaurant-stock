@@ -1893,13 +1893,10 @@
     container.innerHTML = '';
 
     const sections = [
-      { key: 'restaurant', title: 'Restaurant', icon: '🏪', desc: 'Manage restaurant information' },
-      { key: 'permissions', title: 'Staff Permissions', icon: '👥', desc: 'Control staff access' },
-      { key: 'inventory', title: 'Inventory', icon: '📦', desc: 'Inventory behaviour' },
-      { key: 'recipe', title: 'Recipes', icon: '🍸', desc: 'Recipe configuration' },
-      { key: 'pos', title: 'POS Integration', icon: '🖥', desc: 'POS connection & synchronization' },
-      { key: 'backup', title: 'Backup & Restore', icon: '💾', desc: 'Export & backup' },
-      { key: 'about', title: 'About System', icon: 'ℹ', desc: 'System information' }
+      { key: 'inventory',    title: 'Inventory Behaviour', icon: '📦', desc: 'Negative stock rules & warnings' },
+      { key: 'staff',        title: 'Staff Management',    icon: '👥', desc: 'Manage staff accounts (coming soon)' },
+      { key: 'permissions',  title: 'Staff Permissions',   icon: '🔐', desc: 'Control staff access' },
+      { key: 'pos',          title: 'POS Integration',     icon: '🖥', desc: 'POS connection status' }
     ];
 
     sections.forEach(sec => {
@@ -1923,7 +1920,13 @@
 
   function showSettingsDetail(sectionKey) {
     settingsSubPage = sectionKey;
-    const sectionTitle = sectionKey.charAt(0).toUpperCase() + sectionKey.slice(1).replace(/_/g, ' ');
+    const titles = {
+      inventory: 'Inventory Behaviour',
+      staff: 'Staff Management',
+      permissions: 'Staff Permissions',
+      pos: 'POS Integration'
+    };
+    const title = titles[sectionKey] || sectionKey;
     const container = document.getElementById('settingsContainer');
     if (!container) return;
 
@@ -1931,17 +1934,20 @@
       <button class="btn btn-ghost btn-small" id="settingsBackBtn" style="margin-bottom:var(--space-3);">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M15 18l-6-6 6-6"/></svg> Back
       </button>
-      <div class="modal-title" style="margin-bottom:var(--space-3);">${escapeHtml(sectionTitle)}</div>
+      <div class="modal-title" style="margin-bottom:var(--space-3);">${escapeHtml(title)}</div>
       <div id="settingsDetailContent"></div>
     `;
 
     document.getElementById('settingsBackBtn').addEventListener('click', showSettingsMenu);
 
-    if (sectionKey === 'permissions') {
+    if (sectionKey === 'inventory') {
+      showInventoryBehaviourDetail();
+    } else if (sectionKey === 'staff') {
+      showStaffManagementPlaceholder();
+    } else if (sectionKey === 'permissions') {
       showPermissionsDetail();
-    } else {
-      const secData = settingsData[sectionKey] || {};
-      buildSectionDetail(sectionKey, secData);
+    } else if (sectionKey === 'pos') {
+      showPOSIntegrationDetail();
     }
   }
 
@@ -1984,17 +1990,21 @@
       btn.addEventListener('click', async () => {
         btn.disabled = true; btn.textContent = 'Saving…';
         try {
-          // Build staff permissions boolean map
-          const newStaff = {};
+          // Build complete staff permissions map based on enabled definitions
+          const fullStaff = {};
+          definitions.forEach(def => {
+            if (!def.enabled) return;
+            if (!fullStaff[def.module]) fullStaff[def.module] = {};
+            fullStaff[def.module][def.permission] = false; // default false
+          });
           content.querySelectorAll('input[data-mod]').forEach(cb => {
             const mod = cb.dataset.mod;
             const perm = cb.dataset.perm;
-            if (!newStaff[mod]) newStaff[mod] = {};
-            newStaff[mod][perm] = cb.checked;
+            if (fullStaff[mod]) {
+              fullStaff[mod][perm] = cb.checked;
+            }
           });
-          // Keep manager permissions unchanged (obtained from the fetched data)
-          const managerPerms = perms.manager || {};
-          await api.updatePermissions('staff', newStaff);
+          await api.updatePermissions('staff', fullStaff);
           toast('Staff permissions updated.');
         } catch (err) {
           toast(err.message || 'Failed to save permissions', true);
@@ -2007,37 +2017,18 @@
       toast('Could not load permissions.', true);
     }
   }
-
-  function buildSectionDetail(sectionKey, secData) {
+       function showInventoryBehaviourDetail() {
     const content = document.getElementById('settingsDetailContent');
     if (!content) return;
-    content.innerHTML = '';
-
-    // Render section-specific fields (about, restaurant, inventory, etc.)
-    if (sectionKey === 'about') {
-      Object.keys(secData).forEach(key => {
-        content.innerHTML += `<div class="field-label">${key}</div><div class="field-input" style="background:var(--charcoal-2)">${escapeHtml(secData[key]||'')}</div>`;
-      });
-    } else {
-      const fieldsMap = {
-        restaurant: ['name','displayName','logoUrl','themeColor','address','phone'],
-        inventory: ['negativeStockAllowed','showNegativeWarning','defaultBottleSize','defaultUnit'],
-        recipe: Object.keys(secData),
-        pos: ['provider','webhookUrl','simulationMode'],
-        backup: ['autoBackupEnabled','backupFrequency']
-      };
-      const fields = fieldsMap[sectionKey] || Object.keys(secData);
-      fields.forEach(field => {
-        const val = secData[field] ?? '';
-        if (typeof val === 'boolean') {
-          content.innerHTML += `<label style="display:flex;align-items:center;gap:8px;margin-top:var(--space-2)"><input type="checkbox" ${val?'checked':''} id="set-${sectionKey}-${field}"> ${field}</label>`;
-        } else {
-          content.innerHTML += `<div class="field-label">${field}</div><input class="field-input" id="set-${sectionKey}-${field}" value="${escapeHtml(val)}">`;
-        }
-      });
-    }
-
-    // Save button (reuses existing action button style)
+    const ib = settingsData && settingsData.inventoryBehaviour ? settingsData.inventoryBehaviour : { negativeStockAllowed: false, showNegativeWarning: true };
+    content.innerHTML = `
+      <label style="display:flex;align-items:center;gap:8px;margin-top:var(--space-2)">
+        <input type="checkbox" id="ibNegativeStockAllowed" ${ib.negativeStockAllowed ? 'checked' : ''}> Allow negative stock
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:var(--space-2)">
+        <input type="checkbox" id="ibShowNegativeWarning" ${ib.showNegativeWarning ? 'checked' : ''}> Show negative warning
+      </label>
+    `;
     const btn = document.createElement('button');
     btn.className = 'btn-gold';
     btn.textContent = 'Save';
@@ -2045,17 +2036,12 @@
     btn.addEventListener('click', async () => {
       btn.disabled = true; btn.textContent = 'Saving…';
       try {
-        const payload = {};
-        const sectionFields = document.querySelectorAll(`#settingsDetailContent [id^="set-${sectionKey}-"]`);
-        sectionFields.forEach(field => {
-          const key = field.id.replace(`set-${sectionKey}-`, '');
-          if (field.type === 'checkbox') payload[key] = field.checked;
-          else payload[key] = field.value;
-        });
-        await api.updateSettings(sectionKey, payload);
-        toast('Settings saved.');
-        await loadSettings(); // refresh data
-        showSettingsMenu();   // back to menu
+        const payload = {
+          negativeStockAllowed: document.getElementById('ibNegativeStockAllowed').checked,
+          showNegativeWarning: document.getElementById('ibShowNegativeWarning').checked
+        };
+        await api.updateSettings('inventoryBehaviour', payload);
+        toast('Inventory behaviour saved.');
       } catch (err) {
         toast(err.message || 'Save failed', true);
       } finally {
@@ -2063,6 +2049,26 @@
       }
     });
     content.appendChild(btn);
+  }
+
+  function showPOSIntegrationDetail() {
+    const content = document.getElementById('settingsDetailContent');
+    if (!content) return;
+    const pos = settingsData && settingsData.posIntegration ? settingsData.posIntegration : {};
+    content.innerHTML = `
+      <div class="field-label">Provider</div><div class="field-input" style="background:var(--charcoal-2)">${escapeHtml(pos.provider || '—')}</div>
+      <div class="field-label">Status</div><div class="field-input" style="background:var(--charcoal-2)">${escapeHtml(pos.status || '—')}</div>
+      <div class="field-label">Last Sync</div><div class="field-input" style="background:var(--charcoal-2)">${pos.lastSync ? escapeHtml(new Date(pos.lastSync).toLocaleString()) : 'Never'}</div>
+      <div class="field-label">Total Sales</div><div class="field-input" style="background:var(--charcoal-2)">${pos.statistics ? pos.statistics.totalSales : '0'}</div>
+      <div class="field-label">Last Sale At</div><div class="field-input" style="background:var(--charcoal-2)">${pos.statistics && pos.statistics.lastSaleAt ? escapeHtml(new Date(pos.statistics.lastSaleAt).toLocaleString()) : 'Never'}</div>
+      <div class="field-label">Connect Status</div><div class="field-input" style="background:var(--charcoal-2)">${escapeHtml(pos.connectStatus || '—')}</div>
+    `;
+  }
+
+  function showStaffManagementPlaceholder() {
+    const content = document.getElementById('settingsDetailContent');
+    if (!content) return;
+    content.innerHTML = '<div class="empty-state show"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg><div>Staff Management will be available in the next update.</div></div>';
   }
 
       let shouldOpenAllocations = false;
@@ -2270,7 +2276,7 @@
       fabLbl.textContent = 'Add Recipe';
       fab.classList.toggle('hidden', !can('recipes', 'create'));
       if (recipeState.recipes.length === 0) loadRecipes(); else renderRecipes();
-      loadPendingAllocations();
+      if (can('allocations', 'list')) loadPendingAllocations();
     } else if (p === 'settings') {
       pgSet.classList.remove('hidden');
       navSet.classList.add('active');
@@ -2287,6 +2293,7 @@
         if (currentPage === 'inventory') {
           if (!can('inventory', 'add')) { toast('You do not have permission to add items.', true); return; }
           if (!state.categories.length) { toast('No categories loaded.', true); return; }
+          document.getElementById('actionAddCategory').classList.toggle('hidden', !can('categories', 'add'));
           openModal(document.getElementById('actionSheetOverlay'));
         } else {
           if (!can('recipes', 'create')) { toast('You do not have permission to create recipes.', true); return; }
@@ -2317,14 +2324,16 @@
       const rootEl = document.getElementById('categoriesRoot');
       function render() { rootEl.innerHTML = ''; state.categories.forEach(c => rootEl.appendChild(renderCat(c))); updateOverview(); applySearchFilter(); updateDirty(); }
       function renderCat(c) {
-        const card = document.createElement('div'); card.className = 'cat-card' + (expandedState[c.id] ? ' expanded' : ''); card.dataset.catId = c.id; const h = document.createElement('button'); h.className = 'cat-header'; h.setAttribute('aria-expanded', expandedState[c.id] ? 'true' : 'false'); h.innerHTML = `<div class="cat-icon">${ICONS[c.icon] || ICONS.default}</div><div class="cat-title-wrap"><div class="cat-name">${escapeHtml(c.name)}</div><div class="cat-count"><b>${c.items.length}</b> item${c.items.length === 1 ? '' : 's'}</div></div><svg class="cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>`; if (can('inventory', 'edit')) {
+        const card = document.createElement('div'); card.className = 'cat-card' + (expandedState[c.id] ? ' expanded' : ''); card.dataset.catId = c.id; const h = document.createElement('button'); h.className = 'cat-header'; h.setAttribute('aria-expanded', expandedState[c.id] ? 'true' : 'false'); h.innerHTML = `<div class="cat-icon">${ICONS[c.icon] || ICONS.default}</div><div class="cat-title-wrap"><div class="cat-name">${escapeHtml(c.name)}</div><div class="cat-count"><b>${c.items.length}</b> item${c.items.length === 1 ? '' : 's'}</div></div><svg class="cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>`;         
+        if (can('categories', 'edit') || can('categories', 'delete')) {
           const mb = document.createElement('button');
           mb.className = 'cat-menu-btn';
           mb.setAttribute('aria-label', 'Category menu');
           mb.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>';
-          mb.addEventListener('click', ev => { ev.stopPropagation(); openCtx(mb, [{ label: 'Rename Category', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>', action: () => openCatDialog('rename', c) }, { label: 'Delete Category', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>', danger: true, action: () => delCat(c) }]); });
+          mb.addEventListener('click', ev => { ev.stopPropagation(); const items = []; if (can('categories', 'edit')) items.push({ label: 'Rename Category', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>', action: () => openCatDialog('rename', c) }); if (can('categories', 'delete')) items.push({ label: 'Delete Category', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>', danger: true, action: () => delCat(c) }); if (items.length) openCtx(mb, items); });
           h.appendChild(mb);
-        } h.addEventListener('click', ev => { if (ev.target.closest('.cat-menu-btn')) return; expandedState[c.id] = !expandedState[c.id]; card.classList.toggle('expanded'); h.setAttribute('aria-expanded', expandedState[c.id] ? 'true' : 'false'); try { localStorage.setItem(EXPANDED_KEY, JSON.stringify(expandedState)); } catch (e) { } }); const body = document.createElement('div'); body.className = 'cat-body'; const bi = document.createElement('div'); bi.className = 'cat-body-inner'; c.items.forEach(it => bi.appendChild(renderItemRow(c, it))); body.appendChild(bi); card.appendChild(h); card.appendChild(body); return card;
+        } 
+        h.addEventListener('click', ev => { if (ev.target.closest('.cat-menu-btn')) return; expandedState[c.id] = !expandedState[c.id]; card.classList.toggle('expanded'); h.setAttribute('aria-expanded', expandedState[c.id] ? 'true' : 'false'); try { localStorage.setItem(EXPANDED_KEY, JSON.stringify(expandedState)); } catch (e) { } }); const body = document.createElement('div'); body.className = 'cat-body'; const bi = document.createElement('div'); bi.className = 'cat-body-inner'; c.items.forEach(it => bi.appendChild(renderItemRow(c, it))); body.appendChild(bi); card.appendChild(h); card.appendChild(body); return card;
       }
 
       // Original renderItemRow – we will wrap it later to add the warning
@@ -2354,21 +2363,21 @@
         pb.addEventListener('click', e => { e.stopPropagation(); changeQty(it.id, 1); });
         ctrls.appendChild(mb); ctrls.appendChild(qe); ctrls.appendChild(pb);
         const editable = it.editable !== false && it.locked !== true;
-        const canEditInventory = can('inventory', 'edit');
+        const canEditItem = can('inventory', 'edit');
+        const canDeleteItem = can('inventory', 'delete');
         let mnb = null;
-        if (canEditInventory) {
+        if ((canEditItem || canDeleteItem) && editable) {
           mnb = document.createElement('button');
           mnb.className = 'item-menu-btn';
           mnb.setAttribute('aria-label', 'Item menu');
           mnb.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>';
-          if (!editable) mnb.style.display = 'none';
           mnb.addEventListener('click', e => {
             e.stopPropagation();
             setActive(it.id);
-            openCtx(mnb, [
-              { label: 'Edit Item', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>', action: () => openEditItem(it) },
-              { label: 'Delete Item', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>', danger: true, action: () => delItem(it) }
-            ]);
+            const ctxItems = [];
+            if (canEditItem) ctxItems.push({ label: 'Edit Item', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>', action: () => openEditItem(it) });
+            if (canDeleteItem) ctxItems.push({ label: 'Delete Item', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>', danger: true, action: () => delItem(it) });
+            if (ctxItems.length) openCtx(mnb, ctxItems);
           });
         }
         row.appendChild(ne);
@@ -2695,12 +2704,13 @@
           card.innerHTML = `
         <div class="alloc-header">
           <span class="alloc-name">${escapeHtml(alloc.categoryName || 'Unknown Category')}</span>
-          <button class="btn btn-gold btn-small resolve-alloc-btn">Resolve</button>
+          ${can('allocations', 'resolve') ? '<button class="btn btn-gold btn-small resolve-alloc-btn">Resolve</button>' : ''}
         </div>
         <div class="alloc-short">${Math.abs(alloc.totalShortage || 0)} ${escapeHtml(alloc.unit || 'ml')} shortage</div>
         <div class="alloc-count">${alloc.affectedCocktails || 0} cocktail${alloc.affectedCocktails !== 1 ? 's' : ''} affected</div>
       `;
-          card.querySelector('.resolve-alloc-btn').addEventListener('click', () => openResolveModal(alloc));
+          const resolveBtn = card.querySelector('.resolve-alloc-btn');
+          if (resolveBtn) resolveBtn.addEventListener('click', () => openResolveModal(alloc));
           list.appendChild(card);
         });
 
