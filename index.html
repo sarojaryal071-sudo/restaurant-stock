@@ -511,7 +511,7 @@ button{font-family:inherit}
       fab.classList.toggle('hidden', !showFab);
     } else {
       // Recipes page: show FAB only if can add recipes
-      fab.classList.toggle('hidden', !can('recipes', 'add'));
+      fab.classList.toggle('hidden', !can('recipes', 'create'));
     }
 
     // Reset button (allowed for both roles)
@@ -674,7 +674,7 @@ button{font-family:inherit}
       if (!state.categories.length) { toast('No categories loaded.', true); return; }
       openModal(document.getElementById('actionSheetOverlay'));
     } else {
-      if (!can('recipes', 'add')) { toast('You do not have permission to add recipes.', true); return; }
+      if (!can('recipes', 'create')) { toast('You do not have permission to create recipes.', true); return; }
       openRecipeModal(null);
     }
   });
@@ -1177,7 +1177,12 @@ button{font-family:inherit}
     pinEl.value = ''; authErr.textContent = ''; pinEl.focus();
   }
 
-  function showApp() { authSc.classList.add('hidden'); appEl.classList.remove('hidden'); document.getElementById('loadingScreen').classList.add('fade-out'); }
+  function showApp() {
+    authSc.classList.add('hidden');
+    appEl.classList.remove('hidden');
+    document.getElementById('loadingScreen').classList.add('fade-out');
+    applyUIPermissions();
+  }
 
   loginBtn.addEventListener('click', async () => {
     const pin = pinEl.value.trim(); if (!pin) { authErr.textContent = 'Enter PIN'; return; }
