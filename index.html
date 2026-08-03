@@ -493,30 +493,25 @@ button{font-family:inherit}
   /**
    * Check a permission path like 'inventory.edit'
    */
-  function can(path) {
-    const parts = path.split('.');
-    let node = userPermissions;
-    for (const p of parts) {
-      if (node == null || typeof node !== 'object') return false;
-      node = node[p];
-    }
-    return !!node;
+  function can(module, action) {
+    const allowed = userPermissions[module];
+    return Array.isArray(allowed) && allowed.includes(action);
   }
 
   /** Hide/show UI elements based on permissions */
   function applyUIPermissions() {
     // Inventory page static buttons
     const exportBtn = document.getElementById('exportBtn');
-    if (exportBtn) exportBtn.classList.toggle('hidden', !can('inventory.export'));
+    if (exportBtn) exportBtn.classList.toggle('hidden', !can('inventory', 'export'));
 
     // FAB visibility
     if (currentPage === 'inventory') {
       // Show FAB only if staff can add items or categories
-      const showFab = can('inventory.add');
+      const showFab = can('inventory', 'add');
       fab.classList.toggle('hidden', !showFab);
     } else {
       // Recipes page: show FAB only if can add recipes
-      fab.classList.toggle('hidden', !can('recipes.add'));
+      fab.classList.toggle('hidden', !can('recipes', 'add'));
     }
 
     // Reset button (allowed for both roles)
@@ -675,11 +670,11 @@ button{font-family:inherit}
 
   fab.addEventListener('click', () => {
     if (currentPage === 'inventory') {
-      if (!can('inventory.add')) { toast('You do not have permission to add items.', true); return; }
+      if (!can('inventory', 'add')) { toast('You do not have permission to add items.', true); return; }
       if (!state.categories.length) { toast('No categories loaded.', true); return; }
       openModal(document.getElementById('actionSheetOverlay'));
     } else {
-      if (!can('recipes.add')) { toast('You do not have permission to add recipes.', true); return; }
+      if (!can('recipes', 'add')) { toast('You do not have permission to add recipes.', true); return; }
       openRecipeModal(null);
     }
   });
@@ -706,7 +701,7 @@ button{font-family:inherit}
 
   const rootEl = document.getElementById('categoriesRoot');
   function render() { rootEl.innerHTML = ''; state.categories.forEach(c => rootEl.appendChild(renderCat(c))); updateOverview(); applySearchFilter(); updateDirty(); }
-  function renderCat(c) { const card = document.createElement('div'); card.className = 'cat-card' + (expandedState[c.id] ? ' expanded' : ''); card.dataset.catId = c.id; const h = document.createElement('button'); h.className = 'cat-header'; h.setAttribute('aria-expanded', expandedState[c.id] ? 'true' : 'false'); h.innerHTML = `<div class="cat-icon">${ICONS[c.icon] || ICONS.default}</div><div class="cat-title-wrap"><div class="cat-name">${escapeHtml(c.name)}</div><div class="cat-count"><b>${c.items.length}</b> item${c.items.length === 1 ? '' : 's'}</div></div><svg class="cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>`;     if (can('inventory.edit')) {
+  function renderCat(c) { const card = document.createElement('div'); card.className = 'cat-card' + (expandedState[c.id] ? ' expanded' : ''); card.dataset.catId = c.id; const h = document.createElement('button'); h.className = 'cat-header'; h.setAttribute('aria-expanded', expandedState[c.id] ? 'true' : 'false'); h.innerHTML = `<div class="cat-icon">${ICONS[c.icon] || ICONS.default}</div><div class="cat-title-wrap"><div class="cat-name">${escapeHtml(c.name)}</div><div class="cat-count"><b>${c.items.length}</b> item${c.items.length === 1 ? '' : 's'}</div></div><svg class="cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>`;     if (can('inventory', 'edit')) {
       const mb = document.createElement('button');
       mb.className = 'cat-menu-btn';
       mb.setAttribute('aria-label', 'Category menu');
@@ -742,7 +737,7 @@ button{font-family:inherit}
     pb.addEventListener('click', e => { e.stopPropagation(); changeQty(it.id, 1); });
     ctrls.appendChild(mb); ctrls.appendChild(qe); ctrls.appendChild(pb);
     const editable = it.editable !== false && it.locked !== true;
-    const canEditInventory = can('inventory.edit');
+    const canEditInventory = can('inventory', 'edit');
     let mnb = null;
     if (canEditInventory) {
       mnb = document.createElement('button');
@@ -843,8 +838,8 @@ button{font-family:inherit}
 
   async function loadRecipes() { try { const d = await api.listRecipes(); recipeState.recipes = (d && Array.isArray(d.recipes)) ? d.recipes : (d && Array.isArray(d) ? d : []); renderRecipes(); } catch (e) { toast('Could not load recipes.', true); } }
   function renderRecipes() { const root = document.getElementById('recipesRoot'); root.innerHTML = ''; const sorted = [...recipeState.recipes].sort((a, b) => (a.name || '').localeCompare(b.name || '')); sorted.forEach(r => root.appendChild(renderRecipeCard(r))); applyRecipeSearch(); }
-  function renderRecipeCard(r) { const card = document.createElement('div'); card.className = 'cat-card'; card.dataset.recipeId = r.id; card.dataset.recipeName = (r.name || '').toLowerCase(); const h = document.createElement('button'); h.className = 'cat-header'; h.setAttribute('aria-expanded', 'false'); const ic = (r.ingredients || []).length; h.innerHTML = `<div class="cat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3h8l1 6a4 4 0 0 1-8 0L8 3z"/><path d="M12 13v5"/><path d="M8 21h8"/></svg></div><div class="cat-title-wrap"><div class="cat-name">${escapeHtml(r.name || 'Unnamed')}</div><div class="cat-count"><b>${ic}</b> ingredient${ic === 1 ? '' : 's'}</div></div><svg class="cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>`; h.addEventListener('click', () => { card.classList.toggle('expanded'); h.setAttribute('aria-expanded', card.classList.contains('expanded') ? 'true' : 'false'); }); const body = document.createElement('div'); body.className = 'cat-body'; const bi = document.createElement('div'); bi.className = 'cat-body-inner'; let dh = ''; if (r.glass) dh += `<div class="recipe-detail"><strong>Glass</strong><br>${escapeHtml(r.glass)}</div>`; if (r.method) dh += `<div class="recipe-detail"><strong>Method</strong><br>${escapeHtml(r.method)}</div>`; if (r.garnish) dh += `<div class="recipe-detail"><strong>Garnish</strong><br>${escapeHtml(r.garnish)}</div>`; if (r.ingredients && r.ingredients.length > 0) { dh += '<div class="recipe-detail"><strong>Ingredients</strong>'; r.ingredients.forEach(ing => { const nm = ing.inventoryItemName || ing.customName || 'Unknown'; dh += `<div class="ingredient-row"><span>${escapeHtml(nm)}</span> ${ing.amount || ''} ${escapeHtml(ing.unit || '')}</div>`; }); dh += '</div>'; }       const editAllowed = can('recipes.edit');
-      const deleteAllowed = can('recipes.delete');
+  function renderRecipeCard(r) { const card = document.createElement('div'); card.className = 'cat-card'; card.dataset.recipeId = r.id; card.dataset.recipeName = (r.name || '').toLowerCase(); const h = document.createElement('button'); h.className = 'cat-header'; h.setAttribute('aria-expanded', 'false'); const ic = (r.ingredients || []).length; h.innerHTML = `<div class="cat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3h8l1 6a4 4 0 0 1-8 0L8 3z"/><path d="M12 13v5"/><path d="M8 21h8"/></svg></div><div class="cat-title-wrap"><div class="cat-name">${escapeHtml(r.name || 'Unnamed')}</div><div class="cat-count"><b>${ic}</b> ingredient${ic === 1 ? '' : 's'}</div></div><svg class="cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>`; h.addEventListener('click', () => { card.classList.toggle('expanded'); h.setAttribute('aria-expanded', card.classList.contains('expanded') ? 'true' : 'false'); }); const body = document.createElement('div'); body.className = 'cat-body'; const bi = document.createElement('div'); bi.className = 'cat-body-inner'; let dh = ''; if (r.glass) dh += `<div class="recipe-detail"><strong>Glass</strong><br>${escapeHtml(r.glass)}</div>`; if (r.method) dh += `<div class="recipe-detail"><strong>Method</strong><br>${escapeHtml(r.method)}</div>`; if (r.garnish) dh += `<div class="recipe-detail"><strong>Garnish</strong><br>${escapeHtml(r.garnish)}</div>`; if (r.ingredients && r.ingredients.length > 0) { dh += '<div class="recipe-detail"><strong>Ingredients</strong>'; r.ingredients.forEach(ing => { const nm = ing.inventoryItemName || ing.customName || 'Unknown'; dh += `<div class="ingredient-row"><span>${escapeHtml(nm)}</span> ${ing.amount || ''} ${escapeHtml(ing.unit || '')}</div>`; }); dh += '</div>'; }       const editAllowed = can('recipes', 'edit');
+      const deleteAllowed = can('recipes', 'delete');
       if (editAllowed || deleteAllowed) {
         dh += '<div class="recipe-card-actions">';
         if (editAllowed) dh += '<button class="btn btn-gold btn-small edit-recipe-btn">Edit</button>';
