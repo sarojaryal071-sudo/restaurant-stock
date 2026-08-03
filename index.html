@@ -2094,7 +2094,8 @@
       function applyUIPermissions() {
         // Inventory page static buttons
         const exportBtn = document.getElementById('exportBtn');
-        if (exportBtn) exportBtn.classList.toggle('hidden', !can('inventory', 'export'));
+        // Export is not a separate permission; show to anyone who can view inventory
+        if (exportBtn) exportBtn.classList.toggle('hidden', !can('inventory', 'view'));
 
         // FAB visibility
         if (currentPage === 'inventory') {

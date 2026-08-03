@@ -50,7 +50,8 @@ async function bulkUpdatePermissions(restaurantId, role, permissionsObject) {
       if (typeof perms !== 'object') continue;
       for (const action of Object.keys(perms)) {
         const allowed = !!perms[action];
-        await tx.query(
+        // tx is a function, not an object with .query
+        await tx(
           `INSERT INTO role_permissions (id, restaurant_id, role, module, permission, allowed, created_at, updated_at)
            VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NOW(), NOW())
            ON CONFLICT (restaurant_id, role, module, permission)
