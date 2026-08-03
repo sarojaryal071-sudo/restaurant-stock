@@ -2,7 +2,7 @@ const { query } = require('../../database');
 
 async function listStaff(restaurantId) {
   const res = await query(
-    `SELECT id, name, role, is_active, created_at
+    `SELECT id, name, username, role, is_active, created_at
      FROM users
      WHERE restaurant_id = $1 AND role = 'staff'
      ORDER BY name ASC`,
@@ -19,15 +19,15 @@ async function getStaffById(userId, restaurantId) {
   return res.rows[0] || null;
 }
 
-async function createStaff(restaurantId, name, passwordHash) {
+async function createStaff(restaurantId, name, passwordHash, username) {
   const { v4: uuidv4 } = require('uuid');
   const id = uuidv4();
   await query(
-    `INSERT INTO users (id, name, role, restaurant_id, password_hash, is_active, created_at)
-     VALUES ($1, $2, 'staff', $3, $4, TRUE, NOW())`,
-    [id, name, restaurantId, passwordHash]
+    `INSERT INTO users (id, name, username, role, restaurant_id, password_hash, is_active, created_at)
+     VALUES ($1, $2, $3, 'staff', $4, $5, TRUE, NOW())`,
+    [id, name, username, restaurantId, passwordHash]
   );
-  return { id, name, role: 'staff', is_active: true, created_at: new Date().toISOString() };
+  return { id, name, username, role: 'staff', is_active: true, created_at: new Date().toISOString() };
 }
 
 async function updateStaff(userId, restaurantId, fields) {

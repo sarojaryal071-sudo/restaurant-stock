@@ -1,4 +1,5 @@
 const service = require('./staff.service');
+const { query } = require('../../database');
 
 async function list(req, res) {
   try {
@@ -25,7 +26,7 @@ async function create(req, res) {
 async function update(req, res) {
   try {
     const userId = req.params.id;
-    const updates = req.body; // may contain name, pin, is_active
+    const updates = req.body;
     const user = await service.updateStaff(req.auth.restaurantId, userId, updates, req.auth.userId);
     res.json({ ok: true, user });
   } catch (err) {

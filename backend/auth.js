@@ -62,15 +62,15 @@ async function getRestaurant(restaurantId) {
 // Login handler
 // -------------------------------------------------------------------
 async function login(req, res) {
-  const { pin } = req.body;
-  if (!pin) return res.json({ ok: false, code: 'INVALID_PIN', error: 'PIN is required.' });
+  const { username, pin } = req.body;
+  if (!username || !pin) return res.json({ ok: false, code: 'INVALID_PIN', error: 'Username and PIN are required.' });
 
   const hash = hashPin(pin);
   const userRes = await query(
-      `SELECT u.id, u.name, u.role, u.restaurant_id
+      `SELECT u.id, u.name, u.username, u.role, u.restaurant_id
        FROM users u
-       WHERE u.password_hash = $1 AND u.is_active = TRUE`,
-    [hash]
+       WHERE u.username = $1 AND u.password_hash = $2 AND u.is_active = TRUE`,
+          [req.body.username, hash]
   );
 
   if (userRes.rows.length === 0) {
@@ -94,7 +94,7 @@ async function login(req, res) {
   return res.json({
     ok: true,
     token,
-    user: { id: user.id, name: user.name, role },
+          user: { id: user.id, name: user.name, username: user.username, role },
     permissions,
     restaurant
   });

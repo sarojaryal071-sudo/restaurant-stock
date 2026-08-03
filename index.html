@@ -1670,8 +1670,10 @@
   <div id="authScreen" class="hidden">
     <div class="auth-logo" id="authLogoWrap"><img id="authLogoImg" src="assets/stock-logo.png" alt="Logo"></div>
     <div class="auth-restaurant-name" id="authRestaurantName">Stock Counter</div>
-    <div class="auth-subtitle">Enter PIN to continue</div>
+    <div class="auth-subtitle">Enter your username and PIN to continue</div>
     <div class="auth-form">
+      <input type="text" class="auth-input" id="usernameInput" placeholder="Username" autocomplete="off"
+        autocapitalize="off" autocorrect="off" spellcheck="false">
       <input type="password" inputmode="numeric" class="auth-input" id="pinInput" placeholder="PIN" maxlength="6"
         autocomplete="off">
       <div class="auth-error" id="authError"></div>
@@ -2296,13 +2298,14 @@
     if (!staffArray || staffArray.length === 0) {
       html += '<div class="empty-state show"><div>No staff members yet.</div></div>';
     } else {
-      html += `<table class="staff-table"><thead><tr><th>Name</th><th>Status</th><th>Created</th>${canEdit ? '<th></th>' : ''}</tr></thead><tbody>`;
+      html += `<table class="staff-table"><thead><tr><th>Name</th><th>Username</th><th>Status</th><th>Created</th>${canEdit ? '<th></th>' : ''}</tr></thead><tbody>`;
       staffArray.forEach(s => {
         const created = s.created_at ? new Date(s.created_at).toLocaleDateString() : '—';
         const statusBadge = s.is_active ? '<span class="badge-active">Active</span>' : '<span class="badge-inactive">Inactive</span>';
         const initial = escapeHtml((s.name || '?').trim().charAt(0).toUpperCase());
         html += `<tr>
           <td data-label="Name"><span class="staff-name-cell"><span class="staff-avatar">${initial}</span>${escapeHtml(s.name)}</span></td>
+          <td data-label="Username">${escapeHtml(s.username || '—')}</td>
           <td data-label="Status">${statusBadge}</td>
           <td data-label="Created">${created}</td>
           ${canEdit ? `<td data-label=""><button class="btn btn-ghost btn-small edit-staff-btn" data-id="${s.id}" data-name="${escapeHtml(s.name)}" data-active="${s.is_active}">Edit</button></td>` : ''}
@@ -2523,7 +2526,7 @@
 
       const api = {
         health: () => apiCall('GET', '/health'),
-        login: (pin) => apiCall('POST', '/login', { pin }),
+        login: (username, pin) => apiCall('POST', '/login', { username, pin }),
         logout: () => apiCall('POST', '/logout', {}),
         loadStock: () => apiCall('GET', '/?action=loadStock'),
         saveStock: (updates) => apiCall('POST', '/', { action: 'saveStock', updates }),
@@ -3126,14 +3129,14 @@
 
       // ==================== AUTH ====================
       const authSc = document.getElementById('authScreen'), appEl = document.getElementById('app');
-      const pinEl = document.getElementById('pinInput'), loginBtn = document.getElementById('loginBtn'), authErr = document.getElementById('authError');
+      const usernameEl = document.getElementById('usernameInput'), pinEl = document.getElementById('pinInput'), loginBtn = document.getElementById('loginBtn'), authErr = document.getElementById('authError');
 
       function showLogin() {
         appEl.classList.add('hidden'); authSc.classList.remove('hidden');
         document.getElementById('loadingScreen').classList.add('fade-out');
         document.getElementById('authRestaurantName').textContent = 'Stock Counter';
         document.getElementById('authLogoImg').src = GENERIC_LOGO;
-        pinEl.value = ''; authErr.textContent = ''; pinEl.focus();
+        usernameEl.value = ''; pinEl.value = ''; authErr.textContent = ''; usernameEl.focus();
       }
 
       function showApp() {
@@ -3144,10 +3147,11 @@
       }
 
       loginBtn.addEventListener('click', async () => {
+        const username = usernameEl.value.trim(); if (!username) { authErr.textContent = 'Enter username'; return; }
         const pin = pinEl.value.trim(); if (!pin) { authErr.textContent = 'Enter PIN'; return; }
         loginBtn.disabled = true; authErr.textContent = '';
         try {
-          const r = await api.login(pin);
+          const r = await api.login(username, pin);
           if (r && r.token) {
             authToken = r.token; setToken(authToken);
             userPermissions = r.permissions || {};
@@ -3159,6 +3163,7 @@
         finally { loginBtn.disabled = false; }
       });
 
+      usernameEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); pinEl.focus(); } });
       pinEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); loginBtn.click(); } });
 
       document.getElementById('logoutBtn').addEventListener('click', async () => {

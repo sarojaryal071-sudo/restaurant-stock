@@ -52,7 +52,7 @@ app.get('/api/health', async (req, res) => {
     if (token) {
       const session = await validateSession(token);
       if (session) {
-        const userRes = await pool.query(`SELECT id, name, role FROM users WHERE id = $1`, [session.userId]);
+        const userRes = await pool.query(`SELECT id, name, username, role FROM users WHERE id = $1`, [session.userId]);
         const user = userRes.rows[0] || null;
         const restaurant = await getRestaurant(session.restaurantId);
         // Resolve permissions for the authenticated user (uses new database-driven service)
@@ -63,7 +63,7 @@ app.get('/api/health', async (req, res) => {
         return res.json({
           ok: true,
           initialized: true,
-          user: user ? { id: user.id, name: user.name, role: user.role || 'staff' } : null,
+          user: user ? { id: user.id, name: user.name, username: user.username, role: user.role || 'staff' } : null,
           restaurant,
           permissions
         });

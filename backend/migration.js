@@ -224,6 +224,49 @@ async function runMigrations() {
     // -----------------------------------------------------------------
     await tx(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`);
 
+    // Remove old global PIN uniqueness constraint if present
+    await tx(`ALTER TABLE users DROP CONSTRAINT IF EXISTS unique_user_pin`);
+
+    // Add username column (unique, indexed)
+    await tx(`ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT`);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`);
+
+    // Add restaurant_code column (unique)
+    await tx(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS restaurant_code TEXT`);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_restaurants_code ON restaurants(restaurant_code)`);
+
+    // Generate restaurant_code for existing restaurants (simple lowercase, replace spaces with nothing)
+    const restRows = await tx(`SELECT id, name FROM restaurants WHERE restaurant_code IS NULL`);
+    for (const row of restRows.rows) {
+      const code = row.name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30) || 'restaurant';
+      await tx(`UPDATE restaurants SET restaurant_code = $1 WHERE id = $2`, [code, row.id]);
+    }
+    // Ensure uniqueness for future inserts (add unique constraint after data is fixed)
+    await tx(`ALTER TABLE restaurants ADD CONSTRAINT IF NOT EXISTS unique_restaurant_code UNIQUE (restaurant_code)`);
+
+    // Generate username for existing users
+    const userRows = await tx(`
+      SELECT u.id, u.name, r.restaurant_code
+      FROM users u
+      JOIN restaurants r ON u.restaurant_id = r.id
+      WHERE u.username IS NULL
+    `);
+    for (const user of userRows.rows) {
+      const base = user.name.toLowerCase().replace(/[^a-z0-9]/g, '') + '@' + user.restaurant_code;
+      let username = base;
+      let counter = 1;
+      while (true) {
+        const exists = await tx(`SELECT id FROM users WHERE username = $1 AND id <> $2`, [username, user.id]);
+        if (exists.rows.length === 0) break;
+        username = base.replace('@', counter + '@');
+        counter++;
+      }
+      await tx(`UPDATE users SET username = $1 WHERE id = $2`, [username, user.id]);
+    }
+    // Make username NOT NULL and UNIQUE (now that all rows have values)
+    await tx(`ALTER TABLE users ALTER COLUMN username SET NOT NULL`);
+    await tx(`ALTER TABLE users ADD CONSTRAINT IF NOT EXISTS unique_username UNIQUE (username)`);
+
     // --- Restaurant Settings ---
     await tx(`
       CREATE TABLE IF NOT EXISTS restaurant_settings (
