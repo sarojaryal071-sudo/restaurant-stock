@@ -4,7 +4,7 @@ const cors = require('cors');
 const { runMigrations } = require('./migration');
 const { pool } = require('./database');
 const { login, logout, requireAuth, requireAdmin, validateSession, getRestaurant } = require('./auth');
-const requireManager = require('./src/middleware/requireManager');
+const requirePermission = require('./src/middleware/requirePermission');
 const inventory = require('./inventory');
 const recipes = require('./recipes');
 const allocations = require('./allocations');
@@ -110,30 +110,30 @@ app.all('/api', async (req, res, next) => {
 
       // ---------- Inventory management (manager only) ----------
       case 'addCustomItem':
-        await requireAuth(req, res, requireManager, async () => inventory.addCustomItem(req, res));
+        await requireAuth(req, res, requirePermission('inventory', 'add'), async () => inventory.addCustomItem(req, res));
         break;
       case 'updateItem':
-        await requireAuth(req, res, requireManager, async () => inventory.updateItem(req, res));
+        await requireAuth(req, res, requirePermission('inventory', 'edit'), async () => inventory.updateItem(req, res));
         break;
       case 'deleteItem':
-        await requireAuth(req, res, requireManager, async () => inventory.deleteItem(req, res));
+        await requireAuth(req, res, requirePermission('inventory', 'delete'), async () => inventory.deleteItem(req, res));
         break;
       case 'restoreItem':
-        await requireAuth(req, res, requireManager, async () => inventory.restoreItem(req, res));
+        await requireAuth(req, res, requirePermission('inventory', 'edit'), async () => inventory.restoreItem(req, res));
         break;
 
       // ---------- Category management (manager only) ----------
       case 'addCategory':
-        await requireAuth(req, res, requireManager, async () => inventory.addCategory(req, res));
+        await requireAuth(req, res, requirePermission('categories', 'add'), async () => inventory.addCategory(req, res));
         break;
       case 'updateCategory':
-        await requireAuth(req, res, requireManager, async () => inventory.updateCategory(req, res));
+        await requireAuth(req, res, requirePermission('categories', 'edit'), async () => inventory.updateCategory(req, res));
         break;
       case 'deleteCategory':
-        await requireAuth(req, res, requireManager, async () => inventory.deleteCategory(req, res));
+        await requireAuth(req, res, requirePermission('categories', 'delete'), async () => inventory.deleteCategory(req, res));
         break;
       case 'restoreCategory':
-        await requireAuth(req, res, requireManager, async () => inventory.restoreCategory(req, res));
+        await requireAuth(req, res, requirePermission('categories', 'edit'), async () => inventory.restoreCategory(req, res));
         break;
 
       // ---------- Recipes (staff can view, manager can manage) ----------
@@ -144,16 +144,16 @@ app.all('/api', async (req, res, next) => {
         await requireAuth(req, res, async () => recipes.getRecipe(req, res));
         break;
       case 'createRecipe':
-        await requireAuth(req, res, requireManager, async () => recipes.createRecipe(req, res));
+        await requireAuth(req, res, requirePermission('recipes', 'create'), async () => recipes.createRecipe(req, res));
         break;
       case 'updateRecipe':
-        await requireAuth(req, res, requireManager, async () => recipes.updateRecipe(req, res));
+        await requireAuth(req, res, requirePermission('recipes', 'edit'), async () => recipes.updateRecipe(req, res));
         break;
       case 'deleteRecipe':
-        await requireAuth(req, res, requireManager, async () => recipes.deleteRecipe(req, res));
+        await requireAuth(req, res, requirePermission('recipes', 'delete'), async () => recipes.deleteRecipe(req, res));
         break;
       case 'recordSale':
-        await requireAuth(req, res, async () => recipes.recordSale(req, res));
+        await requireAuth(req, res, requirePermission('pos', 'sale'), async () => recipes.recordSale(req, res));
         break;
 
       // ---------- Allocations (staff accessible) ----------

@@ -1,9 +1,10 @@
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { query } = require('./database');
+const { getPermissions } = require('./permissions');
 
 // -------------------------------------------------------------------
-// PIN Hashing – identical to Apps Script SHA-256
+// PIN Hashing
 // -------------------------------------------------------------------
 function hashPin(pin) {
   return crypto.createHash('sha256').update(String(pin)).digest('hex');
@@ -75,8 +76,7 @@ async function login(req, res) {
   }
 
   const user = userRes.rows[0];
-  // Default role to "staff" if null/empty
-  const role = user.role || 'staff';
+  const role = user.role || 'staff';   // default to staff if missing
   const restaurant = await getRestaurant(user.restaurant_id);
   if (!restaurant) return res.json({ ok: false, code: 'SERVER_ERROR', error: 'Restaurant not found.' });
 
@@ -92,6 +92,7 @@ async function login(req, res) {
     ok: true,
     token,
     user: { id: user.id, name: user.name, role },
+    permissions: getPermissions(role),
     restaurant
   });
 }
@@ -120,11 +121,10 @@ async function requireAuth(req, res, next) {
   const requireAuthSetting = settingRes.rows.length > 0 ? settingRes.rows[0].value : 'false';
 
   if (requireAuthSetting !== 'true') {
-    // Authentication disabled → use the first restaurant from the database
     try {
       const restRes = await query(`SELECT id FROM restaurants ORDER BY created_at LIMIT 1`);
       const restaurantId = restRes.rows.length > 0 ? restRes.rows[0].id : null;
-      req.auth = { restaurantId, userId: null, role: 'staff' };   // default role when auth off
+      req.auth = { restaurantId, userId: null, role: 'staff' };
       return next();
     } catch (err) {
       req.auth = { restaurantId: null, userId: null, role: 'staff' };
@@ -154,12 +154,9 @@ async function requireAuth(req, res, next) {
 }
 
 // -------------------------------------------------------------------
-// Middleware: requireAdmin (kept for backward compatibility, now just requireManager)
+// Middleware: requireAdmin (kept for backward compatibility, uses manager role)
 // -------------------------------------------------------------------
 async function requireAdmin(req, res, next) {
-  const settingRes = await query(`SELECT value FROM settings WHERE key = 'requireAuth'`);
-  const requireAuthSetting = settingRes.rows.length > 0 ? settingRes.rows[0].value : 'false';
-  if (requireAuthSetting !== 'true') return next();
   if (req.auth.role !== 'admin' && req.auth.role !== 'manager') {
     return res.status(403).json({ ok: false, code: 'FORBIDDEN', error: 'Admin access required.' });
   }
