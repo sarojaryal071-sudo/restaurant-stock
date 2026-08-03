@@ -235,14 +235,22 @@ async function runMigrations() {
     await tx(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS restaurant_code TEXT`);
     await tx(`CREATE INDEX IF NOT EXISTS idx_restaurants_code ON restaurants(restaurant_code)`);
 
-    // Generate restaurant_code for existing restaurants (simple lowercase, keep only a-z0-9)
+    // Generate restaurant_code for existing restaurants – ensure uniqueness
     const restRows = await tx(`SELECT id, name FROM restaurants WHERE restaurant_code IS NULL`);
     for (const row of restRows.rows) {
-      const code = row.name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30) || 'restaurant';
+      const base = row.name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30) || 'restaurant';
+      let code = base;
+      let counter = 1;
+      while (true) {
+        const exists = await tx(`SELECT id FROM restaurants WHERE restaurant_code = $1 AND id <> $2`, [code, row.id]);
+        if (exists.rows.length === 0) break;
+        code = base + counter;
+        counter++;
+      }
       await tx(`UPDATE restaurants SET restaurant_code = $1 WHERE id = $2`, [code, row.id]);
     }
 
-    // Add unique constraint on restaurant_code only if it does not already exist
+    // Now all codes are unique – safe to add the constraint
     const restCodeCon = await tx(`
       SELECT 1 FROM pg_constraint
       WHERE conname = 'unique_restaurant_code' AND conrelid = 'restaurants'::regclass
