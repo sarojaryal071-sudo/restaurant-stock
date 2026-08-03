@@ -222,6 +222,7 @@ async function runMigrations() {
     // -----------------------------------------------------------------
     await tx(`ALTER TABLE users ALTER COLUMN role SET DEFAULT 'staff'`);
     await tx(`UPDATE users SET role = 'manager' WHERE role = 'admin'`);
+    await tx(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`);
 
     // --- Restaurant Settings ---
     await tx(`
@@ -328,6 +329,9 @@ async function runMigrations() {
       ['allocations', 'resolve', 'Resolve Pending Allocations', 'Ability to resolve shortages', 15],
       ['pos', 'sale', 'Record Sale', 'Ability to record a sale (POS)', 16],
       ['settings', 'manage', 'Manage Settings', 'Ability to modify restaurant settings', 17]
+      ['staff','view','View Staff','Ability to view staff members',18],
+      ['staff','create','Create Staff','Ability to create new staff accounts',19],
+      ['staff','edit','Edit Staff','Ability to edit staff details',20],
     ];
     for (const def of seedDefinitions) {
       await tx(

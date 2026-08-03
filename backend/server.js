@@ -289,6 +289,27 @@ app.patch('/api/permissions', (req, res, next) => {
   });
 });
 
+const staffActions = require('./src/staff/staff.actions');
+
+// ---------- Staff Management (manager only) ----------
+app.get('/api/staff', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('staff', 'view')(req, res, () => staffActions.list(req, res));
+  });
+});
+
+app.post('/api/staff', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('staff', 'create')(req, res, () => staffActions.create(req, res));
+  });
+});
+
+app.patch('/api/staff/:id', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('staff', 'edit')(req, res, () => staffActions.update(req, res));
+  });
+});
+
 // ---------------------------------------------------------------
 // Error handling
 // ---------------------------------------------------------------

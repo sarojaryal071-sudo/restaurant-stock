@@ -67,9 +67,9 @@ async function login(req, res) {
 
   const hash = hashPin(pin);
   const userRes = await query(
-    `SELECT u.id, u.name, u.role, u.restaurant_id
-     FROM users u
-     WHERE u.password_hash = $1`,
+      `SELECT u.id, u.name, u.role, u.restaurant_id
+       FROM users u
+       WHERE u.password_hash = $1 AND u.is_active = TRUE`,
     [hash]
   );
 

@@ -1561,6 +1561,13 @@
 .settings-body .btn-save{margin-top:var(--space-3);min-height:var(--tap);border-radius:var(--radius-sm);border:none;cursor:pointer;font-weight:700;font-size:0.9rem;background:linear-gradient(135deg,var(--gold-bright),var(--gold-deep));color:#1c1305;width:100%}
 .settings-body .btn-save:disabled{opacity:0.5;cursor:not-allowed}
 #settingsBackBtn { display: inline-flex; align-items: center; gap: 6px; margin-bottom: var(--space-3); font-size: 0.85rem; }
+/* ========== STAFF MANAGEMENT TABLE STYLES (NEW) ========== */
+.staff-table { width:100%; border-collapse:collapse; margin-top:var(--space-3); }
+.staff-table th, .staff-table td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); }
+.staff-table th { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--paper-dim); }
+.staff-table td { font-size:0.9rem; }
+.badge-active { display:inline-block; padding:2px 10px; border-radius:12px; font-size:0.7rem; font-weight:700; background:rgba(76,154,95,0.2); color:var(--qty-good); }
+.badge-inactive { display:inline-block; padding:2px 10px; border-radius:12px; font-size:0.7rem; font-weight:700; background:rgba(224,80,63,0.2); color:var(--danger); }
   </style>
 </head>
 
@@ -1835,6 +1842,25 @@
     </div>
   </div>
 
+  <!-- ========== NEW: Staff Management Modals ========== -->
+  <div class="modal-overlay" id="staffAddModalOverlay">
+    <div class="modal-card">
+      <div class="modal-title">Add Staff</div>
+      <label class="field-label" for="staffAddName">Name</label><input class="field-input" id="staffAddName" type="text" maxlength="100">
+      <label class="field-label" for="staffAddPin">PIN</label><input class="field-input" id="staffAddPin" type="password" maxlength="6" inputmode="numeric" pattern="[0-9]*">
+      <div class="modal-actions"><button class="btn btn-ghost" id="staffAddCancel">Cancel</button><button class="btn btn-gold" id="staffAddConfirm">Create</button></div>
+    </div>
+  </div>
+  <div class="modal-overlay" id="staffEditModalOverlay">
+    <div class="modal-card">
+      <div class="modal-title">Edit Staff</div>
+      <label class="field-label" for="staffEditName">Name</label><input class="field-input" id="staffEditName" type="text" maxlength="100">
+      <label class="field-label" for="staffEditPin">New PIN (leave blank to keep)</label><input class="field-input" id="staffEditPin" type="password" maxlength="6" inputmode="numeric" pattern="[0-9]*">
+      <label class="field-label"><input type="checkbox" id="staffEditActive"> Active</label>
+      <div class="modal-actions"><button class="btn btn-ghost" id="staffEditCancel">Cancel</button><button class="btn btn-gold" id="staffEditConfirm">Save</button></div>
+    </div>
+  </div>
+
   <div class="toast-stack" id="toastStack"></div>
 
   <script>
@@ -1894,7 +1920,7 @@
 
     const sections = [
       { key: 'inventory',    title: 'Inventory Behaviour', icon: '📦', desc: 'Negative stock rules & warnings' },
-      { key: 'staff',        title: 'Staff Management',    icon: '👥', desc: 'Manage staff accounts (coming soon)' },
+      { key: 'staff', title: 'Staff Management', icon: '👥', desc: 'Manage staff accounts' },      
       { key: 'permissions',  title: 'Staff Permissions',   icon: '🔐', desc: 'Control staff access' },
       { key: 'pos',          title: 'POS Integration',     icon: '🖥', desc: 'POS connection status' }
     ];
@@ -1943,7 +1969,7 @@
     if (sectionKey === 'inventory') {
       showInventoryBehaviourDetail();
     } else if (sectionKey === 'staff') {
-      showStaffManagementPlaceholder();
+      showStaffManagementDetail();
     } else if (sectionKey === 'permissions') {
       showPermissionsDetail();
     } else if (sectionKey === 'pos') {
@@ -2062,14 +2088,183 @@
       <div class="field-label">Total Sales</div><div class="field-input" style="background:var(--charcoal-2)">${pos.statistics ? pos.statistics.totalSales : '0'}</div>
       <div class="field-label">Last Sale At</div><div class="field-input" style="background:var(--charcoal-2)">${pos.statistics && pos.statistics.lastSaleAt ? escapeHtml(new Date(pos.statistics.lastSaleAt).toLocaleString()) : 'Never'}</div>
       <div class="field-label">Connect Status</div><div class="field-input" style="background:var(--charcoal-2)">${escapeHtml(pos.connectStatus || '—')}</div>
+      <div style="margin-top:var(--space-4); display:flex; gap:var(--space-2); flex-wrap:wrap; align-items:center;">
+        <input type="text" id="posProviderInput" placeholder="Provider name" class="field-input" style="max-width:150px; flex:1;" value="${escapeHtml(pos.provider || 'Flatpay')}">
+        <button class="btn btn-gold btn-small" id="posConnectBtn">Connect</button>
+        <button class="btn btn-ghost btn-small" id="posDisconnectBtn">Disconnect</button>
+        <button class="btn btn-ghost btn-small" id="posSyncBtn">Sync</button>
+      </div>
     `;
+
+    const canManage = can('settings', 'manage');
+    const connectBtn = document.getElementById('posConnectBtn');
+    const disconnectBtn = document.getElementById('posDisconnectBtn');
+    const syncBtn = document.getElementById('posSyncBtn');
+    if (!canManage) {
+      connectBtn.disabled = true;
+      disconnectBtn.disabled = true;
+      syncBtn.disabled = true;
+    }
+
+    connectBtn.addEventListener('click', async () => {
+      const provider = document.getElementById('posProviderInput').value.trim();
+      if (!provider) { toast('Enter a provider name', true); return; }
+      connectBtn.disabled = true; connectBtn.textContent = 'Connecting…';
+      try {
+        await api.connectPos(provider);
+        toast('Connected.');
+        await loadSettings();          // refresh data
+        showPOSIntegrationDetail();    // re‑render this view
+      } catch (e) { toast(e.message || 'Connect failed', true); }
+      finally { connectBtn.disabled = false; connectBtn.textContent = 'Connect'; }
+    });
+
+    disconnectBtn.addEventListener('click', async () => {
+      disconnectBtn.disabled = true; disconnectBtn.textContent = 'Disconnecting…';
+      try {
+        await api.disconnectPos();
+        toast('Disconnected.');
+        await loadSettings();
+        showPOSIntegrationDetail();
+      } catch (e) { toast(e.message || 'Disconnect failed', true); }
+      finally { disconnectBtn.disabled = false; disconnectBtn.textContent = 'Disconnect'; }
+    });
+
+    syncBtn.addEventListener('click', async () => {
+      syncBtn.disabled = true; syncBtn.textContent = 'Syncing…';
+      try {
+        await api.syncPos();
+        toast('Sync triggered.');
+        await loadSettings();
+        showPOSIntegrationDetail();
+      } catch (e) { toast(e.message || 'Sync failed', true); }
+      finally { syncBtn.disabled = false; syncBtn.textContent = 'Sync'; }
+    });
   }
 
-  function showStaffManagementPlaceholder() {
+  let editingStaffId = null;  // NEW: for staff edit modal
+
+  async function showStaffManagementDetail() {
     const content = document.getElementById('settingsDetailContent');
     if (!content) return;
-    content.innerHTML = '<div class="empty-state show"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg><div>Staff Management will be available in the next update.</div></div>';
+    if (!can('staff', 'view')) {
+      content.innerHTML = '<div class="empty-state show"><div>You do not have permission to manage staff.</div></div>';
+      return;
+    }
+    content.innerHTML = '<div class="loading-spinner" style="margin:2rem auto;"></div>';
+    try {
+      const data = await api.listStaff();
+      renderStaffList(data.staff || []);
+    } catch (e) {
+      content.innerHTML = `<div class="empty-state show"><div>Could not load staff list. ${escapeHtml(e.message)}</div></div>`;
+    }
   }
+
+  function renderStaffList(staffArray) {
+    const content = document.getElementById('settingsDetailContent');
+    if (!content) return;
+    const canCreate = can('staff', 'create');
+    const canEdit = can('staff', 'edit');
+    let html = '';
+    if (canCreate) {
+      html += `<button class="btn btn-gold btn-small" id="addStaffBtn" style="margin-bottom:var(--space-3);">+ Add Staff</button>`;
+    }
+    if (!staffArray || staffArray.length === 0) {
+      html += '<div class="empty-state show"><div>No staff members yet.</div></div>';
+    } else {
+      html += `<table class="staff-table"><thead><tr><th>Name</th><th>Status</th><th>Created</th>${canEdit ? '<th></th>' : ''}</tr></thead><tbody>`;
+      staffArray.forEach(s => {
+        const created = s.created_at ? new Date(s.created_at).toLocaleDateString() : '—';
+        const statusBadge = s.is_active ? '<span class="badge-active">Active</span>' : '<span class="badge-inactive">Inactive</span>';
+        html += `<tr>
+          <td>${escapeHtml(s.name)}</td>
+          <td>${statusBadge}</td>
+          <td>${created}</td>
+          ${canEdit ? `<td><button class="btn btn-ghost btn-small edit-staff-btn" data-id="${s.id}" data-name="${escapeHtml(s.name)}" data-active="${s.is_active}">Edit</button></td>` : ''}
+        </tr>`;
+      });
+      html += '</tbody></table>';
+    }
+    content.innerHTML = html;
+
+    if (canCreate) {
+      document.getElementById('addStaffBtn').addEventListener('click', () => openStaffAddModal());
+    }
+    if (canEdit) {
+      content.querySelectorAll('.edit-staff-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          openStaffEditModal(btn.dataset.id, btn.dataset.name, btn.dataset.active === 'true');
+        });
+      });
+    }
+  }
+
+  function openStaffAddModal() {
+    document.getElementById('staffAddName').value = '';
+    document.getElementById('staffAddPin').value = '';
+    openModal(document.getElementById('staffAddModalOverlay'));
+    setTimeout(() => document.getElementById('staffAddName').focus(), 250);
+  }
+
+  function openStaffEditModal(id, name, active) {
+    editingStaffId = id;
+    document.getElementById('staffEditName').value = name;
+    document.getElementById('staffEditPin').value = '';
+    document.getElementById('staffEditActive').checked = active;
+    openModal(document.getElementById('staffEditModalOverlay'));
+    setTimeout(() => document.getElementById('staffEditName').focus(), 250);
+  }
+
+  // Staff modal event handlers
+  document.getElementById('staffAddCancel').addEventListener('click', () => {
+    closeModal(document.getElementById('staffAddModalOverlay'));
+  });
+  document.getElementById('staffAddConfirm').addEventListener('click', async () => {
+    const name = document.getElementById('staffAddName').value.trim();
+    const pin = document.getElementById('staffAddPin').value.trim();
+    if (!name) { toast('Name is required.', true); return; }
+    if (!pin || !/^\d{4,6}$/.test(pin)) { toast('PIN must be 4-6 digits.', true); return; }
+    const btn = document.getElementById('staffAddConfirm');
+    btn.disabled = true; btn.textContent = 'Creating…';
+    try {
+      await api.createStaff(name, pin);
+      toast('Staff created.');
+      closeModal(document.getElementById('staffAddModalOverlay'));
+      showStaffManagementDetail();
+    } catch (e) {
+      toast(e.message || 'Failed to create staff.', true);
+    } finally {
+      btn.disabled = false; btn.textContent = 'Create';
+    }
+  });
+
+  document.getElementById('staffEditCancel').addEventListener('click', () => {
+    closeModal(document.getElementById('staffEditModalOverlay'));
+    editingStaffId = null;
+  });
+  document.getElementById('staffEditConfirm').addEventListener('click', async () => {
+    if (!editingStaffId) return;
+    const name = document.getElementById('staffEditName').value.trim();
+    const pin = document.getElementById('staffEditPin').value.trim();
+    const isActive = document.getElementById('staffEditActive').checked;
+    if (!name) { toast('Name is required.', true); return; }
+    if (pin && !/^\d{4,6}$/.test(pin)) { toast('PIN must be 4-6 digits.', true); return; }
+    const payload = { name, is_active: isActive };
+    if (pin) payload.pin = pin;
+    const btn = document.getElementById('staffEditConfirm');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      await api.updateStaff(editingStaffId, payload);
+      toast('Staff updated.');
+      closeModal(document.getElementById('staffEditModalOverlay'));
+      editingStaffId = null;
+      showStaffManagementDetail();
+    } catch (e) {
+      toast(e.message || 'Failed to update staff.', true);
+    } finally {
+      btn.disabled = false; btn.textContent = 'Save';
+    }
+  });
 
       let shouldOpenAllocations = false;
 
@@ -2230,13 +2425,21 @@
     updateSettings: (section, data) => apiCall('PATCH', `/settings/${section}`, data),
 
         // Permissions (staff management)
-    getPermissions: () => apiCall('GET', '/permissions'),
-    updatePermissions: (role, permissions) => apiCall('PATCH', '/permissions', { role, permissions }),
+        getPermissions: () => apiCall('GET', '/permissions'),
+        updatePermissions: (role, permissions) => apiCall('PATCH', '/permissions', { role, permissions }),
 
+        // POS actions
+        connectPos: (provider) => apiCall('POST', '/pos/connect', { provider }),
+        disconnectPos: () => apiCall('POST', '/pos/disconnect'),
+        syncPos: () => apiCall('POST', '/pos/sync'),
         // Pending Allocations
         listPendingAllocations: () => apiCall('GET', '/?action=listPendingAllocations'),
         getPendingAllocationDetails: (allocationId) => apiCall('GET', '/?action=getPendingAllocationDetails&allocationId=' + encodeURIComponent(allocationId)),
-        resolvePendingAllocation: (allocationId, mappings) => apiCall('POST', '/', { action: 'resolvePendingAllocation', allocationId, mappings })
+        resolvePendingAllocation: (allocationId, mappings) => apiCall('POST', '/', { action: 'resolvePendingAllocation', allocationId, mappings }),
+        // NEW: Staff management
+        listStaff: () => apiCall('GET', '/staff'),
+        createStaff: (name, pin) => apiCall('POST', '/staff', { name, pin }),
+        updateStaff: (id, data) => apiCall('PATCH', `/staff/${id}`, data)
       };
 
       function toast(msg, err = false) {
@@ -2460,8 +2663,8 @@
 
       function openModal(o) { o.classList.add('open'); }
       function closeModal(o) { o.classList.remove('open'); }
-      [ao, ro, eio, co, cdo, aso, document.getElementById('recipeModalOverlay'), document.getElementById('resolveAllocationModal')].forEach(o => { if (o) o.addEventListener('click', e => { if (e.target === o) closeModal(o); }); });
-      document.addEventListener('keydown', e => { if (e.key === 'Escape') { [ao, ro, eio, co, cdo, aso, document.getElementById('recipeModalOverlay'), document.getElementById('resolveAllocationModal')].forEach(closeModal); } });
+      [ao, ro, eio, co, cdo, aso, document.getElementById('recipeModalOverlay'), document.getElementById('resolveAllocationModal'), document.getElementById('staffAddModalOverlay'), document.getElementById('staffEditModalOverlay')].forEach(o => { if (o) o.addEventListener('click', e => { if (e.target === o) closeModal(o); }); });
+      document.addEventListener('keydown', e => { if (e.key === 'Escape') { [ao, ro, eio, co, cdo, aso, document.getElementById('recipeModalOverlay'), document.getElementById('resolveAllocationModal'), document.getElementById('staffAddModalOverlay'), document.getElementById('staffEditModalOverlay')].forEach(closeModal); } });
 
       async function loadRecipes() { try { const d = await api.listRecipes(); recipeState.recipes = (d && Array.isArray(d.recipes)) ? d.recipes : (d && Array.isArray(d) ? d : []); renderRecipes(); } catch (e) { toast('Could not load recipes.', true); } }
       function renderRecipes() { const root = document.getElementById('recipesRoot'); root.innerHTML = ''; const sorted = [...recipeState.recipes].sort((a, b) => (a.name || '').localeCompare(b.name || '')); sorted.forEach(r => root.appendChild(renderRecipeCard(r))); applyRecipeSearch(); }
