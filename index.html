@@ -1492,6 +1492,58 @@
       margin-bottom: var(--space-2)
     }
 
+    /* Softcoded "no data yet" hero states */
+    .empty-hero {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      background: linear-gradient(160deg, var(--charcoal-2), var(--charcoal-1));
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      padding: var(--space-5) var(--space-4);
+      margin-bottom: var(--space-4);
+      box-shadow: var(--shadow-card)
+    }
+
+    .empty-hero.show {
+      display: flex
+    }
+
+    .empty-hero-icon {
+      width: clamp(52px, 12vw, 68px);
+      height: clamp(52px, 12vw, 68px);
+      border-radius: 50%;
+      background: linear-gradient(150deg, rgba(212, 175, 55, 0.16), rgba(212, 175, 55, 0.05));
+      border: 1px solid rgba(212, 175, 55, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: var(--space-3);
+      flex-shrink: 0
+    }
+
+    .empty-hero-icon svg {
+      width: 46%;
+      height: 46%;
+      color: var(--gold-bright)
+    }
+
+    .empty-hero-title {
+      font-family: var(--font-display);
+      font-size: clamp(1.02rem, 3.4vw, 1.2rem);
+      font-weight: 700;
+      color: var(--paper);
+      margin-bottom: 6px
+    }
+
+    .empty-hero-desc {
+      font-size: clamp(0.82rem, 2.4vw, 0.9rem);
+      color: var(--paper-dim);
+      max-width: 380px;
+      line-height: 1.55
+    }
+
     .toast-stack {
       position: fixed;
       left: 50%;
@@ -1742,6 +1794,15 @@
             <div class="overview-label">Out</div>
           </div>
         </div>
+        <div class="empty-hero" id="inventoryEmptyHero">
+          <div class="empty-hero-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+              <line x1="12" y1="22.08" x2="12" y2="12" />
+            </svg></div>
+          <div class="empty-hero-title">No inventory yet</div>
+          <div class="empty-hero-desc">Start by adding your first inventory item. You can add drinks, ingredients, or any stock you need to track.</div>
+        </div>
         <div class="categories" id="categoriesRoot"></div>
         <div class="empty-state" id="emptyState"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="1.5">
@@ -1767,6 +1828,15 @@
           </svg>
           <input type="text" class="search-input" id="recipeSearchInput" placeholder="Search recipes…"
             autocomplete="off">
+        </div>
+        <div class="empty-hero" id="recipesEmptyHero">
+          <div class="empty-hero-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+              <path d="M8 3h8l1 6a4 4 0 0 1-8 0L8 3z" />
+              <path d="M12 13v5" />
+              <path d="M8 21h8" />
+            </svg></div>
+          <div class="empty-hero-title">No recipes yet</div>
+          <div class="empty-hero-desc">Create your first cocktail or drink recipe to begin tracking sales and inventory deductions.</div>
         </div>
         <div class="categories" id="recipesRoot"></div>
         <div class="empty-state" id="recipeEmptyState"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -2653,7 +2723,7 @@
       window.addEventListener('resize', () => { if (ctxMenu.classList.contains('open')) closeMenus(); });
 
       const rootEl = document.getElementById('categoriesRoot');
-      function render() { rootEl.innerHTML = ''; state.categories.forEach(c => rootEl.appendChild(renderCat(c))); updateOverview(); applySearchFilter(); updateDirty(); }
+      function render() { rootEl.innerHTML = ''; state.categories.forEach(c => rootEl.appendChild(renderCat(c))); document.getElementById('inventoryEmptyHero').classList.toggle('show', state.categories.length === 0); updateOverview(); applySearchFilter(); updateDirty(); }
       function renderCat(c) {
         const card = document.createElement('div'); card.className = 'cat-card' + (expandedState[c.id] ? ' expanded' : ''); card.dataset.catId = c.id; const h = document.createElement('button'); h.className = 'cat-header'; h.setAttribute('aria-expanded', expandedState[c.id] ? 'true' : 'false'); h.innerHTML = `<div class="cat-icon">${ICONS[c.icon] || ICONS.default}</div><div class="cat-title-wrap"><div class="cat-name">${escapeHtml(c.name)}</div><div class="cat-count"><b>${c.items.length}</b> item${c.items.length === 1 ? '' : 's'}</div></div><svg class="cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>`;         
         if (can('categories', 'edit') || can('categories', 'delete')) {
@@ -2795,7 +2865,7 @@
       document.addEventListener('keydown', e => { if (e.key === 'Escape') { [ao, ro, eio, co, cdo, aso, document.getElementById('recipeModalOverlay'), document.getElementById('resolveAllocationModal'), document.getElementById('staffAddModalOverlay'), document.getElementById('staffEditModalOverlay')].forEach(closeModal); } });
 
       async function loadRecipes() { try { const d = await api.listRecipes(); recipeState.recipes = (d && Array.isArray(d.recipes)) ? d.recipes : (d && Array.isArray(d) ? d : []); renderRecipes(); } catch (e) { toast('Could not load recipes.', true); } }
-      function renderRecipes() { const root = document.getElementById('recipesRoot'); root.innerHTML = ''; const sorted = [...recipeState.recipes].sort((a, b) => (a.name || '').localeCompare(b.name || '')); sorted.forEach(r => root.appendChild(renderRecipeCard(r))); applyRecipeSearch(); }
+      function renderRecipes() { const root = document.getElementById('recipesRoot'); root.innerHTML = ''; const sorted = [...recipeState.recipes].sort((a, b) => (a.name || '').localeCompare(b.name || '')); sorted.forEach(r => root.appendChild(renderRecipeCard(r))); document.getElementById('recipesEmptyHero').classList.toggle('show', recipeState.recipes.length === 0); applyRecipeSearch(); }
       function renderRecipeCard(r) {
         const card = document.createElement('div'); card.className = 'cat-card'; card.dataset.recipeId = r.id; card.dataset.recipeName = (r.name || '').toLowerCase(); const h = document.createElement('button'); h.className = 'cat-header'; h.setAttribute('aria-expanded', 'false'); const ic = (r.ingredients || []).length; h.innerHTML = `<div class="cat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3h8l1 6a4 4 0 0 1-8 0L8 3z"/><path d="M12 13v5"/><path d="M8 21h8"/></svg></div><div class="cat-title-wrap"><div class="cat-name">${escapeHtml(r.name || 'Unnamed')}</div><div class="cat-count"><b>${ic}</b> ingredient${ic === 1 ? '' : 's'}</div></div><svg class="cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>`; h.addEventListener('click', () => { card.classList.toggle('expanded'); h.setAttribute('aria-expanded', card.classList.contains('expanded') ? 'true' : 'false'); }); const body = document.createElement('div'); body.className = 'cat-body'; const bi = document.createElement('div'); bi.className = 'cat-body-inner'; let dh = ''; if (r.glass) dh += `<div class="recipe-detail"><strong>Glass</strong><br>${escapeHtml(r.glass)}</div>`; if (r.method) dh += `<div class="recipe-detail"><strong>Method</strong><br>${escapeHtml(r.method)}</div>`; if (r.garnish) dh += `<div class="recipe-detail"><strong>Garnish</strong><br>${escapeHtml(r.garnish)}</div>`; if (r.ingredients && r.ingredients.length > 0) { dh += '<div class="recipe-detail"><strong>Ingredients</strong>'; r.ingredients.forEach(ing => { const nm = ing.inventoryItemName || ing.customName || 'Unknown'; dh += `<div class="ingredient-row"><span>${escapeHtml(nm)}</span> ${ing.amount || ''} ${escapeHtml(ing.unit || '')}</div>`; }); dh += '</div>'; } const editAllowed = can('recipes', 'edit');
         const deleteAllowed = can('recipes', 'delete');
