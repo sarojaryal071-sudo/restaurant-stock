@@ -13,6 +13,7 @@ const settingsController = require('./src/settings/settings.controller');
 const permissionsController = require('./src/permissions/permissions.controller');
 const permissionsService = require('./src/permissions/permissions.service');  // for health endpoint
 const posActions = require('./src/posIntegration/posIntegration.actions');
+const posSalesActions = require('./src/posSales/posSales.actions');
 
 const app = express();
 
@@ -258,6 +259,13 @@ app.post('/api/pos/disconnect', (req, res, next) => {
 app.post('/api/pos/sync', (req, res, next) => {
   requireAuth(req, res, () => {
     requirePermission('settings', 'manage')(req, res, () => posActions.sync(req, res));
+  });
+});
+
+// ---------- POS Sales Summary (manager only) ----------
+app.get('/api/pos/sales', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => posSalesActions.getSalesSummary(req, res));
   });
 });
 

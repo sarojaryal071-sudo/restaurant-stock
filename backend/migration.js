@@ -464,6 +464,24 @@ async function runMigrations() {
       }
     }
 
+        // =================================================================
+    // POS Sales table (aggregate sales summaries)
+    // =================================================================
+    await tx(`
+      CREATE TABLE IF NOT EXISTS pos_sales (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        restaurant_id UUID REFERENCES restaurants(id) ON DELETE CASCADE,
+        provider TEXT,
+        product_name TEXT NOT NULL,
+        quantity NUMERIC NOT NULL DEFAULT 1,
+        sold_at TIMESTAMPTZ NOT NULL,
+        external_sale_id TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_pos_sales_restaurant ON pos_sales(restaurant_id);`);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_pos_sales_sold_at ON pos_sales(sold_at);`);
+
     console.log('Migrations completed successfully.');
   });
 }
