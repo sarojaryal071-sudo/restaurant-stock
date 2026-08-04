@@ -3467,16 +3467,22 @@
       }
 
       async function preloadWorkspace() {
-        const [stockRes, recipesRes, settingsRes] = await Promise.all([
-          api.loadStock(),
-          api.listRecipes(),
-          api.getSettings()
-        ]);
+        const canManageSettings = can('settings', 'manage');
+        const tasks = [api.loadStock(), api.listRecipes()];
+        if (canManageSettings) tasks.push(api.getSettings());
+
+        const results = await Promise.all(tasks);
+        const stockRes = results[0], recipesRes = results[1], settingsRes = canManageSettings ? results[2] : null;
+
         const arr = (stockRes && Array.isArray(stockRes.categories)) ? stockRes.categories : (Array.isArray(stockRes) ? stockRes : []);
         state.categories = arr.map(c => ({ id: c.id, name: c.name, icon: c.icon || 'default', items: (c.items || []).map(it => ({ id: it.id, name: it.name, qty: Number(it.qty) || 0, custom: !!it.custom, unit: it.unit || undefined, containerVolume: it.containerVolume, editable: it.editable, locked: it.locked, lastConfirmedQty: Number(it.qty) || 0 })) }));
         saveCache();
         recipeState.recipes = (recipesRes && Array.isArray(recipesRes.recipes)) ? recipesRes.recipes : (recipesRes && Array.isArray(recipesRes) ? recipesRes : []);
-        settingsData = (settingsRes && settingsRes.settings) ? settingsRes.settings : settingsRes;
+        if (canManageSettings) {
+          settingsData = (settingsRes && settingsRes.settings) ? settingsRes.settings : settingsRes;
+        } else {
+          settingsData = null;
+        }
         try { const r = localStorage.getItem(EXPANDED_KEY); expandedState = r ? JSON.parse(r) : {}; } catch (e) { expandedState = {}; }
         if (!Object.keys(expandedState).length && state.categories[0]) expandedState[state.categories[0].id] = true;
         render();
