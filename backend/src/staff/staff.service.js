@@ -66,11 +66,7 @@ async function updateStaff(restaurantId, userId, updates, currentUserId) {
   const fields = {};
 
   if (updates.name !== undefined) {
-    const newName = validateName(updates.name);
-    fields.name = newName;
-    // Auto‑regenerate username when name changes
-    const newUsername = await generateUsername(newName, restaurantId);
-    fields.username = newUsername;
+    fields.name = validateName(updates.name);
   }
 
   if (updates.pin !== undefined) {

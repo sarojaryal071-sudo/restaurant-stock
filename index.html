@@ -1742,7 +1742,7 @@
         <img id="headerLogo" class="brand-logo-img" src="assets/stock-logo.png" alt="Restaurant logo">
         <div class="brand-block">
           <div class="brand-name is-loading" id="brandName">Loading…</div>
-          <div class="brand-sub">Stock Counter</div>
+          <div class="brand-sub" id="brandSub">Stock Counter</div>
         </div>
         <button class="export-btn" id="exportBtn" title="Print / Save as PDF"><svg viewBox="0 0 24 24" fill="none"
             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -3206,6 +3206,7 @@
         document.getElementById('loadingScreen').classList.add('fade-out');
         document.getElementById('authRestaurantName').textContent = 'Stock Counter';
         document.getElementById('authLogoImg').src = GENERIC_LOGO;
+        document.getElementById('brandSub').textContent = 'Stock Counter';
         usernameEl.value = ''; pinEl.value = ''; authErr.textContent = ''; usernameEl.focus();
       }
 
@@ -3227,6 +3228,7 @@
             userPermissions = r.permissions || {};
             savePermissions(userPermissions);
             if (r.restaurant) { applyBranding(r.restaurant); }
+            if (r.user && r.user.name) { document.getElementById('brandSub').textContent = r.user.name; }
             showApp(); await loadInventory();
           } else { authErr.textContent = 'Invalid response from server.'; }
         } catch (e) { authErr.textContent = e.message || 'Login failed'; }
@@ -3278,7 +3280,9 @@
           if (h && h.restaurant) {
             userPermissions = h.permissions || loadPermissions();
             savePermissions(userPermissions);
-            applyBranding(h.restaurant); showApp(); await loadInventory(); return;
+            applyBranding(h.restaurant);
+            if (h.user && h.user.name) { document.getElementById('brandSub').textContent = h.user.name; }
+            showApp(); await loadInventory(); return;
           }
           clearAuth(); showLogin();
         } catch (e) { clearAuth(); showLogin(); }
