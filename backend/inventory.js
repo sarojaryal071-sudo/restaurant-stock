@@ -13,6 +13,27 @@ async function writeLog(action, details, restaurantId, userId) {
 }
 
 // -------------------------------------------------------------------
+// Helper: validate reason / unit against database
+// -------------------------------------------------------------------
+async function isValidReason(reason) {
+  if (!reason) return false;
+  const res = await query(
+    `SELECT id FROM inventory_adjustment_reasons WHERE value = $1 AND enabled = TRUE`,
+    [reason]
+  );
+  return res.rows.length > 0;
+}
+
+async function isValidUnit(unit) {
+  if (!unit) return true;
+  const res = await query(
+    `SELECT id FROM inventory_units WHERE value = $1 AND enabled = TRUE`,
+    [unit]
+  );
+  return res.rows.length > 0;
+}
+
+// -------------------------------------------------------------------
 // loadStock – returns nested categories → items with quantities
 // -------------------------------------------------------------------
 async function loadStock(req, res) {
@@ -62,11 +83,11 @@ async function loadStock(req, res) {
 }
 
 // -------------------------------------------------------------------
-// saveStock – single or batch update, sets absolute quantity
+// saveStock – requires reason for every change, records adjustments
 // -------------------------------------------------------------------
 async function saveStock(req, res) {
   const { restaurantId, userId } = req.auth;
-  const { updates } = req.body;   // expect { updates: [{ itemId, quantity }, ...] }
+  const updates = req.body.updates || [];   // array of { itemId, quantity, reason?, note? }
 
   try {
     if (!Array.isArray(updates) || updates.length === 0) {
@@ -74,10 +95,29 @@ async function saveStock(req, res) {
     }
 
     await transaction(async (tx) => {
+      // 1. Load current stock and item names for this restaurant
+      const stockRows = await tx(
+        `SELECT item_id, quantity FROM stocks WHERE restaurant_id = $1`,
+        [restaurantId]
+      );
+      const stockMap = {};
+      for (const r of stockRows.rows) {
+        stockMap[r.item_id] = parseFloat(r.quantity) || 0;
+      }
+
+      const itemRows = await tx(
+        `SELECT id, name FROM items WHERE restaurant_id = $1 AND is_deleted = FALSE`,
+        [restaurantId]
+      );
+      const itemMap = {};
+      for (const r of itemRows.rows) { itemMap[r.id] = r.name; }
+
+      // 2. Collect only items whose quantity actually changes, validate reasons
+      const changed = [];
       for (const upd of updates) {
         const itemId = upd.itemId;
-        const quantity = parseFloat(upd.quantity);
-        if (!itemId || isNaN(quantity)) continue;
+        const newQty = parseFloat(upd.quantity);
+        if (!itemId || isNaN(newQty)) continue;
 
         // Verify item exists and is not deleted
         const itemRes = await tx(
@@ -86,42 +126,86 @@ async function saveStock(req, res) {
         );
         if (itemRes.rows.length === 0) continue;
 
-        // Upsert stock
+        const oldQty = stockMap[itemId] || 0;
+        if (newQty === oldQty) continue;   // no change → skip
+
+        // Reason required for every change
+        const reason = (upd.reason || '').trim();
+        if (!reason) throw { code: 'VALIDATION_ERROR', error: `Reason is required for item "${itemMap[itemId] || itemId}".` };
+        // Validate reason against the database
+        if (!(await isValidReason(reason))) {
+          throw { code: 'VALIDATION_ERROR', error: `Invalid reason "${reason}" for item "${itemMap[itemId] || itemId}".` };
+        }
+        if (reason === 'Other' && !(upd.note || '').trim()) {
+          throw { code: 'VALIDATION_ERROR', error: `A note is required when reason is "Other" for item "${itemMap[itemId] || itemId}".` };
+        }
+
+        changed.push({ itemId, oldQty, newQty, reason, note: (upd.note || '').trim() });
+      }
+
+      // 3. If nothing changed, exit early (still OK)
+      if (changed.length === 0) return;
+
+      // 4. Create adjustment header
+      const adjId = uuidv4();
+      await tx(
+        `INSERT INTO inventory_adjustments (id, restaurant_id, user_id) VALUES ($1, $2, $3)`,
+        [adjId, restaurantId, userId || null]
+      );
+
+      // 5. Update stocks and create adjustment item rows
+      for (const c of changed) {
+        const diff = c.newQty - c.oldQty;
+
+        // Upsert stock (set absolute quantity)
         const stockRes = await tx(
           `SELECT id FROM stocks WHERE item_id = $1 AND restaurant_id = $2`,
-          [itemId, restaurantId]
+          [c.itemId, restaurantId]
         );
         if (stockRes.rows.length > 0) {
           await tx(
             `UPDATE stocks SET quantity = $1, updated_at = NOW() WHERE item_id = $2 AND restaurant_id = $3`,
-            [Math.max(0, quantity), itemId, restaurantId]
+            [Math.max(0, c.newQty), c.itemId, restaurantId]
           );
         } else {
           await tx(
             `INSERT INTO stocks (id, item_id, restaurant_id, quantity, updated_at)
              VALUES ($1, $2, $3, $4, NOW())`,
-            [uuidv4(), itemId, restaurantId, Math.max(0, quantity)]
+            [uuidv4(), c.itemId, restaurantId, Math.max(0, c.newQty)]
           );
         }
+
+        // Record adjustment item
+        await tx(
+          `INSERT INTO inventory_adjustment_items (id, adjustment_id, item_id, old_quantity, new_quantity, difference, reason, note)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [uuidv4(), adjId, c.itemId, c.oldQty, c.newQty, diff, c.reason, c.note || null]
+        );
       }
     });
 
-    await writeLog('BATCH_SAVE', `Updated ${updates.length} stock items`, restaurantId, userId);
+    await writeLog('BATCH_SAVE', `Adjustment recorded for ${changed.length} items`, restaurantId, userId);
     res.json({ ok: true });
   } catch (err) {
+    if (err.code) return res.json({ ok: false, code: err.code, error: err.error });
     console.error('saveStock error:', err);
     res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
   }
 }
 
 // -------------------------------------------------------------------
-// addCustomItem
+// addCustomItem (with unit validation)
 // -------------------------------------------------------------------
 async function addCustomItem(req, res) {
   const { restaurantId, userId } = req.auth;
-  const { categoryId, name, quantity } = req.body;
+  const { categoryId, name, quantity, unit } = req.body;
   if (!categoryId || !name) {
     return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Missing categoryId or name' });
+  }
+
+  const newUnit = (unit || '').trim();
+  if (newUnit && !(await isValidUnit(newUnit))) {
+    return res.json({ ok: false, code: 'VALIDATION_ERROR', error: `Invalid unit: ${newUnit}` });
   }
 
   try {
@@ -131,8 +215,8 @@ async function addCustomItem(req, res) {
     await transaction(async (tx) => {
       await tx(
         `INSERT INTO items (id, name, category_id, unit, default_quantity, restaurant_id, is_default, is_deleted, container_volume, created_at)
-         VALUES ($1, $2, $3, '', 0, $4, FALSE, FALSE, NULL, NOW())`,
-        [itemId, name, categoryId, restaurantId]
+         VALUES ($1, $2, $3, $4, 0, $5, FALSE, FALSE, NULL, NOW())`,
+        [itemId, name, categoryId, newUnit, restaurantId]
       );
       await tx(
         `INSERT INTO stocks (id, item_id, restaurant_id, quantity, updated_at)
@@ -182,6 +266,11 @@ async function updateItem(req, res) {
     );
     if (dupCheck.rows.length > 0) {
       return res.json({ ok: false, code: 'DUPLICATE_NAME', error: 'An item with that name already exists in this category' });
+    }
+
+        // Validate unit (if provided and non-empty)
+    if (newUnit && !(await isValidUnit(newUnit))) {
+      return res.json({ ok: false, code: 'VALIDATION_ERROR', error: `Invalid unit: ${newUnit}` });
     }
 
     await query(

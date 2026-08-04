@@ -1776,6 +1776,18 @@
   .staff-table td{border:none;padding:6px 0;display:flex;justify-content:space-between;align-items:center;gap:var(--space-2)}
   .staff-table td::before{content:attr(data-label);font-size:0.64rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--paper-faint);font-weight:700;flex-shrink:0}
 }
+
+/* Inventory Adjustment reasons */
+.adjust-reason-row{background:var(--charcoal-1);border:1px solid var(--line);border-radius:var(--radius-md);padding:var(--space-3);margin-bottom:var(--space-2)}
+.adjust-reason-header{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);margin-bottom:8px}
+.adjust-reason-name{font-size:0.9rem;font-weight:700;color:var(--paper)}
+.adjust-reason-delta{font-family:var(--font-mono);font-size:0.85rem;color:var(--gold-bright)}
+.adjust-reason-select{width:100%;background:var(--charcoal-2);border:1px solid var(--line-strong);border-radius:var(--radius-sm);padding:10px 12px;color:var(--paper);font-size:0.85rem;margin-bottom:8px}
+.adjust-reason-note{width:100%;background:var(--charcoal-2);border:1px solid var(--line-strong);border-radius:var(--radius-sm);padding:10px 12px;color:var(--paper);font-size:0.85rem;resize:vertical;font-family:inherit}
+
+/* Stock Intake page */
+.intake-item-select{min-width:140px;flex:2;background:var(--charcoal-1);border:1px solid var(--line-strong);border-radius:var(--radius-sm);padding:8px 10px;color:var(--paper);font-size:0.82rem}
+.intake-qty-input{width:80px;flex:none;background:var(--charcoal-1);border:1px solid var(--line-strong);border-radius:var(--radius-sm);padding:8px 10px;color:var(--paper);font-size:0.82rem}
   </style>
 </head>
 
@@ -1948,6 +1960,10 @@
       </div>
     </div>
 
+    <div id="pageStockIntake" class="hidden">
+      <div class="container" id="stockIntakeContainer"></div>
+    </div>
+
     <div id="pageSettings" class="hidden">
       <div class="container" id="settingsContainer"></div>
     </div>
@@ -1955,6 +1971,7 @@
   <nav class="bottom-nav">
     <button class="bottom-nav-btn active" id="navInventory"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg><span>Inventory</span></button>
     <button class="bottom-nav-btn" id="navRecipes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3h8l1 6a4 4 0 0 1-8 0L8 3z"/><path d="M12 13v5"/><path d="M8 21h8"/><line x1="18" y1="8" x2="22" y2="8"/><line x1="2" y1="8" x2="6" y2="8"/></svg><span>Recipes</span></button>
+    <button class="bottom-nav-btn hidden" id="navStockIntake"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4"/><path d="M4 6v12c0 1.1.9 2 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg><span>Intake</span></button>
     <button class="bottom-nav-btn hidden" id="navSettings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg><span>Settings</span></button>
   </nav>
     <button class="fab fab-save hidden" id="saveBtn"><svg class="fab-save-icon" viewBox="0 0 24 24" fill="none"
@@ -2100,6 +2117,17 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="adjustReasonModalOverlay">
+    <div class="modal-card" style="max-width:520px">
+      <div class="modal-title">Reason for Changes</div>
+      <div id="adjustReasonList"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="adjustReasonCancel">Cancel</button>
+        <button class="btn btn-gold" id="adjustReasonConfirm" disabled>Save Changes</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast-stack" id="toastStack"></div>
 
   <script>
@@ -2114,7 +2142,7 @@
       const CACHE_KEY = 'sc_inv_cache';
       const CACHE_MAX_AGE = 10 * 60 * 1000;
       const GENERIC_LOGO = 'assets/stock-logo.png';
-      const UNITS = ['ml', 'cl', 'L', 'pcs', 'slice', 'wedge', 'dash', 'drop', 'sprig', 'leaf', 'pinch'];
+      let appConfig = { units: [], adjustmentReasons: [] };
 
       const ICONS = {
         wine: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8l-1 6a3 3 0 0 1-6 0L8 3z"/><path d="M12 12v6"/><path d="M9 21h6"/></svg>',
@@ -2143,6 +2171,9 @@
       let authLoadingInterval = null;
   let settingsData = null;
   let settingsSubPage = null; // 'menu' or a section key like 'restaurant'
+  let cachedPermissionsData = null;
+  let cachedStaffData = null;
+  let cachedPosSalesData = null;
 
   async function loadSettings() {
     try {
@@ -2227,7 +2258,8 @@
 
     async function showPermissionsDetail() {
     try {
-      const data = await api.getPermissions();
+      const data = cachedPermissionsData || await api.getPermissions();
+      cachedPermissionsData = data;
       const definitions = data && data.definitions ? data.definitions : [];
       const perms = data && data.permissions ? data.permissions : { staff: {}, manager: {} };
       const staffPerms = perms.staff || {};
@@ -2494,7 +2526,12 @@
         loadSalesSummary('custom', start, end);
       });
     }
-    loadSalesSummary('today');
+    if (cachedPosSalesData) {
+      renderSalesTable(cachedPosSalesData.summary ? cachedPosSalesData.summary : []);
+      cachedPosSalesData = null;
+    } else {
+      loadSalesSummary('today');
+    }
   }
 
   function renderSalesNotConnected() {
@@ -2567,10 +2604,15 @@
       content.innerHTML = '<div class="empty-state show"><div>You do not have permission to manage staff.</div></div>';
       return;
     }
+    if (cachedStaffData) {
+      renderStaffList(cachedStaffData);
+      return;
+    }
     content.innerHTML = '<div class="loading-spinner" style="margin:2rem auto;"></div>';
     try {
       const data = await api.listStaff();
-      renderStaffList(data.staff || []);
+      cachedStaffData = data.staff || [];
+      renderStaffList(cachedStaffData);
     } catch (e) {
       content.innerHTML = `<div class="empty-state show"><div>Could not load staff list. ${escapeHtml(e.message)}</div></div>`;
     }
@@ -2648,6 +2690,7 @@
       await api.createStaff(name, pin);
       toast('Staff created.');
       closeModal(document.getElementById('staffAddModalOverlay'));
+      cachedStaffData = null;
       showStaffManagementDetail();
     } catch (e) {
       toast(e.message || 'Failed to create staff.', true);
@@ -2676,6 +2719,7 @@
       toast('Staff updated.');
       closeModal(document.getElementById('staffEditModalOverlay'));
       editingStaffId = null;
+      cachedStaffData = null;
       showStaffManagementDetail();
     } catch (e) {
       toast(e.message || 'Failed to update staff.', true);
@@ -2729,6 +2773,8 @@
       fab.classList.add('hidden');
     }            // Show Settings tab for managers
     navSet.classList.toggle('hidden', !can('settings', 'manage'));
+    // Stock Intake tab: manager only (settings.manage), same permission the backend enforces
+    navSI.classList.toggle('hidden', !can('settings', 'manage'));
 
         // Reset button (allowed for both roles)
         // No change required.
@@ -2835,6 +2881,7 @@
         deleteRecipe: (recipeId) => apiCall('POST', '/', { action: 'deleteRecipe', recipeId }),
         recordSale: (recipeId, quantity) => apiCall('POST', '/', { action: 'recordSale', recipeId, quantity }),
         getConfig: () => apiCall('GET', '/?action=getConfig'),
+        getInventoryConfig: () => apiCall('GET', '/config'),
         exportInventory: () => apiCall('GET', '/?action=exportInventory', null, 'blob'),
         resetStock: () => apiCall('POST', '/', { action: 'resetStock' }),
 
@@ -2857,6 +2904,16 @@
           }
           return apiCall('GET', q);
         },
+        // Stock Intake
+        getStockIntake: (start, end) => {
+          let q = '/stock-intake';
+          const params = [];
+          if (start) params.push('start=' + encodeURIComponent(start));
+          if (end) params.push('end=' + encodeURIComponent(end));
+          if (params.length) q += '?' + params.join('&');
+          return apiCall('GET', q);
+        },
+        createStockIntake: (items) => apiCall('POST', '/stock-intake', { items }),
         // Pending Allocations
         listPendingAllocations: () => apiCall('GET', '/?action=listPendingAllocations'),
         getPendingAllocationDetails: (allocationId) => apiCall('GET', '/?action=getPendingAllocationDetails&allocationId=' + encodeURIComponent(allocationId)),
@@ -2881,15 +2938,15 @@
 
       function tick() { const n = new Date(); document.getElementById('clockTime').textContent = fmtTime(n); document.getElementById('clockDate').textContent = fmtDate(n); }
 
-        const pgInv = document.getElementById('pageInventory'), pgRec = document.getElementById('pageRecipes'), pgSet = document.getElementById('pageSettings');
-      const navInv = document.getElementById('navInventory'), navRec = document.getElementById('navRecipes'), navSet = document.getElementById('navSettings');
+        const pgInv = document.getElementById('pageInventory'), pgRec = document.getElementById('pageRecipes'), pgSet = document.getElementById('pageSettings'), pgSI = document.getElementById('pageStockIntake');
+      const navInv = document.getElementById('navInventory'), navRec = document.getElementById('navRecipes'), navSet = document.getElementById('navSettings'), navSI = document.getElementById('navStockIntake');
       const fab = document.getElementById('fabAction'), fabLbl = document.getElementById('fabActionLabel');
       const svBtn = document.getElementById('saveBtn');
 
   function switchPage(p) {
     currentPage = p;
-    pgInv.classList.add('hidden'); pgRec.classList.add('hidden'); pgSet.classList.add('hidden');
-    navInv.classList.remove('active'); navRec.classList.remove('active'); navSet.classList.remove('active');
+    pgInv.classList.add('hidden'); pgRec.classList.add('hidden'); pgSet.classList.add('hidden'); pgSI.classList.add('hidden');
+    navInv.classList.remove('active'); navRec.classList.remove('active'); navSet.classList.remove('active'); navSI.classList.remove('active');
     fab.classList.add('hidden'); svBtn.classList.add('hidden');
 
     if (p === 'inventory') {
@@ -2905,6 +2962,11 @@
       fab.classList.toggle('hidden', !can('recipes', 'create'));
       if (recipeState.recipes.length === 0) loadRecipes(); else renderRecipes();
       if (can('allocations', 'list')) loadPendingAllocations();
+    } else if (p === 'stockintake') {
+      pgSI.classList.remove('hidden');
+      navSI.classList.add('active');
+      fab.classList.add('hidden');
+      showStockIntakePage();
     } else if (p === 'settings') {
       pgSet.classList.remove('hidden');
       navSet.classList.add('active');
@@ -2915,6 +2977,7 @@
   }    
       navInv.addEventListener('click', () => switchPage('inventory'));
       navRec.addEventListener('click', () => switchPage('recipes'));
+      navSI.addEventListener('click', () => switchPage('stockintake'));
       navSet.addEventListener('click', () => switchPage('settings'));
 
       fab.addEventListener('click', () => {
@@ -3040,7 +3103,91 @@
       function isDirtyFn() { return state.categories.some(c => c.items.some(it => it.qty !== it.lastConfirmedQty)); }
       function updateDirty() { isDirty = isDirtyFn(); if (currentPage === 'inventory') svBtn.classList.toggle('hidden', !isDirty); }
       function revertAll() { state.categories.forEach(c => c.items.forEach(it => { it.qty = it.lastConfirmedQty; })); render(); }
-      async function doSave() { if (isSaving) return; const u = dirtyUpdates(); if (!u.length) return; isSaving = true; svBtn.disabled = true; svBtn.classList.add('is-saving'); document.getElementById('saveBtnLabel').textContent = 'Saving…'; try { await api.saveStock(u); u.forEach(x => { const f = findItem(x.itemId); if (f) f.item.lastConfirmedQty = x.quantity; }); setOnline(true); updateDirty(); u.forEach(x => { const f = findItem(x.itemId); if (f) updateItemRowUI(x.itemId, f.item); }); toast('Inventory saved.'); } catch (e) { revertAll(); setOnline(false); toast('Failed to save inventory.', true); } finally { isSaving = false; svBtn.disabled = false; svBtn.classList.remove('is-saving'); document.getElementById('saveBtnLabel').textContent = 'Save Changes'; } }
+
+      const arModalOverlay = document.getElementById('adjustReasonModalOverlay');
+      const arList = document.getElementById('adjustReasonList');
+      const arConfirmBtn = document.getElementById('adjustReasonConfirm');
+      const arCancelBtn = document.getElementById('adjustReasonCancel');
+      let pendingAdjustmentUpdates = [];
+
+      function openAdjustReasonModal(updates) {
+        pendingAdjustmentUpdates = updates;
+        arList.innerHTML = '';
+        updates.forEach(u => {
+          const f = findItem(u.itemId);
+          const name = f ? f.item.name : 'Item';
+          const oldQty = f ? f.item.lastConfirmedQty : '';
+          const row = document.createElement('div');
+          row.className = 'adjust-reason-row';
+          row.dataset.itemId = u.itemId;
+          row.innerHTML = `
+            <div class="adjust-reason-header">
+              <span class="adjust-reason-name">${escapeHtml(name)}</span>
+              <span class="adjust-reason-delta">${oldQty} → ${u.quantity}</span>
+            </div>
+            <select class="adjust-reason-select">
+              <option value="">-- Select reason --</option>
+              ${appConfig.adjustmentReasons.map(r => `<option value="${escapeHtml(r.value)}">${escapeHtml(r.label)}</option>`).join('')}
+            </select>
+            <textarea class="adjust-reason-note hidden" rows="2" placeholder="Reason note (required)"></textarea>
+          `;
+          const sel = row.querySelector('.adjust-reason-select');
+          const note = row.querySelector('.adjust-reason-note');
+          sel.addEventListener('change', () => {
+            note.classList.toggle('hidden', sel.value !== 'Other');
+            if (sel.value !== 'Other') note.value = '';
+            validateAdjustReasonForm();
+          });
+          note.addEventListener('input', validateAdjustReasonForm);
+          arList.appendChild(row);
+        });
+        validateAdjustReasonForm();
+        openModal(arModalOverlay);
+      }
+
+      function validateAdjustReasonForm() {
+        const rows = arList.querySelectorAll('.adjust-reason-row');
+        let allValid = rows.length > 0;
+        rows.forEach(row => {
+          const sel = row.querySelector('.adjust-reason-select');
+          const note = row.querySelector('.adjust-reason-note');
+          if (!sel.value) { allValid = false; return; }
+          if (sel.value === 'Other' && !note.value.trim()) { allValid = false; }
+        });
+        arConfirmBtn.disabled = !allValid;
+      }
+
+      arCancelBtn.addEventListener('click', () => { closeModal(arModalOverlay); pendingAdjustmentUpdates = []; });
+
+      arConfirmBtn.addEventListener('click', async () => {
+        const rows = arList.querySelectorAll('.adjust-reason-row');
+        const payload = [];
+        rows.forEach(row => {
+          const itemId = row.dataset.itemId;
+          const sel = row.querySelector('.adjust-reason-select');
+          const note = row.querySelector('.adjust-reason-note');
+          const u = pendingAdjustmentUpdates.find(x => x.itemId === itemId);
+          if (u) payload.push({ itemId: u.itemId, quantity: u.quantity, reason: sel.value, note: sel.value === 'Other' ? note.value.trim() : '' });
+        });
+        arConfirmBtn.disabled = true; arConfirmBtn.textContent = 'Saving…';
+        isSaving = true; svBtn.disabled = true; svBtn.classList.add('is-saving'); document.getElementById('saveBtnLabel').textContent = 'Saving…';
+        try {
+          await api.saveStock(payload);
+          setOnline(true);
+          closeModal(arModalOverlay);
+          pendingAdjustmentUpdates = [];
+          toast('Inventory adjustment saved.');
+          await loadInventory();
+        } catch (e) {
+          setOnline(false);
+          toast(e.message || 'Failed to save inventory.', true);
+        } finally {
+          arConfirmBtn.disabled = false; arConfirmBtn.textContent = 'Save Changes';
+          isSaving = false; svBtn.disabled = false; svBtn.classList.remove('is-saving'); document.getElementById('saveBtnLabel').textContent = 'Save Changes';
+        }
+      });
+
+      function doSave() { if (isSaving) return; const u = dirtyUpdates(); if (!u.length) return; openAdjustReasonModal(u); }
       svBtn.addEventListener('click', doSave);
       document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (isDirty) doSave(); } });
       window.addEventListener('beforeunload', e => { if (isDirty) { e.preventDefault(); e.returnValue = ''; } });
@@ -3088,8 +3235,8 @@
 
       function openModal(o) { o.classList.add('open'); }
       function closeModal(o) { o.classList.remove('open'); }
-      [ao, ro, eio, co, cdo, aso, document.getElementById('recipeModalOverlay'), document.getElementById('resolveAllocationModal'), document.getElementById('staffAddModalOverlay'), document.getElementById('staffEditModalOverlay')].forEach(o => { if (o) o.addEventListener('click', e => { if (e.target === o) closeModal(o); }); });
-      document.addEventListener('keydown', e => { if (e.key === 'Escape') { [ao, ro, eio, co, cdo, aso, document.getElementById('recipeModalOverlay'), document.getElementById('resolveAllocationModal'), document.getElementById('staffAddModalOverlay'), document.getElementById('staffEditModalOverlay')].forEach(closeModal); } });
+      [ao, ro, eio, co, cdo, aso, document.getElementById('recipeModalOverlay'), document.getElementById('resolveAllocationModal'), document.getElementById('staffAddModalOverlay'), document.getElementById('staffEditModalOverlay'), document.getElementById('adjustReasonModalOverlay')].forEach(o => { if (o) o.addEventListener('click', e => { if (e.target === o) closeModal(o); }); });
+      document.addEventListener('keydown', e => { if (e.key === 'Escape') { [ao, ro, eio, co, cdo, aso, document.getElementById('recipeModalOverlay'), document.getElementById('resolveAllocationModal'), document.getElementById('staffAddModalOverlay'), document.getElementById('staffEditModalOverlay'), document.getElementById('adjustReasonModalOverlay')].forEach(closeModal); } });
 
       async function loadRecipes() { try { const d = await api.listRecipes(); recipeState.recipes = (d && Array.isArray(d.recipes)) ? d.recipes : (d && Array.isArray(d) ? d : []); renderRecipes(); } catch (e) { toast('Could not load recipes.', true); } }
       function renderRecipes() { const root = document.getElementById('recipesRoot'); root.innerHTML = ''; const sorted = [...recipeState.recipes].sort((a, b) => (a.name || '').localeCompare(b.name || '')); sorted.forEach(r => root.appendChild(renderRecipeCard(r))); document.getElementById('recipesEmptyHero').classList.toggle('show', recipeState.recipes.length === 0); applyRecipeSearch(); }
@@ -3179,7 +3326,7 @@
         const us = document.createElement('select');
         us.className = 'unit-select';
         us.style.width = '80px'; us.style.flex = 'none';
-        UNITS.forEach(u => { const o = document.createElement('option'); o.value = u; o.textContent = u; us.appendChild(o); });
+        appConfig.units.forEach(u => { const o = document.createElement('option'); o.value = u.value; o.textContent = u.label; us.appendChild(o); });
 
         // --- Delete & Convert buttons ---
         const db = document.createElement('button');
@@ -3296,6 +3443,73 @@
       });
 
   
+      // ==================== STOCK INTAKE ====================
+      function buildItemOptionsHtml() {
+        let html = '<option value="">-- Select item --</option>';
+        state.categories.forEach(c => {
+          html += `<optgroup label="${escapeHtml(c.name)}">`;
+          c.items.forEach(it => {
+            html += `<option value="${it.id}">${escapeHtml(it.name)}</option>`;
+          });
+          html += '</optgroup>';
+        });
+        return html;
+      }
+
+      function addStockIntakeRow() {
+        const wrap = document.getElementById('stockIntakeRows');
+        if (!wrap) return;
+        const row = document.createElement('div');
+        row.className = 'ingredient-editor-row';
+        row.innerHTML = `
+          <select class="intake-item-select">${buildItemOptionsHtml()}</select>
+          <input type="number" min="0" step="0.01" class="intake-qty-input" placeholder="Qty">
+          <button class="ingredient-delete-btn" type="button" aria-label="Remove row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+        `;
+        row.querySelector('.ingredient-delete-btn').addEventListener('click', () => row.remove());
+        wrap.appendChild(row);
+      }
+
+      async function saveStockIntake() {
+        const btn = document.getElementById('stockIntakeSaveBtn');
+        const rows = document.querySelectorAll('#stockIntakeRows .ingredient-editor-row');
+        const items = [];
+        rows.forEach(row => {
+          const itemId = row.querySelector('.intake-item-select').value;
+          const qty = parseFloat(row.querySelector('.intake-qty-input').value);
+          if (itemId && qty > 0) items.push({ itemId, quantity: qty });
+        });
+        if (!items.length) { toast('Add at least one item with a quantity.', true); return; }
+        btn.disabled = true; btn.textContent = 'Saving…';
+        try {
+          await api.createStockIntake(items);
+          toast('Stock intake recorded.');
+          await loadInventory();
+          showStockIntakePage();
+        } catch (e) {
+          toast(e.message || 'Failed to record stock intake.', true);
+        } finally {
+          btn.disabled = false; btn.textContent = 'Save Intake';
+        }
+      }
+
+      function showStockIntakePage() {
+        const container = document.getElementById('stockIntakeContainer');
+        if (!container) return;
+        container.innerHTML = `
+          <div class="settings-detail-header">
+            <div class="settings-detail-title">Stock Intake</div>
+            <div class="settings-detail-desc">Record incoming stock purchases.</div>
+          </div>
+          <div id="stockIntakeRows"></div>
+          <button class="add-ingredient-btn" id="addIntakeRowBtn">+ Add Item</button>
+          <button class="btn-save-premium" id="stockIntakeSaveBtn">Save Intake</button>
+        `;
+        document.getElementById('addIntakeRowBtn').addEventListener('click', () => addStockIntakeRow());
+        document.getElementById('stockIntakeSaveBtn').addEventListener('click', saveStockIntake);
+        addStockIntakeRow();
+      }
+
       // ==================== PENDING ALLOCATIONS ====================
       async function loadPendingAllocations() {
         try {
@@ -3468,21 +3682,42 @@
 
       async function preloadWorkspace() {
         const canManageSettings = can('settings', 'manage');
-        const tasks = [api.loadStock(), api.listRecipes()];
-        if (canManageSettings) tasks.push(api.getSettings());
+        const tasks = [api.loadStock(), api.listRecipes(), api.getInventoryConfig()];
+        if (canManageSettings) {
+          tasks.push(api.getSettings(), api.getPermissions(), api.listStaff(), api.getPosSales('today'));
+        }
 
         const results = await Promise.all(tasks);
-        const stockRes = results[0], recipesRes = results[1], settingsRes = canManageSettings ? results[2] : null;
+        const stockRes = results[0], recipesRes = results[1], configRes = results[2];
+        let settingsRes = null, permissionsRes = null, staffRes = null, posSalesRes = null;
+        if (canManageSettings) {
+          settingsRes = results[3];
+          permissionsRes = results[4];
+          staffRes = results[5];
+          posSalesRes = results[6];
+        }
 
         const arr = (stockRes && Array.isArray(stockRes.categories)) ? stockRes.categories : (Array.isArray(stockRes) ? stockRes : []);
         state.categories = arr.map(c => ({ id: c.id, name: c.name, icon: c.icon || 'default', items: (c.items || []).map(it => ({ id: it.id, name: it.name, qty: Number(it.qty) || 0, custom: !!it.custom, unit: it.unit || undefined, containerVolume: it.containerVolume, editable: it.editable, locked: it.locked, lastConfirmedQty: Number(it.qty) || 0 })) }));
         saveCache();
+
         recipeState.recipes = (recipesRes && Array.isArray(recipesRes.recipes)) ? recipesRes.recipes : (recipesRes && Array.isArray(recipesRes) ? recipesRes : []);
+
+        appConfig.units = (configRes && configRes.inventory && Array.isArray(configRes.inventory.units)) ? configRes.inventory.units : [];
+        appConfig.adjustmentReasons = (configRes && configRes.inventory && Array.isArray(configRes.inventory.adjustmentReasons)) ? configRes.inventory.adjustmentReasons : [];
+
         if (canManageSettings) {
           settingsData = (settingsRes && settingsRes.settings) ? settingsRes.settings : settingsRes;
+          cachedPermissionsData = permissionsRes;
+          cachedStaffData = (staffRes && staffRes.staff) ? staffRes.staff : [];
+          cachedPosSalesData = posSalesRes;
         } else {
           settingsData = null;
+          cachedPermissionsData = null;
+          cachedStaffData = null;
+          cachedPosSalesData = null;
         }
+
         try { const r = localStorage.getItem(EXPANDED_KEY); expandedState = r ? JSON.parse(r) : {}; } catch (e) { expandedState = {}; }
         if (!Object.keys(expandedState).length && state.categories[0]) expandedState[state.categories[0].id] = true;
         render();
@@ -3493,7 +3728,9 @@
       loginBtn.addEventListener('click', async () => {
         const username = usernameEl.value.trim(); if (!username) { authErr.textContent = 'Enter username'; return; }
         const pin = pinEl.value.trim(); if (!pin) { authErr.textContent = 'Enter PIN'; return; }
-        loginBtn.disabled = true; authErr.textContent = '';
+        authErr.textContent = '';
+        loginBtn.disabled = true;
+        showAuthLoading();
         try {
           const r = await api.login(username, pin);
           if (r && r.token) {
@@ -3502,18 +3739,19 @@
             savePermissions(userPermissions);
             if (r.restaurant) { applyBranding(r.restaurant); }
             if (r.user && r.user.name) { document.getElementById('brandSub').textContent = r.user.name; }
-            showAuthLoading();
-            try {
-              await preloadWorkspace();
-              showApp();
-            } catch (e) {
-              hideAuthLoading();
-              pinEl.value = '';
-              authErr.textContent = e.message || 'Could not load your workspace. Please try again.';
-              loginBtn.disabled = false;
-            }
-          } else { authErr.textContent = 'Invalid response from server.'; loginBtn.disabled = false; }
-        } catch (e) { authErr.textContent = e.message || 'Login failed'; loginBtn.disabled = false; }
+            await preloadWorkspace();
+            showApp();
+          } else {
+            hideAuthLoading();
+            authErr.textContent = 'Invalid response from server.';
+            loginBtn.disabled = false;
+          }
+        } catch (e) {
+          hideAuthLoading();
+          pinEl.value = '';
+          authErr.textContent = e.message || 'Login failed';
+          loginBtn.disabled = false;
+        }
       });
 
       usernameEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); pinEl.focus(); } });

@@ -482,6 +482,110 @@ async function runMigrations() {
     await tx(`CREATE INDEX IF NOT EXISTS idx_pos_sales_restaurant ON pos_sales(restaurant_id);`);
     await tx(`CREATE INDEX IF NOT EXISTS idx_pos_sales_sold_at ON pos_sales(sold_at);`);
 
+        // =================================================================
+    // Inventory Adjustments (header + detail)
+    // =================================================================
+    await tx(`
+      CREATE TABLE IF NOT EXISTS inventory_adjustments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        restaurant_id UUID REFERENCES restaurants(id) ON DELETE CASCADE,
+        user_id UUID REFERENCES users(id),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_inv_adj_restaurant ON inventory_adjustments(restaurant_id);`);
+
+    await tx(`
+      CREATE TABLE IF NOT EXISTS inventory_adjustment_items (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        adjustment_id UUID REFERENCES inventory_adjustments(id) ON DELETE CASCADE,
+        item_id UUID REFERENCES items(id) ON DELETE CASCADE,
+        old_quantity DECIMAL(10,2) NOT NULL,
+        new_quantity DECIMAL(10,2) NOT NULL,
+        difference DECIMAL(10,2) NOT NULL,
+        reason TEXT NOT NULL,
+        note TEXT
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_inv_adj_items_adjustment ON inventory_adjustment_items(adjustment_id);`);
+
+    // =================================================================
+    // Stock Intakes (header + detail)
+    // =================================================================
+    await tx(`
+      CREATE TABLE IF NOT EXISTS stock_intakes (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        restaurant_id UUID REFERENCES restaurants(id) ON DELETE CASCADE,
+        user_id UUID REFERENCES users(id),
+        intake_type TEXT NOT NULL DEFAULT 'purchase',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_stock_intakes_restaurant ON stock_intakes(restaurant_id);`);
+
+    await tx(`
+      CREATE TABLE IF NOT EXISTS stock_intake_items (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        intake_id UUID REFERENCES stock_intakes(id) ON DELETE CASCADE,
+        item_id UUID REFERENCES items(id) ON DELETE CASCADE,
+        quantity_added DECIMAL(10,2) NOT NULL
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_stock_intake_items_intake ON stock_intake_items(intake_id);`);
+
+
+        // =================================================================
+    // Configuration tables – inventory units & adjustment reasons
+    // =================================================================
+    await tx(`
+      CREATE TABLE IF NOT EXISTS inventory_units (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        value TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        sort_order INTEGER DEFAULT 0,
+        enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        UNIQUE(value)
+      );
+    `);
+    await tx(`
+      INSERT INTO inventory_units (value, display_name, sort_order)
+      VALUES
+        ('ml', 'ml', 1),
+        ('cl', 'cl', 2),
+        ('L', 'L', 3),
+        ('pcs', 'pcs', 4),
+        ('slice', 'slice', 5),
+        ('wedge', 'wedge', 6),
+        ('dash', 'dash', 7),
+        ('drop', 'drop', 8),
+        ('sprig', 'sprig', 9),
+        ('leaf', 'leaf', 10),
+        ('pinch', 'pinch', 11)
+      ON CONFLICT (value) DO NOTHING;
+    `);
+
+    await tx(`
+      CREATE TABLE IF NOT EXISTS inventory_adjustment_reasons (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        value TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        sort_order INTEGER DEFAULT 0,
+        enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        UNIQUE(value)
+      );
+    `);
+    await tx(`
+      INSERT INTO inventory_adjustment_reasons (value, display_name, sort_order)
+      VALUES
+        ('Broken', 'Broken', 1),
+        ('Spillage', 'Spillage', 2),
+        ('Staff Consumption', 'Staff Consumption', 3),
+        ('Expired', 'Expired', 4),
+        ('Inventory Count Correction', 'Inventory Count Correction', 5),
+        ('Other', 'Other', 6)
+      ON CONFLICT (value) DO NOTHING;
+    `);
+    
     console.log('Migrations completed successfully.');
   });
 }

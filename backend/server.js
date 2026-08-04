@@ -14,6 +14,7 @@ const permissionsController = require('./src/permissions/permissions.controller'
 const permissionsService = require('./src/permissions/permissions.service');  // for health endpoint
 const posActions = require('./src/posIntegration/posIntegration.actions');
 const posSalesActions = require('./src/posSales/posSales.actions');
+const stockIntakeActions = require('./src/stockIntake/stockIntake.actions');
 
 const app = express();
 
@@ -102,6 +103,31 @@ app.get('/api/getConfig', async (req, res) => {
 // Auth routes (no action parameter)
 // ---------------------------------------------------------------
 app.post('/api/login', login);
+
+// ---------------------------------------------------------------
+// Configuration endpoint – public (units, adjustment reasons)
+// ---------------------------------------------------------------
+app.get('/api/config', async (req, res) => {
+  try {
+    const unitsRes = await pool.query(
+      `SELECT value, display_name AS label FROM inventory_units WHERE enabled = TRUE ORDER BY sort_order ASC`
+    );
+    const reasonsRes = await pool.query(
+      `SELECT value, display_name AS label FROM inventory_adjustment_reasons WHERE enabled = TRUE ORDER BY sort_order ASC`
+    );
+    res.json({
+      ok: true,
+      inventory: {
+        units: unitsRes.rows,
+        adjustmentReasons: reasonsRes.rows
+      }
+    });
+  } catch (err) {
+    console.error('config error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+});
+
 app.post('/api/logout', logout);
 
 // ---------------------------------------------------------------
@@ -281,6 +307,19 @@ app.get('/api/settings', (req, res, next) => {
 app.patch('/api/settings/:section', (req, res, next) => {
   requireAuth(req, res, () => {
     requirePermission('settings', 'manage')(req, res, () => settingsController.patchSection(req, res));
+  });
+});
+
+// ---------- Stock Intake (manager only) ----------
+app.get('/api/stock-intake', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => stockIntakeActions.list(req, res));
+  });
+});
+
+app.post('/api/stock-intake', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => stockIntakeActions.create(req, res));
   });
 });
 
