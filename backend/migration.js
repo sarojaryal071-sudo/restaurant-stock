@@ -627,6 +627,31 @@ async function runMigrations() {
       );
     `);
 
+        // =================================================================
+    // Product Barcode Cache (restaurant-scoped)
+    // =================================================================
+    await tx(`
+      CREATE TABLE IF NOT EXISTS product_barcodes (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        restaurant_id UUID REFERENCES restaurants(id) ON DELETE CASCADE,
+        barcode TEXT NOT NULL,
+        product_name TEXT,
+        brand TEXT,
+        description TEXT,
+        category TEXT,
+        quantity_value DECIMAL,
+        quantity_unit TEXT,
+        package_quantity INTEGER,
+        package_unit TEXT,
+        inventory_item_id UUID REFERENCES items(id),
+        provider TEXT,
+        provider_product_id TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_product_barcodes_restaurant ON product_barcodes(restaurant_id, barcode);`);
+    
     console.log('Migrations completed successfully.');
   });
 }

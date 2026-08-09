@@ -2845,6 +2845,23 @@
     </div>
   </div>
 
+  <!-- Barcode Scanner Modal -->
+  <div class="modal-overlay" id="barcodeScannerModal">
+    <div class="modal-card" style="max-width:400px;">
+      <div class="modal-title">Scan Barcode</div>
+      <div style="position:relative; background:#000; border-radius:var(--radius-md); overflow:hidden; margin-bottom:var(--space-2);">
+        <video id="barcodeVideo" autoplay playsinline style="width:100%; display:block;"></video>
+        <div id="barcodeScanFrame" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:70%; height:50%; border:2px solid var(--gold-bright); border-radius:8px; pointer-events:none;"></div>
+      </div>
+      <p style="text-align:center; font-size:0.85rem; color:var(--paper-dim); margin-bottom:var(--space-2);">Point your camera at the barcode</p>
+      <div id="barcodeManualFallback" class="hidden" style="margin-bottom:var(--space-2);">
+        <input type="text" id="barcodeManualInput" placeholder="Enter barcode number" class="field-input" style="margin-bottom:8px;">
+        <button class="btn btn-gold btn-small" id="barcodeManualLookup">Lookup</button>
+      </div>
+      <button class="btn btn-ghost btn-small" id="barcodeScannerCancel" style="width:100%;">Cancel</button>
+    </div>
+  </div>
+
   <div class="toast-stack" id="toastStack"></div>
 
   <script>
@@ -3606,7 +3623,9 @@ const titles = {
         // NEW: CSV Sales Import
         getSalesSummary: (period) => apiCall('GET', '/pos/sales?period=' + encodeURIComponent(period)),
         saveSalesMapping: (sourceProductName, itemId) => apiCall('POST', '/pos/sales/mappings', { sourceProductName, itemId }),
-        applySalesImport: (fileHash, periodStart, periodEnd, items) => apiCall('POST', '/pos/sales/import/apply', { fileHash, periodStart, periodEnd, items })
+        applySalesImport: (fileHash, periodStart, periodEnd, items) => apiCall('POST', '/pos/sales/import/apply', { fileHash, periodStart, periodEnd, items }),
+        // Barcode lookup
+        barcodeLookup: (barcode) => apiCall('POST', '/stock-intake/barcode/lookup', { barcode })
       };
 
       function toast(msg, err = false) {
@@ -4186,13 +4205,159 @@ function validateAdjustReasonForm() {
             <div class="settings-detail-title">Stock Intake</div>
             <div class="settings-detail-desc">Record incoming stock purchases.</div>
           </div>
+          <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+            <button class="btn btn-gold btn-small" id="scanBarcodeBtn">Scan Barcode</button>
+            <button class="add-ingredient-btn" id="addIntakeRowBtn" style="flex:1;">+ Add Item</button>
+          </div>
           <div id="stockIntakeRows"></div>
-          <button class="add-ingredient-btn" id="addIntakeRowBtn">+ Add Item</button>
           <button class="btn-save-premium" id="stockIntakeSaveBtn">Save Intake</button>
         `;
+        document.getElementById('scanBarcodeBtn').addEventListener('click', openBarcodeScanner);
         document.getElementById('addIntakeRowBtn').addEventListener('click', () => addStockIntakeRow());
         document.getElementById('stockIntakeSaveBtn').addEventListener('click', saveStockIntake);
         addStockIntakeRow();
+      }
+
+      // ==================== BARCODE SCANNER ====================
+      let barcodeScannerStream = null;
+      let barcodeDetector = null;
+
+      async function openBarcodeScanner() {
+        const modal = document.getElementById('barcodeScannerModal');
+        const video = document.getElementById('barcodeVideo');
+        const fallback = document.getElementById('barcodeManualFallback');
+        const manualInput = document.getElementById('barcodeManualInput');
+        const manualLookup = document.getElementById('barcodeManualLookup');
+        const cancelBtn = document.getElementById('barcodeScannerCancel');
+
+        // Check for BarcodeDetector support
+        if (typeof BarcodeDetector !== 'undefined') {
+          try {
+            barcodeDetector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e'] });
+          } catch (e) {
+            barcodeDetector = null;
+          }
+        }
+
+        openModal(modal);
+        // Reset UI
+        fallback.classList.add('hidden');
+        video.style.display = 'block';
+        document.getElementById('barcodeScanFrame').style.display = 'block';
+        if (barcodeDetector) {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+            barcodeScannerStream = stream;
+            video.srcObject = stream;
+            await video.play();
+            scanLoop();
+          } catch (err) {
+            // Camera permission denied or error
+            video.style.display = 'none';
+            document.getElementById('barcodeScanFrame').style.display = 'none';
+            fallback.classList.remove('hidden');
+            toast('Camera access is required to scan a barcode.', true);
+          }
+        } else {
+          // BarcodeDetector not available, show manual fallback
+          video.style.display = 'none';
+          document.getElementById('barcodeScanFrame').style.display = 'none';
+          fallback.classList.remove('hidden');
+        }
+
+        cancelBtn.onclick = () => {
+          closeBarcodeScanner();
+        };
+
+        manualLookup.onclick = () => {
+          const barcode = manualInput.value.trim();
+          if (!barcode) { toast('Enter a barcode.', true); return; }
+          closeBarcodeScanner();
+          lookupBarcode(barcode);
+        };
+
+        // Close modal with escape
+        const escHandler = (e) => { if (e.key === 'Escape') { closeBarcodeScanner(); document.removeEventListener('keydown', escHandler); } };
+        document.addEventListener('keydown', escHandler);
+      }
+
+      function closeBarcodeScanner() {
+        stopScanner();
+        closeModal(document.getElementById('barcodeScannerModal'));
+      }
+
+      function stopScanner() {
+        if (barcodeScannerStream) {
+          barcodeScannerStream.getTracks().forEach(track => track.stop());
+          barcodeScannerStream = null;
+        }
+        // reset video
+        const video = document.getElementById('barcodeVideo');
+        if (video) video.srcObject = null;
+      }
+
+      async function scanLoop() {
+        if (!barcodeDetector || !barcodeScannerStream) return;
+        const video = document.getElementById('barcodeVideo');
+        if (video.readyState < 2) {
+          requestAnimationFrame(scanLoop);
+          return;
+        }
+        try {
+          const barcodes = await barcodeDetector.detect(video);
+          if (barcodes.length > 0) {
+            const barcode = barcodes[0].rawValue.trim();
+            closeBarcodeScanner();
+            lookupBarcode(barcode);
+            return;
+          }
+        } catch (err) {
+          // detection error, ignore
+        }
+        requestAnimationFrame(scanLoop);
+      }
+
+      async function lookupBarcode(barcode) {
+        toast('Looking up product...');
+        try {
+          const result = await api.barcodeLookup(barcode);
+          if (result.found && result.inventoryMatch && result.inventoryMatch.matched) {
+            // Add to intake list
+            addIntakeRowWithItem(result.inventoryMatch.itemId, result.product.name, result.product.quantityValue || 1);
+            toast('Product added to intake.');
+          } else if (result.found) {
+            toast('Product found but not in your inventory.', true);
+          } else {
+            toast('Product not found.', true);
+          }
+        } catch (err) {
+          toast(err.message || 'Barcode lookup failed.', true);
+        }
+      }
+
+      function addIntakeRowWithItem(itemId, itemName, quantity) {
+        // Add a row with the matched item pre-selected and quantity set
+        const wrap = document.getElementById('stockIntakeRows');
+        if (!wrap) return;
+        const row = document.createElement('div');
+        row.className = 'ingredient-editor-row';
+        row.innerHTML = `
+          <select class="intake-item-select">${buildItemOptionsHtml()}</select>
+          <input type="number" min="0" step="0.01" class="intake-qty-input" value="${quantity || 1}">
+          <button class="ingredient-delete-btn" type="button" aria-label="Remove row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+        `;
+        row.querySelector('.ingredient-delete-btn').addEventListener('click', () => row.remove());
+        // Select the matched item
+        const select = row.querySelector('.intake-item-select');
+        if (select && itemId) {
+          for (let i = 0; i < select.options.length; i++) {
+            if (select.options[i].value === itemId) {
+              select.selectedIndex = i;
+              break;
+            }
+          }
+        }
+        wrap.appendChild(row);
       }
 
       // ==================== PENDING ALLOCATIONS ====================

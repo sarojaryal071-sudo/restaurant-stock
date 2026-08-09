@@ -15,7 +15,7 @@ const permissionsService = require('./src/permissions/permissions.service');  //
 const posActions = require('./src/posIntegration/posIntegration.actions');
 const posSalesActions = require('./src/posSales/posSales.actions');
 const stockIntakeActions = require('./src/stockIntake/stockIntake.actions');
-
+const productBarcodeActions = require('./src/productBarcode/productBarcode.actions');
 
 const app = express();
 
@@ -342,6 +342,13 @@ app.get('/api/stock-intake', (req, res, next) => {
 app.post('/api/stock-intake', (req, res, next) => {
   requireAuth(req, res, () => {
     requirePermission('settings', 'manage')(req, res, () => stockIntakeActions.create(req, res));
+  });
+});
+
+// ---------- Barcode lookup (manager only) ----------
+app.post('/api/stock-intake/barcode/lookup', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => productBarcodeActions.lookup(req, res));
   });
 });
 
