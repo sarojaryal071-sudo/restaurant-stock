@@ -585,7 +585,48 @@ async function runMigrations() {
         ('Other', 'Other', 6)
       ON CONFLICT (value) DO NOTHING;
     `);
-    
+
+        // =================================================================
+    // Sales Import tables (CSV import + product mappings)
+    // =================================================================
+    await tx(`
+      CREATE TABLE IF NOT EXISTS sales_imports (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        restaurant_id UUID NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+        imported_by UUID REFERENCES users(id),
+        source TEXT NOT NULL DEFAULT 'flatpay',
+        period_start TIMESTAMPTZ,
+        period_end TIMESTAMPTZ,
+        file_hash TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(restaurant_id, file_hash)
+      );
+    `);
+
+    await tx(`
+      CREATE TABLE IF NOT EXISTS sales_import_items (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        import_id UUID NOT NULL REFERENCES sales_imports(id) ON DELETE CASCADE,
+        item_id UUID NOT NULL REFERENCES items(id),
+        source_product_name TEXT NOT NULL,
+        quantity_sold DECIMAL(10,2) NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    await tx(`
+      CREATE TABLE IF NOT EXISTS sales_product_mappings (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        restaurant_id UUID NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+        source TEXT NOT NULL DEFAULT 'flatpay',
+        source_product_name TEXT NOT NULL,
+        item_id UUID NOT NULL REFERENCES items(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(restaurant_id, source, source_product_name)
+      );
+    `);
+
     console.log('Migrations completed successfully.');
   });
 }

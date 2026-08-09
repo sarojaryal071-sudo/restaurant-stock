@@ -15,6 +15,7 @@ const permissionsService = require('./src/permissions/permissions.service');  //
 const posActions = require('./src/posIntegration/posIntegration.actions');
 const posSalesActions = require('./src/posSales/posSales.actions');
 const stockIntakeActions = require('./src/stockIntake/stockIntake.actions');
+const posSalesImportActions = require('./src/posSalesImport/posSalesImport.actions');
 
 const app = express();
 
@@ -292,6 +293,27 @@ app.post('/api/pos/sync', (req, res, next) => {
 app.get('/api/pos/sales', (req, res, next) => {
   requireAuth(req, res, () => {
     requirePermission('settings', 'manage')(req, res, () => posSalesActions.getSalesSummary(req, res));
+  });
+});
+
+// ---------- Sales Import (manager only) ----------
+const posSalesImportActions = require('./src/posSalesImport/posSalesImport.actions');
+
+app.post('/api/pos/sales/import/preview', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => posSalesImportActions.preview(req, res));
+  });
+});
+
+app.post('/api/pos/sales/mappings', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => posSalesImportActions.saveMapping(req, res));
+  });
+});
+
+app.post('/api/pos/sales/import/apply', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => posSalesImportActions.apply(req, res));
   });
 });
 

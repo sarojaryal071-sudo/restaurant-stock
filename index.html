@@ -2171,6 +2171,10 @@
       let authLoadingInterval = null;
   let settingsData = null;
   let settingsSubPage = null; // 'menu' or a section key like 'restaurant'
+  let salesFileHash = null;
+  let salesPeriodStart = null;
+  let salesPeriodEnd = null;
+  let salesItems = [];
   let cachedPermissionsData = null;
   let cachedStaffData = null;
   let cachedPosSalesData = null;
@@ -2191,9 +2195,9 @@
 
     const sections = [
       { key: 'inventory',    title: 'Inventory Behaviour', icon: '📦', desc: 'Negative stock rules & warnings' },
-      { key: 'staff', title: 'Staff Management', icon: '👥', desc: 'Manage staff accounts' },      
-      { key: 'permissions',  title: 'Staff Permissions',   icon: '🔐', desc: 'Control staff access' },
-      { key: 'pos',          title: 'POS Integration',     icon: '🖥', desc: 'POS connection status' }
+      { key: 'sales',        title: 'Sales',               icon: '📊', desc: 'Import POS sales and view summary' },
+      { key: 'staff',        title: 'Staff Management',    icon: '👥', desc: 'Manage staff accounts' },      
+      { key: 'permissions',  title: 'Staff Permissions',   icon: '🔐', desc: 'Control staff access' }
     ];
 
     sections.forEach(sec => {
@@ -2216,22 +2220,18 @@
 
   function showSettingsDetail(sectionKey) {
     settingsSubPage = sectionKey;
-    const titles = {
+const titles = {
       inventory: 'Inventory Behaviour',
+      sales: 'Sales',
       staff: 'Staff Management',
-      permissions: 'Staff Permissions',
-      pos: 'POS Integration'
+      permissions: 'Staff Permissions'
     };
-    const title = titles[sectionKey] || sectionKey;
-    const container = document.getElementById('settingsContainer');
-    if (!container) return;
-
     const descriptions = {
       inventory: 'Control how negative stock is handled and warned about.',
+      sales: 'Import POS sales reports and view sales summary.',
       staff: 'Create and manage staff accounts and their active status.',
-      permissions: 'Control what staff members are allowed to do.',
-      pos: 'View connection status and manage your POS integration.'
-    };
+      permissions: 'Control what staff members are allowed to do.'
+    };    
     container.innerHTML = `
       <button class="btn btn-ghost btn-small" id="settingsBackBtn" style="margin-bottom:var(--space-3);">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M15 18l-6-6 6-6"/></svg> Back
@@ -2243,19 +2243,18 @@
       <div id="settingsDetailContent"></div>
     `;
 
-    document.getElementById('settingsBackBtn').addEventListener('click', showSettingsMenu);
+document.getElementById('settingsBackBtn').addEventListener('click', showSettingsMenu);
 
     if (sectionKey === 'inventory') {
       showInventoryBehaviourDetail();
+    } else if (sectionKey === 'sales') {
+      showSalesDetail();
     } else if (sectionKey === 'staff') {
       showStaffManagementDetail();
     } else if (sectionKey === 'permissions') {
       showPermissionsDetail();
-    } else if (sectionKey === 'pos') {
-      showPOSIntegrationDetail();
     }
-  }
-
+    
     async function showPermissionsDetail() {
     try {
       const data = cachedPermissionsData || await api.getPermissions();
@@ -2860,6 +2859,27 @@
         return data && data.data !== undefined ? data.data : data;
       }
 
+      async function apiUpload(path, formData) {
+        if (!API_BASE) throw new Error('API_BASE is not configured.');
+        let url = API_BASE + path;
+        if (authToken) {
+          url += (url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(authToken);
+        }
+        const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+        try {
+          const res = await fetch(url, { method: 'POST', signal: ctrl.signal, body: formData });
+          clearTimeout(t);
+          if (res.status === 401 || res.status === 403) { clearAuth(); showLogin(); throw new Error('Session expired. Please log in again.'); }
+          if (!res.ok) throw new Error('Server error (HTTP ' + res.status + ')');
+          let data = await res.json();
+          if (data && data.ok === false) {
+            if (data.code === 'UNAUTHORIZED') { clearAuth(); showLogin(); throw new Error(data.error || 'Session expired.'); }
+            const e = new Error(data.error || 'Request failed'); e.code = data.code || null; throw e;
+          }
+          return data && data.data !== undefined ? data.data : data;
+        } catch (e) { clearTimeout(t); throw e; }
+      }
+
       const api = {
         health: () => apiCall('GET', '/health'),
         login: (username, pin) => apiCall('POST', '/login', { username, pin }),
@@ -2921,7 +2941,11 @@
         // NEW: Staff management
         listStaff: () => apiCall('GET', '/staff'),
         createStaff: (name, pin) => apiCall('POST', '/staff', { name, pin }),
-        updateStaff: (id, data) => apiCall('PATCH', `/staff/${id}`, data)
+        updateStaff: (id, data) => apiCall('PATCH', `/staff/${id}`, data),
+        // NEW: CSV Sales Import
+        getSalesSummary: (period) => apiCall('GET', '/pos/sales?period=' + encodeURIComponent(period)),
+        saveSalesMapping: (sourceProductName, itemId) => apiCall('POST', '/pos/sales/mappings', { sourceProductName, itemId }),
+        applySalesImport: (fileHash, periodStart, periodEnd, items) => apiCall('POST', '/pos/sales/import/apply', { fileHash, periodStart, periodEnd, items })
       };
 
       function toast(msg, err = false) {
