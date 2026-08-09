@@ -2939,19 +2939,20 @@
     settingsSubPage = sectionKey;
     const container = document.getElementById('settingsContainer');
     if (!container) return;
-    const titles = {
+const titles = {
       inventory: 'Inventory Behaviour',
       sales: 'Sales',
       staff: 'Staff Management',
       permissions: 'Staff Permissions'
     };
-        const descriptions = {
-          inventory: 'Control how negative stock is handled and warned about.',
-          sales: 'Import POS sales reports and view sales summary.',
-          staff: 'Create and manage staff accounts and their active status.',
-          permissions: 'Control what staff members are allowed to do.'
-        };
-        container.innerHTML = `
+    const title = titles[sectionKey] || sectionKey;
+    const descriptions = {
+      inventory: 'Control how negative stock is handled and warned about.',
+      sales: 'Import POS sales reports and view sales summary.',
+      staff: 'Create and manage staff accounts and their active status.',
+      permissions: 'Control what staff members are allowed to do.'
+    };    
+    container.innerHTML = `
       <button class="btn btn-ghost btn-small" id="settingsBackBtn" style="margin-bottom:var(--space-3);">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M15 18l-6-6 6-6"/></svg> Back
       </button>
