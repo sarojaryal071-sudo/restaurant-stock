@@ -1644,150 +1644,835 @@
         animation-duration: 0.01ms !important
       }
     }
+
     /* Settings accordion */
-.settings-section{margin-bottom:var(--space-3)}
-.settings-card{background:var(--charcoal-1);border:1px solid var(--line);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-card)}
-.settings-card .settings-header{width:100%;display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);padding:var(--space-3) var(--space-4);background:none;border:none;cursor:pointer;color:inherit;font-size:1rem;font-family:var(--font-display);font-weight:700;letter-spacing:0.02em;min-height:var(--tap)}
-.settings-card .settings-header .section-title{color:var(--paper)}
-.settings-card .settings-body{overflow:hidden;max-height:0;transition:max-height 0.35s ease,padding 0.35s ease;padding:0 var(--space-4)}
-.settings-card.expanded .settings-body{max-height:1500px;padding:var(--space-3) var(--space-4) var(--space-4)}
-.settings-body .field-label{font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--paper-dim);margin:var(--space-3) 0 6px}
-.settings-body .field-input,.settings-body .field-select{width:100%;background:var(--charcoal-1);border:1px solid var(--line-strong);border-radius:var(--radius-sm);padding:12px 14px;color:var(--paper);font-size:0.95rem}
-.settings-body .btn-save{margin-top:var(--space-3);min-height:var(--tap);border-radius:var(--radius-sm);border:none;cursor:pointer;font-weight:700;font-size:0.9rem;background:linear-gradient(135deg,var(--gold-bright),var(--gold-deep));color:#1c1305;width:100%}
-.settings-body .btn-save:disabled{opacity:0.5;cursor:not-allowed}
-#settingsBackBtn { display: inline-flex; align-items: center; gap: 6px; margin-bottom: var(--space-3); font-size: 0.85rem; }
-/* ========== STAFF MANAGEMENT TABLE STYLES (NEW) ========== */
-.staff-table { width:100%; border-collapse:collapse; margin-top:var(--space-3); }
-.staff-table th, .staff-table td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); }
-.staff-table th { font-size:0.7rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--paper-dim); }
-.staff-table td { font-size:0.9rem; }
-.badge-active { display:inline-block; padding:2px 10px; border-radius:12px; font-size:0.7rem; font-weight:700; background:rgba(76,154,95,0.2); color:var(--qty-good); }
-.badge-inactive { display:inline-block; padding:2px 10px; border-radius:12px; font-size:0.7rem; font-weight:700; background:rgba(224,80,63,0.2); color:var(--danger); }
+    .settings-section {
+      margin-bottom: var(--space-3)
+    }
 
-/* ========== SETTINGS UI POLISH (NEW) ========== */
+    .settings-card {
+      background: var(--charcoal-1);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-card)
+    }
 
-/* Settings menu cards */
-.settings-menu-card{background:var(--charcoal-1);border:1px solid var(--line);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-card);margin-bottom:var(--space-3);transition:border-color .2s ease, transform .15s ease}
-.settings-menu-card:hover{border-color:var(--line-strong);transform:translateY(-1px)}
-.settings-menu-card .cat-header{justify-content:flex-start;gap:var(--space-3)}
-.settings-menu-icon{width:clamp(38px,7vw,44px);height:clamp(38px,7vw,44px);border-radius:var(--radius-md);background:linear-gradient(150deg,rgba(212,175,55,0.16),rgba(212,175,55,0.05));border:1px solid rgba(212,175,55,0.25);display:flex;align-items:center;justify-content:center;font-size:1.25rem;flex-shrink:0}
-.settings-menu-desc{font-size:0.72rem;color:var(--paper-faint);margin-top:2px}
+    .settings-card .settings-header {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      padding: var(--space-3) var(--space-4);
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: inherit;
+      font-size: 1rem;
+      font-family: var(--font-display);
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      min-height: var(--tap)
+    }
 
-/* Section header in detail view */
-.settings-detail-header{margin-bottom:var(--space-4)}
-.settings-detail-title{font-family:var(--font-display);font-size:1.15rem;font-weight:700;color:var(--gold-bright);margin-bottom:4px}
-.settings-detail-desc{font-size:0.82rem;color:var(--paper-faint)}
+    .settings-card .settings-header .section-title {
+      color: var(--paper)
+    }
 
-/* Toggle switches */
-.toggle-switch{position:relative;display:inline-block;width:46px;height:26px;flex-shrink:0}
-.toggle-switch input{opacity:0;width:0;height:0;position:absolute}
-.toggle-slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:var(--charcoal-3);border:1px solid var(--line-strong);transition:background-color .25s ease, border-color .25s ease;border-radius:999px}
-.toggle-slider::before{position:absolute;content:"";height:18px;width:18px;left:3px;top:3px;background:var(--paper-dim);transition:transform .25s cubic-bezier(.4,0,.2,1), background-color .25s ease;border-radius:50%}
-.toggle-switch input:checked + .toggle-slider{background:var(--qty-good);border-color:var(--qty-good)}
-.toggle-switch input:checked + .toggle-slider::before{transform:translateX(20px);background:#fff}
-.toggle-switch input:focus-visible + .toggle-slider{outline:2px solid var(--gold-bright);outline-offset:2px}
-.toggle-row{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);padding:var(--space-3) 0;border-bottom:1px solid var(--line)}
-.toggle-row:last-of-type{border-bottom:none}
-.toggle-row-text{flex:1;min-width:0}
-.toggle-row-title{font-size:0.9rem;color:var(--paper);font-weight:600}
-.toggle-row-desc{font-size:0.74rem;color:var(--paper-faint);margin-top:2px;line-height:1.4}
+    .settings-card .settings-body {
+      overflow: hidden;
+      max-height: 0;
+      transition: max-height 0.35s ease, padding 0.35s ease;
+      padding: 0 var(--space-4)
+    }
 
-/* Premium save button (reused across settings sections) */
-.btn-save-premium{margin-top:var(--space-4);width:100%;min-height:var(--tap);border-radius:var(--radius-sm);border:none;cursor:pointer;font-weight:700;font-size:0.9rem;background:linear-gradient(135deg,var(--gold-bright),var(--gold-deep));color:#1c1305;box-shadow:0 4px 14px rgba(212,175,55,0.25);transition:transform .15s ease, box-shadow .15s ease, opacity .15s ease}
-.btn-save-premium:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(212,175,55,0.35)}
-.btn-save-premium:active{transform:translateY(0) scale(0.98)}
-.btn-save-premium:disabled{opacity:0.5;cursor:not-allowed;transform:none;box-shadow:none}
+    .settings-card.expanded .settings-body {
+      max-height: 1500px;
+      padding: var(--space-3) var(--space-4) var(--space-4)
+    }
 
-/* POS integration dashboard */
-.pos-status-card{background:linear-gradient(160deg,var(--charcoal-2),var(--charcoal-1));border:1px solid var(--line);border-radius:var(--radius-lg);padding:var(--space-4);box-shadow:var(--shadow-card)}
-.pos-status-top{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-3)}
-.pos-provider-name{font-family:var(--font-display);font-size:1.15rem;font-weight:700;color:var(--paper)}
-.pos-status-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;font-size:0.74rem;font-weight:700;white-space:nowrap}
-.pos-status-badge.connected{background:rgba(76,154,95,0.15);color:var(--qty-good)}
-.pos-status-badge.disconnected{background:rgba(224,80,63,0.15);color:var(--danger)}
-.pos-status-badge .dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0}
-.pos-stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(clamp(90px,25vw,120px),1fr));gap:var(--space-2);margin-top:var(--space-3)}
-.pos-stat{background:var(--charcoal-2);border:1px solid var(--line);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3);text-align:center}
-.pos-stat-num{font-family:var(--font-mono);font-size:clamp(0.95rem,3vw,1.1rem);font-weight:700;color:var(--gold-bright);word-break:break-word}
-.pos-stat-label{font-size:0.6rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--paper-faint);margin-top:3px}
-.pos-provider-input-row{display:flex;gap:var(--space-2);margin-top:var(--space-4);flex-wrap:wrap;align-items:center}
-.pos-provider-input-row .field-input{max-width:none;min-width:140px;flex:1}
-.pos-actions-row{display:flex;gap:var(--space-2);flex-wrap:wrap;margin-top:var(--space-2)}
-.pos-actions-row .btn{flex:none}
+    .settings-body .field-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--paper-dim);
+      margin: var(--space-3) 0 6px
+    }
 
-/* Sales Summary */
-.sales-summary-card{background:linear-gradient(160deg,var(--charcoal-2),var(--charcoal-1));border:1px solid var(--line);border-radius:var(--radius-lg);padding:var(--space-4);box-shadow:var(--shadow-card);margin-top:var(--space-4)}
-.sales-summary-header{margin-bottom:var(--space-3)}
-.sales-summary-title{font-family:var(--font-display);font-size:1.1rem;font-weight:700;color:var(--paper);margin-bottom:4px}
-.sales-summary-desc{font-size:0.8rem;color:var(--paper-faint)}
-.segmented-control{display:flex;flex-wrap:wrap;gap:4px;background:var(--charcoal-2);border:1px solid var(--line);border-radius:var(--radius-md);padding:4px;margin-top:var(--space-3)}
-.segmented-btn{flex:1;min-width:70px;min-height:36px;background:none;border:none;border-radius:var(--radius-sm);color:var(--paper-dim);font-size:0.78rem;font-weight:600;cursor:pointer;transition:background .15s ease,color .15s ease}
-.segmented-btn.active{background:linear-gradient(135deg,var(--gold-bright),var(--gold-deep));color:#1c1305}
-.segmented-btn:hover:not(.active){background:var(--charcoal-3)}
-.sales-custom-row{display:flex;flex-wrap:wrap;gap:var(--space-2);margin-top:var(--space-3);align-items:flex-end}
-.sales-custom-row .field-label{margin:0 0 4px}
-.sales-custom-field{flex:1;min-width:140px}
-.sales-table-wrap{margin-top:var(--space-4);overflow-x:auto}
-.sales-table{width:100%;border-collapse:collapse}
-.sales-table th,.sales-table td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line)}
-.sales-table th{font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--paper-dim)}
-.sales-table td{font-size:0.88rem;color:var(--paper)}
-.sales-table td.sales-qty{text-align:right;font-family:var(--font-mono);color:var(--gold-bright);font-weight:700}
-.sales-state-box{text-align:center;padding:var(--space-4) var(--space-2);color:var(--paper-faint);font-size:0.85rem}
-.sales-error-box{text-align:center;padding:var(--space-4) var(--space-2)}
-.sales-error-msg{color:var(--danger);font-size:0.85rem;margin-bottom:var(--space-2)}
+    .settings-body .field-input,
+    .settings-body .field-select {
+      width: 100%;
+      background: var(--charcoal-1);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      color: var(--paper);
+      font-size: 0.95rem
+    }
 
-.sales-connect-prompt{display:flex;flex-direction:column;align-items:center;text-align:center;padding:var(--space-4) var(--space-3)}
-.sales-connect-icon{width:44px;height:44px;border-radius:50%;background:linear-gradient(150deg,rgba(212,175,55,0.16),rgba(212,175,55,0.05));border:1px solid rgba(212,175,55,0.25);display:flex;align-items:center;justify-content:center;margin-bottom:var(--space-2)}
-.sales-connect-icon svg{width:46%;height:46%;color:var(--gold-bright)}
-.sales-connect-title{font-size:0.92rem;font-weight:700;color:var(--paper);margin-bottom:4px}
-.sales-connect-desc{font-size:0.8rem;color:var(--paper-faint);max-width:320px;line-height:1.5}
-.segmented-control.is-disabled{opacity:0.45;pointer-events:none}
+    .settings-body .btn-save {
+      margin-top: var(--space-3);
+      min-height: var(--tap);
+      border-radius: var(--radius-sm);
+      border: none;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 0.9rem;
+      background: linear-gradient(135deg, var(--gold-bright), var(--gold-deep));
+      color: #1c1305;
+      width: 100%
+    }
 
-.modal-toggle-row{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);margin-top:var(--space-3);padding:10px 0;border-top:1px solid var(--line)}
-.modal-toggle-row .field-label{margin:0}
+    .settings-body .btn-save:disabled {
+      opacity: 0.5;
+      cursor: not-allowed
+    }
 
-@media(max-width:480px){
-  .segmented-btn{min-width:60px;font-size:0.72rem}
-}
+    #settingsBackBtn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: var(--space-3);
+      font-size: 0.85rem;
+    }
 
-/* Permission groups */
-.permission-group{margin-bottom:var(--space-4)}
-.permission-group-title{font-family:var(--font-display);font-size:0.92rem;font-weight:700;color:var(--gold-bright);margin-bottom:var(--space-1);padding-bottom:8px;border-bottom:1px solid var(--line);text-transform:capitalize}
-.permission-item{display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);padding:10px 0;border-bottom:1px solid var(--line)}
-.permission-item:last-child{border-bottom:none}
-.permission-item-label{font-size:0.85rem;color:var(--paper);flex:1;min-width:0}
+    /* ========== STAFF MANAGEMENT TABLE STYLES (NEW) ========== */
+    .staff-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: var(--space-3);
+    }
 
-/* Staff management */
-.staff-toolbar{display:flex;justify-content:flex-end;margin-bottom:var(--space-3)}
-.staff-avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(150deg,rgba(212,175,55,0.25),rgba(212,175,55,0.08));border:1px solid rgba(212,175,55,0.3);display:inline-flex;align-items:center;justify-content:center;font-size:0.75rem;font-weight:700;color:var(--gold-bright);margin-right:10px;flex-shrink:0}
-.staff-name-cell{display:flex;align-items:center}
-.staff-table{border-radius:var(--radius-md);overflow:hidden}
-.staff-table th{padding:12px}
-.staff-table td{padding:12px}
-.staff-table tbody tr{transition:background .15s ease}
-.staff-table tbody tr:hover{background:rgba(212,175,55,0.04)}
+    .staff-table th,
+    .staff-table td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+    }
 
-@media(max-width:600px){
-  .staff-table thead{display:none}
-  .staff-table, .staff-table tbody, .staff-table tr, .staff-table td{display:block;width:100%}
-  .staff-table{border:none}
-  .staff-table tr{background:var(--charcoal-2);border:1px solid var(--line);border-radius:var(--radius-md);margin-bottom:var(--space-2);padding:var(--space-2) var(--space-3)}
-  .staff-table td{border:none;padding:6px 0;display:flex;justify-content:space-between;align-items:center;gap:var(--space-2)}
-  .staff-table td::before{content:attr(data-label);font-size:0.64rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--paper-faint);font-weight:700;flex-shrink:0}
-}
+    .staff-table th {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--paper-dim);
+    }
 
-/* Inventory Adjustment reasons */
-.adjust-reason-row{background:var(--charcoal-1);border:1px solid var(--line);border-radius:var(--radius-md);padding:var(--space-3);margin-bottom:var(--space-2)}
-.adjust-reason-header{display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);margin-bottom:8px}
-.adjust-reason-name{font-size:0.9rem;font-weight:700;color:var(--paper)}
-.adjust-reason-delta{font-family:var(--font-mono);font-size:0.85rem;color:var(--gold-bright)}
-.adjust-reason-select{width:100%;background:var(--charcoal-2);border:1px solid var(--line-strong);border-radius:var(--radius-sm);padding:10px 12px;color:var(--paper);font-size:0.85rem;margin-bottom:8px}
-.adjust-reason-note{width:100%;background:var(--charcoal-2);border:1px solid var(--line-strong);border-radius:var(--radius-sm);padding:10px 12px;color:var(--paper);font-size:0.85rem;resize:vertical;font-family:inherit}
+    .staff-table td {
+      font-size: 0.9rem;
+    }
 
-/* Stock Intake page */
-.intake-item-select{min-width:140px;flex:2;background:var(--charcoal-1);border:1px solid var(--line-strong);border-radius:var(--radius-sm);padding:8px 10px;color:var(--paper);font-size:0.82rem}
-.intake-qty-input{width:80px;flex:none;background:var(--charcoal-1);border:1px solid var(--line-strong);border-radius:var(--radius-sm);padding:8px 10px;color:var(--paper);font-size:0.82rem}
+    .badge-active {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 12px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      background: rgba(76, 154, 95, 0.2);
+      color: var(--qty-good);
+    }
+
+    .badge-inactive {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 12px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      background: rgba(224, 80, 63, 0.2);
+      color: var(--danger);
+    }
+
+    /* ========== SETTINGS UI POLISH (NEW) ========== */
+
+    /* Settings menu cards */
+    .settings-menu-card {
+      background: var(--charcoal-1);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      box-shadow: var(--shadow-card);
+      margin-bottom: var(--space-3);
+      transition: border-color .2s ease, transform .15s ease
+    }
+
+    .settings-menu-card:hover {
+      border-color: var(--line-strong);
+      transform: translateY(-1px)
+    }
+
+    .settings-menu-card .cat-header {
+      justify-content: flex-start;
+      gap: var(--space-3)
+    }
+
+    .settings-menu-icon {
+      width: clamp(38px, 7vw, 44px);
+      height: clamp(38px, 7vw, 44px);
+      border-radius: var(--radius-md);
+      background: linear-gradient(150deg, rgba(212, 175, 55, 0.16), rgba(212, 175, 55, 0.05));
+      border: 1px solid rgba(212, 175, 55, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      flex-shrink: 0
+    }
+
+    .settings-menu-desc {
+      font-size: 0.72rem;
+      color: var(--paper-faint);
+      margin-top: 2px
+    }
+
+    /* Section header in detail view */
+    .settings-detail-header {
+      margin-bottom: var(--space-4)
+    }
+
+    .settings-detail-title {
+      font-family: var(--font-display);
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--gold-bright);
+      margin-bottom: 4px
+    }
+
+    .settings-detail-desc {
+      font-size: 0.82rem;
+      color: var(--paper-faint)
+    }
+
+    /* Toggle switches */
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 46px;
+      height: 26px;
+      flex-shrink: 0
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+      position: absolute
+    }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: var(--charcoal-3);
+      border: 1px solid var(--line-strong);
+      transition: background-color .25s ease, border-color .25s ease;
+      border-radius: 999px
+    }
+
+    .toggle-slider::before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      top: 3px;
+      background: var(--paper-dim);
+      transition: transform .25s cubic-bezier(.4, 0, .2, 1), background-color .25s ease;
+      border-radius: 50%
+    }
+
+    .toggle-switch input:checked+.toggle-slider {
+      background: var(--qty-good);
+      border-color: var(--qty-good)
+    }
+
+    .toggle-switch input:checked+.toggle-slider::before {
+      transform: translateX(20px);
+      background: #fff
+    }
+
+    .toggle-switch input:focus-visible+.toggle-slider {
+      outline: 2px solid var(--gold-bright);
+      outline-offset: 2px
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      padding: var(--space-3) 0;
+      border-bottom: 1px solid var(--line)
+    }
+
+    .toggle-row:last-of-type {
+      border-bottom: none
+    }
+
+    .toggle-row-text {
+      flex: 1;
+      min-width: 0
+    }
+
+    .toggle-row-title {
+      font-size: 0.9rem;
+      color: var(--paper);
+      font-weight: 600
+    }
+
+    .toggle-row-desc {
+      font-size: 0.74rem;
+      color: var(--paper-faint);
+      margin-top: 2px;
+      line-height: 1.4
+    }
+
+    /* Premium save button (reused across settings sections) */
+    .btn-save-premium {
+      margin-top: var(--space-4);
+      width: 100%;
+      min-height: var(--tap);
+      border-radius: var(--radius-sm);
+      border: none;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 0.9rem;
+      background: linear-gradient(135deg, var(--gold-bright), var(--gold-deep));
+      color: #1c1305;
+      box-shadow: 0 4px 14px rgba(212, 175, 55, 0.25);
+      transition: transform .15s ease, box-shadow .15s ease, opacity .15s ease
+    }
+
+    .btn-save-premium:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(212, 175, 55, 0.35)
+    }
+
+    .btn-save-premium:active {
+      transform: translateY(0) scale(0.98)
+    }
+
+    .btn-save-premium:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none
+    }
+
+    /* POS integration dashboard */
+    .pos-status-card {
+      background: linear-gradient(160deg, var(--charcoal-2), var(--charcoal-1));
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      padding: var(--space-4);
+      box-shadow: var(--shadow-card)
+    }
+
+    .pos-status-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+      flex-wrap: wrap;
+      margin-bottom: var(--space-3)
+    }
+
+    .pos-provider-name {
+      font-family: var(--font-display);
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--paper)
+    }
+
+    .pos-status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 0.74rem;
+      font-weight: 700;
+      white-space: nowrap
+    }
+
+    .pos-status-badge.connected {
+      background: rgba(76, 154, 95, 0.15);
+      color: var(--qty-good)
+    }
+
+    .pos-status-badge.disconnected {
+      background: rgba(224, 80, 63, 0.15);
+      color: var(--danger)
+    }
+
+    .pos-status-badge .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      flex-shrink: 0
+    }
+
+    .pos-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(clamp(90px, 25vw, 120px), 1fr));
+      gap: var(--space-2);
+      margin-top: var(--space-3)
+    }
+
+    .pos-stat {
+      background: var(--charcoal-2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: var(--space-2) var(--space-3);
+      text-align: center
+    }
+
+    .pos-stat-num {
+      font-family: var(--font-mono);
+      font-size: clamp(0.95rem, 3vw, 1.1rem);
+      font-weight: 700;
+      color: var(--gold-bright);
+      word-break: break-word
+    }
+
+    .pos-stat-label {
+      font-size: 0.6rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--paper-faint);
+      margin-top: 3px
+    }
+
+    .pos-provider-input-row {
+      display: flex;
+      gap: var(--space-2);
+      margin-top: var(--space-4);
+      flex-wrap: wrap;
+      align-items: center
+    }
+
+    .pos-provider-input-row .field-input {
+      max-width: none;
+      min-width: 140px;
+      flex: 1
+    }
+
+    .pos-actions-row {
+      display: flex;
+      gap: var(--space-2);
+      flex-wrap: wrap;
+      margin-top: var(--space-2)
+    }
+
+    .pos-actions-row .btn {
+      flex: none
+    }
+
+    /* Sales Summary */
+    .sales-summary-card {
+      background: linear-gradient(160deg, var(--charcoal-2), var(--charcoal-1));
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      padding: var(--space-4);
+      box-shadow: var(--shadow-card);
+      margin-top: var(--space-4)
+    }
+
+    .sales-summary-header {
+      margin-bottom: var(--space-3)
+    }
+
+    .sales-summary-title {
+      font-family: var(--font-display);
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--paper);
+      margin-bottom: 4px
+    }
+
+    .sales-summary-desc {
+      font-size: 0.8rem;
+      color: var(--paper-faint)
+    }
+
+    .segmented-control {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      background: var(--charcoal-2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: 4px;
+      margin-top: var(--space-3)
+    }
+
+    .segmented-btn {
+      flex: 1;
+      min-width: 70px;
+      min-height: 36px;
+      background: none;
+      border: none;
+      border-radius: var(--radius-sm);
+      color: var(--paper-dim);
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s ease, color .15s ease
+    }
+
+    .segmented-btn.active {
+      background: linear-gradient(135deg, var(--gold-bright), var(--gold-deep));
+      color: #1c1305
+    }
+
+    .segmented-btn:hover:not(.active) {
+      background: var(--charcoal-3)
+    }
+
+    .sales-custom-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+      margin-top: var(--space-3);
+      align-items: flex-end
+    }
+
+    .sales-custom-row .field-label {
+      margin: 0 0 4px
+    }
+
+    .sales-custom-field {
+      flex: 1;
+      min-width: 140px
+    }
+
+    .sales-table-wrap {
+      margin-top: var(--space-4);
+      overflow-x: auto
+    }
+
+    .sales-table {
+      width: 100%;
+      border-collapse: collapse
+    }
+
+    .sales-table th,
+    .sales-table td {
+      text-align: left;
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--line)
+    }
+
+    .sales-table th {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--paper-dim)
+    }
+
+    .sales-table td {
+      font-size: 0.88rem;
+      color: var(--paper)
+    }
+
+    .sales-table td.sales-qty {
+      text-align: right;
+      font-family: var(--font-mono);
+      color: var(--gold-bright);
+      font-weight: 700
+    }
+
+    .sales-state-box {
+      text-align: center;
+      padding: var(--space-4) var(--space-2);
+      color: var(--paper-faint);
+      font-size: 0.85rem
+    }
+
+    .sales-error-box {
+      text-align: center;
+      padding: var(--space-4) var(--space-2)
+    }
+
+    .sales-error-msg {
+      color: var(--danger);
+      font-size: 0.85rem;
+      margin-bottom: var(--space-2)
+    }
+
+    .sales-connect-prompt {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: var(--space-4) var(--space-3)
+    }
+
+    .sales-connect-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: linear-gradient(150deg, rgba(212, 175, 55, 0.16), rgba(212, 175, 55, 0.05));
+      border: 1px solid rgba(212, 175, 55, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: var(--space-2)
+    }
+
+    .sales-connect-icon svg {
+      width: 46%;
+      height: 46%;
+      color: var(--gold-bright)
+    }
+
+    .sales-connect-title {
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: var(--paper);
+      margin-bottom: 4px
+    }
+
+    .sales-connect-desc {
+      font-size: 0.8rem;
+      color: var(--paper-faint);
+      max-width: 320px;
+      line-height: 1.5
+    }
+
+    .segmented-control.is-disabled {
+      opacity: 0.45;
+      pointer-events: none
+    }
+
+    .modal-toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      margin-top: var(--space-3);
+      padding: 10px 0;
+      border-top: 1px solid var(--line)
+    }
+
+    .modal-toggle-row .field-label {
+      margin: 0
+    }
+
+    @media(max-width:480px) {
+      .segmented-btn {
+        min-width: 60px;
+        font-size: 0.72rem
+      }
+    }
+
+    /* Permission groups */
+    .permission-group {
+      margin-bottom: var(--space-4)
+    }
+
+    .permission-group-title {
+      font-family: var(--font-display);
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: var(--gold-bright);
+      margin-bottom: var(--space-1);
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--line);
+      text-transform: capitalize
+    }
+
+    .permission-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line)
+    }
+
+    .permission-item:last-child {
+      border-bottom: none
+    }
+
+    .permission-item-label {
+      font-size: 0.85rem;
+      color: var(--paper);
+      flex: 1;
+      min-width: 0
+    }
+
+    /* Staff management */
+    .staff-toolbar {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: var(--space-3)
+    }
+
+    .staff-avatar {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: linear-gradient(150deg, rgba(212, 175, 55, 0.25), rgba(212, 175, 55, 0.08));
+      border: 1px solid rgba(212, 175, 55, 0.3);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--gold-bright);
+      margin-right: 10px;
+      flex-shrink: 0
+    }
+
+    .staff-name-cell {
+      display: flex;
+      align-items: center
+    }
+
+    .staff-table {
+      border-radius: var(--radius-md);
+      overflow: hidden
+    }
+
+    .staff-table th {
+      padding: 12px
+    }
+
+    .staff-table td {
+      padding: 12px
+    }
+
+    .staff-table tbody tr {
+      transition: background .15s ease
+    }
+
+    .staff-table tbody tr:hover {
+      background: rgba(212, 175, 55, 0.04)
+    }
+
+    @media(max-width:600px) {
+      .staff-table thead {
+        display: none
+      }
+
+      .staff-table,
+      .staff-table tbody,
+      .staff-table tr,
+      .staff-table td {
+        display: block;
+        width: 100%
+      }
+
+      .staff-table {
+        border: none
+      }
+
+      .staff-table tr {
+        background: var(--charcoal-2);
+        border: 1px solid var(--line);
+        border-radius: var(--radius-md);
+        margin-bottom: var(--space-2);
+        padding: var(--space-2) var(--space-3)
+      }
+
+      .staff-table td {
+        border: none;
+        padding: 6px 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: var(--space-2)
+      }
+
+      .staff-table td::before {
+        content: attr(data-label);
+        font-size: 0.64rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--paper-faint);
+        font-weight: 700;
+        flex-shrink: 0
+      }
+    }
+
+    /* Inventory Adjustment reasons */
+    .adjust-reason-row {
+      background: var(--charcoal-1);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: var(--space-3);
+      margin-bottom: var(--space-2)
+    }
+
+    .adjust-reason-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+      margin-bottom: 8px
+    }
+
+    .adjust-reason-name {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--paper)
+    }
+
+    .adjust-reason-delta {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      color: var(--gold-bright)
+    }
+
+    .adjust-reason-select {
+      width: 100%;
+      background: var(--charcoal-2);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      color: var(--paper);
+      font-size: 0.85rem;
+      margin-bottom: 8px
+    }
+
+    .adjust-reason-note {
+      width: 100%;
+      background: var(--charcoal-2);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      color: var(--paper);
+      font-size: 0.85rem;
+      resize: vertical;
+      font-family: inherit
+    }
+
+    /* Stock Intake page */
+    .intake-item-select {
+      min-width: 140px;
+      flex: 2;
+      background: var(--charcoal-1);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      color: var(--paper);
+      font-size: 0.82rem
+    }
+
+    .intake-qty-input {
+      width: 80px;
+      flex: none;
+      background: var(--charcoal-1);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      color: var(--paper);
+      font-size: 0.82rem
+    }
   </style>
 </head>
 
@@ -1892,12 +2577,14 @@
         </div>
         <div class="empty-hero" id="inventoryEmptyHero">
           <div class="empty-hero-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
-              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+              <path
+                d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
               <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
               <line x1="12" y1="22.08" x2="12" y2="12" />
             </svg></div>
           <div class="empty-hero-title">No inventory yet</div>
-          <div class="empty-hero-desc">Start by adding your first inventory item. You can add drinks, ingredients, or any stock you need to track.</div>
+          <div class="empty-hero-desc">Start by adding your first inventory item. You can add drinks, ingredients, or
+            any stock you need to track.</div>
         </div>
         <div class="categories" id="categoriesRoot"></div>
         <div class="empty-state" id="emptyState"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -1932,7 +2619,8 @@
               <path d="M8 21h8" />
             </svg></div>
           <div class="empty-hero-title">No recipes yet</div>
-          <div class="empty-hero-desc">Create your first cocktail or drink recipe to begin tracking sales and inventory deductions.</div>
+          <div class="empty-hero-desc">Create your first cocktail or drink recipe to begin tracking sales and inventory
+            deductions.</div>
         </div>
         <div class="categories" id="recipesRoot"></div>
         <div class="empty-state" id="recipeEmptyState"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -1968,12 +2656,35 @@
       <div class="container" id="settingsContainer"></div>
     </div>
 
-  <nav class="bottom-nav">
-    <button class="bottom-nav-btn active" id="navInventory"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg><span>Inventory</span></button>
-    <button class="bottom-nav-btn" id="navRecipes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3h8l1 6a4 4 0 0 1-8 0L8 3z"/><path d="M12 13v5"/><path d="M8 21h8"/><line x1="18" y1="8" x2="22" y2="8"/><line x1="2" y1="8" x2="6" y2="8"/></svg><span>Recipes</span></button>
-    <button class="bottom-nav-btn hidden" id="navStockIntake"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4"/><path d="M4 6v12c0 1.1.9 2 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4Z"/></svg><span>Intake</span></button>
-    <button class="bottom-nav-btn hidden" id="navSettings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg><span>Settings</span></button>
-  </nav>
+    <nav class="bottom-nav">
+      <button class="bottom-nav-btn active" id="navInventory"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2">
+          <path
+            d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+          <line x1="12" y1="22.08" x2="12" y2="12" />
+        </svg><span>Inventory</span></button>
+      <button class="bottom-nav-btn" id="navRecipes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2">
+          <path d="M8 3h8l1 6a4 4 0 0 1-8 0L8 3z" />
+          <path d="M12 13v5" />
+          <path d="M8 21h8" />
+          <line x1="18" y1="8" x2="22" y2="8" />
+          <line x1="2" y1="8" x2="6" y2="8" />
+        </svg><span>Recipes</span></button>
+      <button class="bottom-nav-btn hidden" id="navStockIntake"><svg viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2">
+          <path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4" />
+          <path d="M4 6v12c0 1.1.9 2 2 2h14v-4" />
+          <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
+        </svg><span>Intake</span></button>
+      <button class="bottom-nav-btn hidden" id="navSettings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2">
+          <circle cx="12" cy="12" r="3" />
+          <path
+            d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+        </svg><span>Settings</span></button>
+    </nav>
     <button class="fab fab-save hidden" id="saveBtn"><svg class="fab-save-icon" viewBox="0 0 24 24" fill="none"
         stroke="currentColor" stroke-width="2.5">
         <path d="M20 6L9 17l-5-5" />
@@ -2096,16 +2807,21 @@
   <div class="modal-overlay" id="staffAddModalOverlay">
     <div class="modal-card">
       <div class="modal-title">Add Staff</div>
-      <label class="field-label" for="staffAddName">Name</label><input class="field-input" id="staffAddName" type="text" maxlength="100">
-      <label class="field-label" for="staffAddPin">PIN</label><input class="field-input" id="staffAddPin" type="password" maxlength="6" inputmode="numeric" pattern="[0-9]*">
-      <div class="modal-actions"><button class="btn btn-ghost" id="staffAddCancel">Cancel</button><button class="btn btn-gold" id="staffAddConfirm">Create</button></div>
+      <label class="field-label" for="staffAddName">Name</label><input class="field-input" id="staffAddName" type="text"
+        maxlength="100">
+      <label class="field-label" for="staffAddPin">PIN</label><input class="field-input" id="staffAddPin"
+        type="password" maxlength="6" inputmode="numeric" pattern="[0-9]*">
+      <div class="modal-actions"><button class="btn btn-ghost" id="staffAddCancel">Cancel</button><button
+          class="btn btn-gold" id="staffAddConfirm">Create</button></div>
     </div>
   </div>
   <div class="modal-overlay" id="staffEditModalOverlay">
     <div class="modal-card">
       <div class="modal-title">Edit Staff</div>
-      <label class="field-label" for="staffEditName">Name</label><input class="field-input" id="staffEditName" type="text" maxlength="100">
-      <label class="field-label" for="staffEditPin">New PIN (leave blank to keep)</label><input class="field-input" id="staffEditPin" type="password" maxlength="6" inputmode="numeric" pattern="[0-9]*">
+      <label class="field-label" for="staffEditName">Name</label><input class="field-input" id="staffEditName"
+        type="text" maxlength="100">
+      <label class="field-label" for="staffEditPin">New PIN (leave blank to keep)</label><input class="field-input"
+        id="staffEditPin" type="password" maxlength="6" inputmode="numeric" pattern="[0-9]*">
       <div class="modal-toggle-row">
         <span class="field-label" style="margin:0;">Active</span>
         <label class="toggle-switch">
@@ -2113,7 +2829,8 @@
           <span class="toggle-slider"></span>
         </label>
       </div>
-      <div class="modal-actions"><button class="btn btn-ghost" id="staffEditCancel">Cancel</button><button class="btn btn-gold" id="staffEditConfirm">Save</button></div>
+      <div class="modal-actions"><button class="btn btn-ghost" id="staffEditCancel">Cancel</button><button
+          class="btn btn-gold" id="staffEditConfirm">Save</button></div>
     </div>
   </div>
 
@@ -2169,41 +2886,41 @@
       let pendingAllocations = [];
       let currentAllocationDetails = null;
       let authLoadingInterval = null;
-  let settingsData = null;
-  let settingsSubPage = null; // 'menu' or a section key like 'restaurant'
-  let salesFileHash = null;
-  let salesPeriodStart = null;
-  let salesPeriodEnd = null;
-  let salesItems = [];
-  let cachedPermissionsData = null;
-  let cachedStaffData = null;
-  let cachedPosSalesData = null;
+      let settingsData = null;
+      let settingsSubPage = null; // 'menu' or a section key like 'restaurant'
+      let salesFileHash = null;
+      let salesPeriodStart = null;
+      let salesPeriodEnd = null;
+      let salesItems = [];
+      let cachedPermissionsData = null;
+      let cachedStaffData = null;
+      let cachedPosSalesData = null;
 
-  async function loadSettings() {
-    try {
-      const data = await api.getSettings();
-      settingsData = (data && data.settings) ? data.settings : data;
-      showSettingsMenu();
-    } catch (e) { toast('Could not load settings.', true); }
-  }
+      async function loadSettings() {
+        try {
+          const data = await api.getSettings();
+          settingsData = (data && data.settings) ? data.settings : data;
+          showSettingsMenu();
+        } catch (e) { toast('Could not load settings.', true); }
+      }
 
-  function showSettingsMenu() {
-    settingsSubPage = 'menu';
-    const container = document.getElementById('settingsContainer');
-    if (!container) return;
-    container.innerHTML = '';
+      function showSettingsMenu() {
+        settingsSubPage = 'menu';
+        const container = document.getElementById('settingsContainer');
+        if (!container) return;
+        container.innerHTML = '';
 
-    const sections = [
-      { key: 'inventory',    title: 'Inventory Behaviour', icon: '📦', desc: 'Negative stock rules & warnings' },
-      { key: 'sales',        title: 'Sales',               icon: '📊', desc: 'Import POS sales and view summary' },
-      { key: 'staff',        title: 'Staff Management',    icon: '👥', desc: 'Manage staff accounts' },      
-      { key: 'permissions',  title: 'Staff Permissions',   icon: '🔐', desc: 'Control staff access' }
-    ];
+        const sections = [
+          { key: 'inventory', title: 'Inventory Behaviour', icon: '📦', desc: 'Negative stock rules & warnings' },
+          { key: 'sales', title: 'Sales', icon: '📊', desc: 'Import POS sales and view summary' },
+          { key: 'staff', title: 'Staff Management', icon: '👥', desc: 'Manage staff accounts' },
+          { key: 'permissions', title: 'Staff Permissions', icon: '🔐', desc: 'Control staff access' }
+        ];
 
-    sections.forEach(sec => {
-      const card = document.createElement('div');
-      card.className = 'settings-menu-card';
-      card.innerHTML = `
+        sections.forEach(sec => {
+          const card = document.createElement('div');
+          card.className = 'settings-menu-card';
+          card.innerHTML = `
         <button class="cat-header">
           <div class="settings-menu-icon">${sec.icon}</div>
           <div class="cat-title-wrap" style="flex:1; text-align:left;">
@@ -2213,26 +2930,26 @@
           <svg class="cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;"><path d="M9 18l6-6-6-6"/></svg>
         </button>
       `;
-      card.querySelector('.cat-header').addEventListener('click', () => showSettingsDetail(sec.key));
-      container.appendChild(card);
-    });
-  }
+          card.querySelector('.cat-header').addEventListener('click', () => showSettingsDetail(sec.key));
+          container.appendChild(card);
+        });
+      }
 
-  function showSettingsDetail(sectionKey) {
-    settingsSubPage = sectionKey;
-const titles = {
-      inventory: 'Inventory Behaviour',
-      sales: 'Sales',
-      staff: 'Staff Management',
-      permissions: 'Staff Permissions'
-    };
-    const descriptions = {
-      inventory: 'Control how negative stock is handled and warned about.',
-      sales: 'Import POS sales reports and view sales summary.',
-      staff: 'Create and manage staff accounts and their active status.',
-      permissions: 'Control what staff members are allowed to do.'
-    };    
-    container.innerHTML = `
+      function showSettingsDetail(sectionKey) {
+        settingsSubPage = sectionKey;
+        const titles = {
+          inventory: 'Inventory Behaviour',
+          sales: 'Sales',
+          staff: 'Staff Management',
+          permissions: 'Staff Permissions'
+        };
+        const descriptions = {
+          inventory: 'Control how negative stock is handled and warned about.',
+          sales: 'Import POS sales reports and view sales summary.',
+          staff: 'Create and manage staff accounts and their active status.',
+          permissions: 'Control what staff members are allowed to do.'
+        };
+        container.innerHTML = `
       <button class="btn btn-ghost btn-small" id="settingsBackBtn" style="margin-bottom:var(--space-3);">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M15 18l-6-6 6-6"/></svg> Back
       </button>
@@ -2243,93 +2960,94 @@ const titles = {
       <div id="settingsDetailContent"></div>
     `;
 
-document.getElementById('settingsBackBtn').addEventListener('click', showSettingsMenu);
+        document.getElementById('settingsBackBtn').addEventListener('click', showSettingsMenu);
 
-    if (sectionKey === 'inventory') {
-      showInventoryBehaviourDetail();
-    } else if (sectionKey === 'sales') {
-      showSalesDetail();
-    } else if (sectionKey === 'staff') {
-      showStaffManagementDetail();
-    } else if (sectionKey === 'permissions') {
-      showPermissionsDetail();
-    }
-    
-    async function showPermissionsDetail() {
-    try {
-      const data = cachedPermissionsData || await api.getPermissions();
-      cachedPermissionsData = data;
-      const definitions = data && data.definitions ? data.definitions : [];
-      const perms = data && data.permissions ? data.permissions : { staff: {}, manager: {} };
-      const staffPerms = perms.staff || {};
-      const content = document.getElementById('settingsDetailContent');
-      if (!content) return;
-      content.innerHTML = '';
+        if (sectionKey === 'inventory') {
+          showInventoryBehaviourDetail();
+        } else if (sectionKey === 'sales') {
+          showSalesDetail();
+        } else if (sectionKey === 'staff') {
+          showStaffManagementDetail();
+        } else if (sectionKey === 'permissions') {
+          showPermissionsDetail();
+        }
+      }
 
-      // Group definitions by module
-      const moduleMap = {};
-      definitions.forEach(def => {
-        if (!def.enabled) return; // skip disabled definitions in UI
-        if (!moduleMap[def.module]) moduleMap[def.module] = [];
-        moduleMap[def.module].push(def);
-      });
+      async function showPermissionsDetail() {
+        try {
+          const data = cachedPermissionsData || await api.getPermissions();
+          cachedPermissionsData = data;
+          const definitions = data && data.definitions ? data.definitions : [];
+          const perms = data && data.permissions ? data.permissions : { staff: {}, manager: {} };
+          const staffPerms = perms.staff || {};
+          const content = document.getElementById('settingsDetailContent');
+          if (!content) return;
+          content.innerHTML = '';
 
-      // Build controls per module
-      Object.keys(moduleMap).forEach(mod => {
-        content.innerHTML += `<div class="permission-group"><div class="permission-group-title">${mod.charAt(0).toUpperCase()+mod.slice(1)}</div>`;
-        moduleMap[mod].forEach(def => {
-          const checked = staffPerms[def.module] && staffPerms[def.module][def.permission] === true;
-          content.innerHTML += `
+          // Group definitions by module
+          const moduleMap = {};
+          definitions.forEach(def => {
+            if (!def.enabled) return; // skip disabled definitions in UI
+            if (!moduleMap[def.module]) moduleMap[def.module] = [];
+            moduleMap[def.module].push(def);
+          });
+
+          // Build controls per module
+          Object.keys(moduleMap).forEach(mod => {
+            content.innerHTML += `<div class="permission-group"><div class="permission-group-title">${mod.charAt(0).toUpperCase() + mod.slice(1)}</div>`;
+            moduleMap[mod].forEach(def => {
+              const checked = staffPerms[def.module] && staffPerms[def.module][def.permission] === true;
+              content.innerHTML += `
             <div class="permission-item">
               <span class="permission-item-label">${escapeHtml(def.label)}</span>
               <label class="toggle-switch">
-                <input type="checkbox" ${checked?'checked':''} data-mod="${def.module}" data-perm="${def.permission}">
+                <input type="checkbox" ${checked ? 'checked' : ''} data-mod="${def.module}" data-perm="${def.permission}">
                 <span class="toggle-slider"></span>
               </label>
             </div>`;
-        });
-        content.innerHTML += `</div>`;
-      });
-
-      // Save button
-      const btn = document.createElement('button');
-      btn.className = 'btn-save-premium';
-      btn.textContent = 'Save Permissions';
-      btn.addEventListener('click', async () => {
-        btn.disabled = true; btn.textContent = 'Saving…';
-        try {
-          // Build complete staff permissions map based on enabled definitions
-          const fullStaff = {};
-          definitions.forEach(def => {
-            if (!def.enabled) return;
-            if (!fullStaff[def.module]) fullStaff[def.module] = {};
-            fullStaff[def.module][def.permission] = false; // default false
+            });
+            content.innerHTML += `</div>`;
           });
-          content.querySelectorAll('input[data-mod]').forEach(cb => {
-            const mod = cb.dataset.mod;
-            const perm = cb.dataset.perm;
-            if (fullStaff[mod]) {
-              fullStaff[mod][perm] = cb.checked;
+
+          // Save button
+          const btn = document.createElement('button');
+          btn.className = 'btn-save-premium';
+          btn.textContent = 'Save Permissions';
+          btn.addEventListener('click', async () => {
+            btn.disabled = true; btn.textContent = 'Saving…';
+            try {
+              // Build complete staff permissions map based on enabled definitions
+              const fullStaff = {};
+              definitions.forEach(def => {
+                if (!def.enabled) return;
+                if (!fullStaff[def.module]) fullStaff[def.module] = {};
+                fullStaff[def.module][def.permission] = false; // default false
+              });
+              content.querySelectorAll('input[data-mod]').forEach(cb => {
+                const mod = cb.dataset.mod;
+                const perm = cb.dataset.perm;
+                if (fullStaff[mod]) {
+                  fullStaff[mod][perm] = cb.checked;
+                }
+              });
+              await api.updatePermissions('staff', fullStaff);
+              toast('Staff permissions updated.');
+            } catch (err) {
+              toast(err.message || 'Failed to save permissions', true);
+            } finally {
+              btn.disabled = false; btn.textContent = 'Save Permissions';
             }
           });
-          await api.updatePermissions('staff', fullStaff);
-          toast('Staff permissions updated.');
-        } catch (err) {
-          toast(err.message || 'Failed to save permissions', true);
-        } finally {
-          btn.disabled = false; btn.textContent = 'Save Permissions';
+          content.appendChild(btn);
+        } catch (e) {
+          toast('Could not load permissions.', true);
         }
-      });
-      content.appendChild(btn);
-    } catch (e) {
-      toast('Could not load permissions.', true);
-    }
-  }
-       function showInventoryBehaviourDetail() {
-    const content = document.getElementById('settingsDetailContent');
-    if (!content) return;
-    const ib = settingsData && settingsData.inventoryBehaviour ? settingsData.inventoryBehaviour : { negativeStockAllowed: false, showNegativeWarning: true };
-    content.innerHTML = `
+      }
+      function showInventoryBehaviourDetail() {
+        const content = document.getElementById('settingsDetailContent');
+        if (!content) return;
+        const ib = settingsData && settingsData.inventoryBehaviour ? settingsData.inventoryBehaviour : { negativeStockAllowed: false, showNegativeWarning: true };
+        content.innerHTML = `
       <div class="toggle-row">
         <div class="toggle-row-text">
           <div class="toggle-row-title">Allow Negative Stock</div>
@@ -2351,381 +3069,321 @@ document.getElementById('settingsBackBtn').addEventListener('click', showSetting
         </label>
       </div>
     `;
-    const btn = document.createElement('button');
-    btn.className = 'btn-save-premium';
-    btn.textContent = 'Save Changes';
-    btn.addEventListener('click', async () => {
-      btn.disabled = true; btn.textContent = 'Saving…';
-      try {
-        const payload = {
-          negativeStockAllowed: document.getElementById('ibNegativeStockAllowed').checked,
-          showNegativeWarning: document.getElementById('ibShowNegativeWarning').checked
-        };
-        await api.updateSettings('inventoryBehaviour', payload);
-        toast('Inventory behaviour saved.');
-      } catch (err) {
-        toast(err.message || 'Save failed', true);
-      } finally {
-        btn.disabled = false; btn.textContent = 'Save Changes';
+        const btn = document.createElement('button');
+        btn.className = 'btn-save-premium';
+        btn.textContent = 'Save Changes';
+        btn.addEventListener('click', async () => {
+          btn.disabled = true; btn.textContent = 'Saving…';
+          try {
+            const payload = {
+              negativeStockAllowed: document.getElementById('ibNegativeStockAllowed').checked,
+              showNegativeWarning: document.getElementById('ibShowNegativeWarning').checked
+            };
+            await api.updateSettings('inventoryBehaviour', payload);
+            toast('Inventory behaviour saved.');
+          } catch (err) {
+            toast(err.message || 'Save failed', true);
+          } finally {
+            btn.disabled = false; btn.textContent = 'Save Changes';
+          }
+        });
+        content.appendChild(btn);
       }
-    });
-    content.appendChild(btn);
-  }
 
-  function showPOSIntegrationDetail() {
-    const content = document.getElementById('settingsDetailContent');
-    if (!content) return;
-    const pos = settingsData && settingsData.posIntegration ? settingsData.posIntegration : {};
-    const isConnected = (pos.status || '').toLowerCase() === 'connected';
-    content.innerHTML = `
-      <div class="pos-status-card">
-        <div class="pos-status-top">
-          <div class="pos-provider-name">${escapeHtml(pos.provider || 'No Provider')}</div>
-          <span class="pos-status-badge ${isConnected ? 'connected' : 'disconnected'}">
-            <span class="dot"></span>${escapeHtml(pos.status || 'Disconnected')}
-          </span>
-        </div>
-        <div class="pos-stats-grid">
-          <div class="pos-stat">
-            <div class="pos-stat-num">${pos.statistics ? pos.statistics.totalSales : '0'}</div>
-            <div class="pos-stat-label">Total Sales</div>
-          </div>
-          <div class="pos-stat">
-            <div class="pos-stat-num">${pos.lastSync ? escapeHtml(new Date(pos.lastSync).toLocaleDateString()) : 'Never'}</div>
-            <div class="pos-stat-label">Last Sync</div>
-          </div>
-          <div class="pos-stat">
-            <div class="pos-stat-num">${pos.statistics && pos.statistics.lastSaleAt ? escapeHtml(new Date(pos.statistics.lastSaleAt).toLocaleDateString()) : 'Never'}</div>
-            <div class="pos-stat-label">Last Sale</div>
-          </div>
-          <div class="pos-stat">
-            <div class="pos-stat-num" style="font-size:0.85rem;">${escapeHtml(pos.connectStatus || '—')}</div>
-            <div class="pos-stat-label">Connect Status</div>
-          </div>
-        </div>
-        <div class="pos-provider-input-row">
-          <input type="text" id="posProviderInput" placeholder="Provider name" class="field-input" value="${escapeHtml(pos.provider || 'Flatpay')}">
-        </div>
-        <div class="pos-actions-row">
-          <button class="btn btn-gold btn-small" id="posConnectBtn">Connect</button>
-          <button class="btn btn-ghost btn-small" id="posDisconnectBtn">Disconnect</button>
-          <button class="btn btn-ghost btn-small" id="posSyncBtn">Sync</button>
-        </div>
+      // ==================== SALES SECTION (replaces POS Integration UI) ====================
+      function showSalesDetail() {
+        const content = document.getElementById('settingsDetailContent');
+        if (!content) return;
+        content.innerHTML = `
+      <div id="salesImportSection" style="background:var(--charcoal-1);border:1px solid var(--line);border-radius:var(--radius-lg);padding:var(--space-4);margin-bottom:var(--space-4);">
+        <h3 style="margin:0 0 var(--space-1);">Sales Import</h3>
+        <p style="font-size:0.82rem;color:var(--paper-dim);margin-bottom:var(--space-3);">Import your POS sales report to automatically deduct sold drinks from inventory.</p>
+        <input type="file" id="salesCsvFile" accept=".csv" style="margin-bottom:var(--space-2);">
+        <div id="salesImportPreview"></div>
       </div>
-
-      <div class="sales-summary-card">
-        <div class="sales-summary-header">
-          <div class="sales-summary-title">Sales Summary</div>
-          <div class="sales-summary-desc">Show sales information received from your connected POS.</div>
-        </div>
-        <div class="segmented-control" id="salesPeriodControl">
-          <button class="segmented-btn active" data-period="today">Today</button>
-          <button class="segmented-btn" data-period="7d">7 Days</button>
-          <button class="segmented-btn" data-period="30d">30 Days</button>
-          <button class="segmented-btn" data-period="month">This Month</button>
-          <button class="segmented-btn" data-period="custom">Custom</button>
-        </div>
-        <div class="sales-custom-row hidden" id="salesCustomRow">
-          <div class="sales-custom-field">
-            <label class="field-label" for="salesCustomStart">Start Date</label>
-            <input type="date" class="field-input" id="salesCustomStart">
-          </div>
-          <div class="sales-custom-field">
-            <label class="field-label" for="salesCustomEnd">End Date</label>
-            <input type="date" class="field-input" id="salesCustomEnd">
-          </div>
-          <button class="btn btn-gold btn-small" id="salesCustomApply">Apply</button>
-        </div>
-        <div id="salesSummaryBody"></div>
+      <div id="salesSummarySection" style="background:var(--charcoal-1);border:1px solid var(--line);border-radius:var(--radius-lg);padding:var(--space-4);">
+        <h3 style="margin:0 0 var(--space-1);">Sales Summary</h3>
+        <div id="salesSummaryContent"></div>
       </div>
     `;
 
-    const canManage = can('settings', 'manage');
-    const connectBtn = document.getElementById('posConnectBtn');
-    const disconnectBtn = document.getElementById('posDisconnectBtn');
-    const syncBtn = document.getElementById('posSyncBtn');
-    if (!canManage) {
-      connectBtn.disabled = true;
-      disconnectBtn.disabled = true;
-      syncBtn.disabled = true;
-    }
+        document.getElementById('salesCsvFile').addEventListener('change', handleSalesFileSelect);
+        loadSalesSummary('today');
+      }
 
-    connectBtn.addEventListener('click', async () => {
-      const provider = document.getElementById('posProviderInput').value.trim();
-      if (!provider) { toast('Enter a provider name', true); return; }
-      connectBtn.disabled = true; connectBtn.textContent = 'Connecting…';
-      try {
-        await api.connectPos(provider);
-        toast('Connected.');
-        await loadSettings();          // refresh data
-        showPOSIntegrationDetail();    // re‑render this view
-      } catch (e) { toast(e.message || 'Connect failed', true); }
-      finally { connectBtn.disabled = false; connectBtn.textContent = 'Connect'; }
-    });
-
-    disconnectBtn.addEventListener('click', async () => {
-      disconnectBtn.disabled = true; disconnectBtn.textContent = 'Disconnecting…';
-      try {
-        await api.disconnectPos();
-        toast('Disconnected.');
-        await loadSettings();
-        showPOSIntegrationDetail();
-      } catch (e) { toast(e.message || 'Disconnect failed', true); }
-      finally { disconnectBtn.disabled = false; disconnectBtn.textContent = 'Disconnect'; }
-    });
-
-    syncBtn.addEventListener('click', async () => {
-      syncBtn.disabled = true; syncBtn.textContent = 'Syncing…';
-      try {
-        await api.syncPos();
-        toast('Sync triggered.');
-        await loadSettings();
-        showPOSIntegrationDetail();
-      } catch (e) { toast(e.message || 'Sync failed', true); }
-      finally { syncBtn.disabled = false; syncBtn.textContent = 'Sync'; }
-    });
-
-    initSalesSummary(isConnected);
-  }
-
-  let currentSalesPeriod = 'today';
-
-  function initSalesSummary(isConnected) {
-    const control = document.getElementById('salesPeriodControl');
-    const customRow = document.getElementById('salesCustomRow');
-    if (!control) return;
-
-    if (!isConnected) {
-      control.classList.add('is-disabled');
-      customRow.classList.add('hidden');
-      renderSalesNotConnected();
-      return;
-    }
-    control.classList.remove('is-disabled');
-
-    control.querySelectorAll('.segmented-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        control.querySelectorAll('.segmented-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        currentSalesPeriod = btn.dataset.period;
-        if (currentSalesPeriod === 'custom') {
-          customRow.classList.remove('hidden');
-        } else {
-          customRow.classList.add('hidden');
-          loadSalesSummary(currentSalesPeriod);
+      async function handleSalesFileSelect(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+          const data = await apiUpload('/pos/sales/import/preview', formData);
+          salesFileHash = data.fileHash;
+          salesPeriodStart = data.periodStart;
+          salesPeriodEnd = data.periodEnd;
+          salesItems = data.items;
+          renderSalesPreview();
+        } catch (err) {
+          toast(err.message || 'Failed to preview CSV', true);
         }
-      });
-    });
-    const applyBtn = document.getElementById('salesCustomApply');
-    if (applyBtn) {
-      applyBtn.addEventListener('click', () => {
-        const start = document.getElementById('salesCustomStart').value;
-        const end = document.getElementById('salesCustomEnd').value;
-        if (!start || !end) { toast('Select both start and end dates.', true); return; }
-        loadSalesSummary('custom', start, end);
-      });
-    }
-    if (cachedPosSalesData) {
-      renderSalesTable(cachedPosSalesData.summary ? cachedPosSalesData.summary : []);
-      cachedPosSalesData = null;
-    } else {
-      loadSalesSummary('today');
-    }
-  }
+      }
 
-  function renderSalesNotConnected() {
-    const body = document.getElementById('salesSummaryBody');
-    if (!body) return;
-    body.innerHTML = `
-      <div class="sales-connect-prompt">
-        <div class="sales-connect-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M7 9h8l-1 10a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2L7 9z"/><path d="M9 9V6a3 3 0 0 1 3-3h2a2 2 0 0 1 2 2"/></svg></div>
-        <div class="sales-connect-title">No sales summary yet</div>
-        <div class="sales-connect-desc">Once your POS system is connected, your sales summary will appear here automatically.</div>
-      </div>
-    `;
-  }
+      function renderSalesPreview() {
+        const previewDiv = document.getElementById('salesImportPreview');
+        if (!previewDiv) return;
+        if (!salesItems.length) {
+          previewDiv.innerHTML = '<p style="font-size:0.82rem;color:var(--paper-faint);">No items to preview.</p>';
+          return;
+        }
+        let html = `<table class="staff-table" style="margin-top:var(--space-2);"><thead><tr><th>POS Product</th><th>Inventory Item</th><th>Qty Sold</th><th>Status</th></tr></thead><tbody>`;
+        salesItems.forEach((item, idx) => {
+          const status = item.matched ? '<span class="badge-active">Matched</span>' : '<span class="badge-inactive">Needs mapping</span>';
+          const itemName = item.itemName || '—';
+          html += `<tr>
+        <td>${escapeHtml(item.sourceProductName)}</td>
+        <td>${item.matched ? escapeHtml(itemName) : `<select class="field-select" id="mapSelect_${idx}" style="width:auto;display:inline-block;"><option value="">-- Select --</option></select>`}</td>
+        <td>${item.quantitySold}</td>
+        <td>${status}</td>
+      </tr>`;
+        });
+        html += '</tbody></table>';
+        html += `<button id="applySalesBtn" class="btn btn-gold btn-small" style="margin-top:var(--space-2);" ${salesItems.some(it => !it.matched) ? 'disabled' : ''}>Apply Sales</button>`;
+        previewDiv.innerHTML = html;
 
-  function renderSalesLoading() {
-    const body = document.getElementById('salesSummaryBody');
-    if (!body) return;
-    body.innerHTML = '<div class="sales-state-box"><div class="loading-spinner" style="margin:0 auto 10px;"></div>Loading sales…</div>';
-  }
+        // Populate dropdowns for unmatched items
+        salesItems.forEach((item, idx) => {
+          if (!item.matched) {
+            const select = document.getElementById(`mapSelect_${idx}`);
+            if (!select) return;
+            // Add blank option already present
+            state.categories.forEach(cat => {
+              cat.items.forEach(it => {
+                const option = document.createElement('option');
+                option.value = it.id;
+                option.textContent = it.name;
+                select.appendChild(option);
+              });
+            });
+            select.addEventListener('change', async (e) => {
+              const itemId = e.target.value;
+              if (!itemId) return;
+              try {
+                await api.saveSalesMapping(item.sourceProductName, itemId);
+                // Update local state
+                item.itemId = itemId;
+                item.itemName = e.target.selectedOptions[0].textContent;
+                item.matched = true;
+                renderSalesPreview();
+                toast('Mapping saved.');
+              } catch (err) {
+                toast(err.message || 'Failed to save mapping', true);
+              }
+            });
+          }
+        });
 
-  function renderSalesError(message, retryFn) {
-    const body = document.getElementById('salesSummaryBody');
-    if (!body) return;
-    body.innerHTML = '';
-    const box = document.createElement('div');
-    box.className = 'sales-error-box';
-    const msg = document.createElement('div');
-    msg.className = 'sales-error-msg';
-    msg.textContent = message || 'Could not load sales data.';
-    const retryBtn = document.createElement('button');
-    retryBtn.className = 'btn btn-gold btn-small';
-    retryBtn.textContent = 'Retry';
-    retryBtn.addEventListener('click', retryFn);
-    box.appendChild(msg);
-    box.appendChild(retryBtn);
-    body.appendChild(box);
-  }
+        const applyBtn = document.getElementById('applySalesBtn');
+        if (applyBtn) {
+          applyBtn.addEventListener('click', async () => {
+            const allMatched = salesItems.every(it => it.matched);
+            if (!allMatched) return;
+            applyBtn.disabled = true; applyBtn.textContent = 'Applying…';
+            try {
+              await api.applySalesImport(salesFileHash, salesPeriodStart, salesPeriodEnd, salesItems.map(it => ({
+                itemId: it.itemId,
+                sourceProductName: it.sourceProductName,
+                quantitySold: it.quantitySold
+              })));
+              toast('Sales imported successfully. Inventory has been updated.');
+              // Reset import state
+              salesFileHash = null;
+              salesPeriodStart = null;
+              salesPeriodEnd = null;
+              salesItems = [];
+              document.getElementById('salesCsvFile').value = '';
+              renderSalesPreview();
+              // Refresh inventory and sales summary
+              loadInventory();
+              loadSalesSummary('today');
+            } catch (err) {
+              if (err.code === 'SALES_IMPORT_ALREADY_EXISTS') {
+                toast('This sales report has already been imported.', true);
+              } else {
+                toast(err.message || 'Failed to apply sales', true);
+              }
+            } finally {
+              applyBtn.disabled = false; applyBtn.textContent = 'Apply Sales';
+            }
+          });
+        }
+      }
 
-  function renderSalesTable(summary) {
-    const body = document.getElementById('salesSummaryBody');
-    if (!body) return;
-    if (!summary || summary.length === 0) {
-      body.innerHTML = '<div class="sales-state-box">No sales found for the selected period.</div>';
-      return;
-    }
-    let html = '<div class="sales-table-wrap"><table class="sales-table"><thead><tr><th>Drink</th><th style="text-align:right">Quantity Sold</th></tr></thead><tbody>';
-    summary.forEach(row => {
-      html += `<tr><td>${escapeHtml(row.product)}</td><td class="sales-qty">${escapeHtml(String(row.quantity))}</td></tr>`;
-    });
-    html += '</tbody></table></div>';
-    body.innerHTML = html;
-  }
+      async function loadSalesSummary(period) {
+        const summaryDiv = document.getElementById('salesSummaryContent');
+        if (!summaryDiv) return;
+        summaryDiv.innerHTML = '<div class="loading-spinner" style="margin:1rem auto;"></div>';
+        try {
+          const data = await api.getSalesSummary(period);
+          const summary = data.summary || [];
+          let html = `<div style="display:flex;gap:var(--space-2);margin-bottom:var(--space-3);flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-small period-btn" data-period="today">Today</button>
+        <button class="btn btn-ghost btn-small period-btn" data-period="7days">Last 7 days</button>
+        <button class="btn btn-ghost btn-small period-btn" data-period="30days">Last 30 days</button>
+        <button class="btn btn-ghost btn-small period-btn" data-period="month">This Month</button>
+      </div>`;
+          if (!summary.length) {
+            html += '<p style="font-size:0.82rem;color:var(--paper-faint);">No sales recorded for this period.</p>';
+          } else {
+            html += `<table class="staff-table"><thead><tr><th>Item</th><th>Quantity Sold</th></tr></thead><tbody>`;
+            summary.forEach(s => {
+              html += `<tr><td>${escapeHtml(s.itemName)}</td><td>${s.totalSold}</td></tr>`;
+            });
+            html += '</tbody></table>';
+          }
+          summaryDiv.innerHTML = html;
 
-  async function loadSalesSummary(period, start, end) {
-    renderSalesLoading();
-    try {
-      const data = await api.getPosSales(period, start, end);
-      renderSalesTable(data && data.summary ? data.summary : []);
-    } catch (e) {
-      renderSalesError(e.message || 'Could not load sales data.', () => loadSalesSummary(period, start, end));
-    }
-  }
+          // Period button active state and handler
+          summaryDiv.querySelectorAll('.period-btn').forEach(btn => {
+            if (btn.dataset.period === period) btn.classList.add('btn-gold');
+            btn.addEventListener('click', () => loadSalesSummary(btn.dataset.period));
+          });
+        } catch (err) {
+          summaryDiv.innerHTML = '<p style="font-size:0.82rem;color:var(--danger);">Failed to load sales summary.</p>';
+        }
+      }
 
-  let editingStaffId = null;  // NEW: for staff edit modal
+      let editingStaffId = null;  // NEW: for staff edit modal
 
-  async function showStaffManagementDetail() {
-    const content = document.getElementById('settingsDetailContent');
-    if (!content) return;
-    if (!can('staff', 'view')) {
-      content.innerHTML = '<div class="empty-state show"><div>You do not have permission to manage staff.</div></div>';
-      return;
-    }
-    if (cachedStaffData) {
-      renderStaffList(cachedStaffData);
-      return;
-    }
-    content.innerHTML = '<div class="loading-spinner" style="margin:2rem auto;"></div>';
-    try {
-      const data = await api.listStaff();
-      cachedStaffData = data.staff || [];
-      renderStaffList(cachedStaffData);
-    } catch (e) {
-      content.innerHTML = `<div class="empty-state show"><div>Could not load staff list. ${escapeHtml(e.message)}</div></div>`;
-    }
-  }
+      async function showStaffManagementDetail() {
+        const content = document.getElementById('settingsDetailContent');
+        if (!content) return;
+        if (!can('staff', 'view')) {
+          content.innerHTML = '<div class="empty-state show"><div>You do not have permission to manage staff.</div></div>';
+          return;
+        }
+        if (cachedStaffData) {
+          renderStaffList(cachedStaffData);
+          return;
+        }
+        content.innerHTML = '<div class="loading-spinner" style="margin:2rem auto;"></div>';
+        try {
+          const data = await api.listStaff();
+          cachedStaffData = data.staff || [];
+          renderStaffList(cachedStaffData);
+        } catch (e) {
+          content.innerHTML = `<div class="empty-state show"><div>Could not load staff list. ${escapeHtml(e.message)}</div></div>`;
+        }
+      }
 
-  function renderStaffList(staffArray) {
-    const content = document.getElementById('settingsDetailContent');
-    if (!content) return;
-    const canCreate = can('staff', 'create');
-    const canEdit = can('staff', 'edit');
-    let html = '';
-    if (canCreate) {
-      html += `<div class="staff-toolbar"><button class="btn btn-gold btn-small" id="addStaffBtn">+ Add Staff</button></div>`;
-    }
-    if (!staffArray || staffArray.length === 0) {
-      html += '<div class="empty-state show"><div>No staff members yet.</div></div>';
-    } else {
-      html += `<table class="staff-table"><thead><tr><th>Name</th><th>Username</th><th>Status</th><th>Created</th>${canEdit ? '<th></th>' : ''}</tr></thead><tbody>`;
-      staffArray.forEach(s => {
-        const created = s.created_at ? new Date(s.created_at).toLocaleDateString() : '—';
-        const statusBadge = s.is_active ? '<span class="badge-active">Active</span>' : '<span class="badge-inactive">Inactive</span>';
-        const initial = escapeHtml((s.name || '?').trim().charAt(0).toUpperCase());
-        html += `<tr>
+      function renderStaffList(staffArray) {
+        const content = document.getElementById('settingsDetailContent');
+        if (!content) return;
+        const canCreate = can('staff', 'create');
+        const canEdit = can('staff', 'edit');
+        let html = '';
+        if (canCreate) {
+          html += `<div class="staff-toolbar"><button class="btn btn-gold btn-small" id="addStaffBtn">+ Add Staff</button></div>`;
+        }
+        if (!staffArray || staffArray.length === 0) {
+          html += '<div class="empty-state show"><div>No staff members yet.</div></div>';
+        } else {
+          html += `<table class="staff-table"><thead><tr><th>Name</th><th>Username</th><th>Status</th><th>Created</th>${canEdit ? '<th></th>' : ''}</tr></thead><tbody>`;
+          staffArray.forEach(s => {
+            const created = s.created_at ? new Date(s.created_at).toLocaleDateString() : '—';
+            const statusBadge = s.is_active ? '<span class="badge-active">Active</span>' : '<span class="badge-inactive">Inactive</span>';
+            const initial = escapeHtml((s.name || '?').trim().charAt(0).toUpperCase());
+            html += `<tr>
           <td data-label="Name"><span class="staff-name-cell"><span class="staff-avatar">${initial}</span>${escapeHtml(s.name)}</span></td>
           <td data-label="Username">${escapeHtml(s.username || '—')}</td>
           <td data-label="Status">${statusBadge}</td>
           <td data-label="Created">${created}</td>
           ${canEdit ? `<td data-label=""><button class="btn btn-ghost btn-small edit-staff-btn" data-id="${s.id}" data-name="${escapeHtml(s.name)}" data-active="${s.is_active}">Edit</button></td>` : ''}
         </tr>`;
+          });
+          html += '</tbody></table>';
+        }
+        content.innerHTML = html;
+
+        if (canCreate) {
+          document.getElementById('addStaffBtn').addEventListener('click', () => openStaffAddModal());
+        }
+        if (canEdit) {
+          content.querySelectorAll('.edit-staff-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              openStaffEditModal(btn.dataset.id, btn.dataset.name, btn.dataset.active === 'true');
+            });
+          });
+        }
+      }
+
+      function openStaffAddModal() {
+        document.getElementById('staffAddName').value = '';
+        document.getElementById('staffAddPin').value = '';
+        openModal(document.getElementById('staffAddModalOverlay'));
+        setTimeout(() => document.getElementById('staffAddName').focus(), 250);
+      }
+
+      function openStaffEditModal(id, name, active) {
+        editingStaffId = id;
+        document.getElementById('staffEditName').value = name;
+        document.getElementById('staffEditPin').value = '';
+        document.getElementById('staffEditActive').checked = active;
+        openModal(document.getElementById('staffEditModalOverlay'));
+        setTimeout(() => document.getElementById('staffEditName').focus(), 250);
+      }
+
+      // Staff modal event handlers
+      document.getElementById('staffAddCancel').addEventListener('click', () => {
+        closeModal(document.getElementById('staffAddModalOverlay'));
       });
-      html += '</tbody></table>';
-    }
-    content.innerHTML = html;
-
-    if (canCreate) {
-      document.getElementById('addStaffBtn').addEventListener('click', () => openStaffAddModal());
-    }
-    if (canEdit) {
-      content.querySelectorAll('.edit-staff-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          openStaffEditModal(btn.dataset.id, btn.dataset.name, btn.dataset.active === 'true');
-        });
+      document.getElementById('staffAddConfirm').addEventListener('click', async () => {
+        const name = document.getElementById('staffAddName').value.trim();
+        const pin = document.getElementById('staffAddPin').value.trim();
+        if (!name) { toast('Name is required.', true); return; }
+        if (!pin || !/^\d{4,6}$/.test(pin)) { toast('PIN must be 4-6 digits.', true); return; }
+        const btn = document.getElementById('staffAddConfirm');
+        btn.disabled = true; btn.textContent = 'Creating…';
+        try {
+          await api.createStaff(name, pin);
+          toast('Staff created.');
+          closeModal(document.getElementById('staffAddModalOverlay'));
+          cachedStaffData = null;
+          showStaffManagementDetail();
+        } catch (e) {
+          toast(e.message || 'Failed to create staff.', true);
+        } finally {
+          btn.disabled = false; btn.textContent = 'Create';
+        }
       });
-    }
-  }
 
-  function openStaffAddModal() {
-    document.getElementById('staffAddName').value = '';
-    document.getElementById('staffAddPin').value = '';
-    openModal(document.getElementById('staffAddModalOverlay'));
-    setTimeout(() => document.getElementById('staffAddName').focus(), 250);
-  }
-
-  function openStaffEditModal(id, name, active) {
-    editingStaffId = id;
-    document.getElementById('staffEditName').value = name;
-    document.getElementById('staffEditPin').value = '';
-    document.getElementById('staffEditActive').checked = active;
-    openModal(document.getElementById('staffEditModalOverlay'));
-    setTimeout(() => document.getElementById('staffEditName').focus(), 250);
-  }
-
-  // Staff modal event handlers
-  document.getElementById('staffAddCancel').addEventListener('click', () => {
-    closeModal(document.getElementById('staffAddModalOverlay'));
-  });
-  document.getElementById('staffAddConfirm').addEventListener('click', async () => {
-    const name = document.getElementById('staffAddName').value.trim();
-    const pin = document.getElementById('staffAddPin').value.trim();
-    if (!name) { toast('Name is required.', true); return; }
-    if (!pin || !/^\d{4,6}$/.test(pin)) { toast('PIN must be 4-6 digits.', true); return; }
-    const btn = document.getElementById('staffAddConfirm');
-    btn.disabled = true; btn.textContent = 'Creating…';
-    try {
-      await api.createStaff(name, pin);
-      toast('Staff created.');
-      closeModal(document.getElementById('staffAddModalOverlay'));
-      cachedStaffData = null;
-      showStaffManagementDetail();
-    } catch (e) {
-      toast(e.message || 'Failed to create staff.', true);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Create';
-    }
-  });
-
-  document.getElementById('staffEditCancel').addEventListener('click', () => {
-    closeModal(document.getElementById('staffEditModalOverlay'));
-    editingStaffId = null;
-  });
-  document.getElementById('staffEditConfirm').addEventListener('click', async () => {
-    if (!editingStaffId) return;
-    const name = document.getElementById('staffEditName').value.trim();
-    const pin = document.getElementById('staffEditPin').value.trim();
-    const isActive = document.getElementById('staffEditActive').checked;
-    if (!name) { toast('Name is required.', true); return; }
-    if (pin && !/^\d{4,6}$/.test(pin)) { toast('PIN must be 4-6 digits.', true); return; }
-    const payload = { name, is_active: isActive };
-    if (pin) payload.pin = pin;
-    const btn = document.getElementById('staffEditConfirm');
-    btn.disabled = true; btn.textContent = 'Saving…';
-    try {
-      await api.updateStaff(editingStaffId, payload);
-      toast('Staff updated.');
-      closeModal(document.getElementById('staffEditModalOverlay'));
-      editingStaffId = null;
-      cachedStaffData = null;
-      showStaffManagementDetail();
-    } catch (e) {
-      toast(e.message || 'Failed to update staff.', true);
-    } finally {
-      btn.disabled = false; btn.textContent = 'Save';
-    }
-  });
+      document.getElementById('staffEditCancel').addEventListener('click', () => {
+        closeModal(document.getElementById('staffEditModalOverlay'));
+        editingStaffId = null;
+      });
+      document.getElementById('staffEditConfirm').addEventListener('click', async () => {
+        if (!editingStaffId) return;
+        const name = document.getElementById('staffEditName').value.trim();
+        const pin = document.getElementById('staffEditPin').value.trim();
+        const isActive = document.getElementById('staffEditActive').checked;
+        if (!name) { toast('Name is required.', true); return; }
+        if (pin && !/^\d{4,6}$/.test(pin)) { toast('PIN must be 4-6 digits.', true); return; }
+        const payload = { name, is_active: isActive };
+        if (pin) payload.pin = pin;
+        const btn = document.getElementById('staffEditConfirm');
+        btn.disabled = true; btn.textContent = 'Saving…';
+        try {
+          await api.updateStaff(editingStaffId, payload);
+          toast('Staff updated.');
+          closeModal(document.getElementById('staffEditModalOverlay'));
+          editingStaffId = null;
+          cachedStaffData = null;
+          showStaffManagementDetail();
+        } catch (e) {
+          toast(e.message || 'Failed to update staff.', true);
+        } finally {
+          btn.disabled = false; btn.textContent = 'Save';
+        }
+      });
 
       let shouldOpenAllocations = false;
 
@@ -2748,10 +3406,10 @@ document.getElementById('settingsBackBtn').addEventListener('click', showSetting
       /**
        * Check a permission path like 'inventory.edit'
        */
-  function can(module, action) {
-    const modPerms = userPermissions[module];
-    return modPerms && typeof modPerms === 'object' && modPerms[action] === true;
-  }
+      function can(module, action) {
+        const modPerms = userPermissions[module];
+        return modPerms && typeof modPerms === 'object' && modPerms[action] === true;
+      }
       /** Hide/show UI elements based on permissions */
       function applyUIPermissions() {
         // Inventory page static buttons
@@ -2764,16 +3422,16 @@ document.getElementById('settingsBackBtn').addEventListener('click', showSetting
           // Show FAB only if staff can add items or categories
           const showFab = can('inventory', 'add');
           fab.classList.toggle('hidden', !showFab);
-    } else if (currentPage === 'recipes') {
-      // Recipes page: show FAB only if can add recipes
-      fab.classList.toggle('hidden', !can('recipes', 'create'));
-    } else {
-      // Settings or other pages: hide FAB completely
-      fab.classList.add('hidden');
-    }            // Show Settings tab for managers
-    navSet.classList.toggle('hidden', !can('settings', 'manage'));
-    // Stock Intake tab: manager only (settings.manage), same permission the backend enforces
-    navSI.classList.toggle('hidden', !can('settings', 'manage'));
+        } else if (currentPage === 'recipes') {
+          // Recipes page: show FAB only if can add recipes
+          fab.classList.toggle('hidden', !can('recipes', 'create'));
+        } else {
+          // Settings or other pages: hide FAB completely
+          fab.classList.add('hidden');
+        }            // Show Settings tab for managers
+        navSet.classList.toggle('hidden', !can('settings', 'manage'));
+        // Stock Intake tab: manager only (settings.manage), same permission the backend enforces
+        navSI.classList.toggle('hidden', !can('settings', 'manage'));
 
         // Reset button (allowed for both roles)
         // No change required.
@@ -2905,9 +3563,9 @@ document.getElementById('settingsBackBtn').addEventListener('click', showSetting
         exportInventory: () => apiCall('GET', '/?action=exportInventory', null, 'blob'),
         resetStock: () => apiCall('POST', '/', { action: 'resetStock' }),
 
-            // Settings
-    getSettings: () => apiCall('GET', '/settings'),
-    updateSettings: (section, data) => apiCall('PATCH', `/settings/${section}`, data),
+        // Settings
+        getSettings: () => apiCall('GET', '/settings'),
+        updateSettings: (section, data) => apiCall('PATCH', `/settings/${section}`, data),
 
         // Permissions (staff management)
         getPermissions: () => apiCall('GET', '/permissions'),
@@ -2962,43 +3620,43 @@ document.getElementById('settingsBackBtn').addEventListener('click', showSetting
 
       function tick() { const n = new Date(); document.getElementById('clockTime').textContent = fmtTime(n); document.getElementById('clockDate').textContent = fmtDate(n); }
 
-        const pgInv = document.getElementById('pageInventory'), pgRec = document.getElementById('pageRecipes'), pgSet = document.getElementById('pageSettings'), pgSI = document.getElementById('pageStockIntake');
+      const pgInv = document.getElementById('pageInventory'), pgRec = document.getElementById('pageRecipes'), pgSet = document.getElementById('pageSettings'), pgSI = document.getElementById('pageStockIntake');
       const navInv = document.getElementById('navInventory'), navRec = document.getElementById('navRecipes'), navSet = document.getElementById('navSettings'), navSI = document.getElementById('navStockIntake');
       const fab = document.getElementById('fabAction'), fabLbl = document.getElementById('fabActionLabel');
       const svBtn = document.getElementById('saveBtn');
 
-  function switchPage(p) {
-    currentPage = p;
-    pgInv.classList.add('hidden'); pgRec.classList.add('hidden'); pgSet.classList.add('hidden'); pgSI.classList.add('hidden');
-    navInv.classList.remove('active'); navRec.classList.remove('active'); navSet.classList.remove('active'); navSI.classList.remove('active');
-    fab.classList.add('hidden'); svBtn.classList.add('hidden');
+      function switchPage(p) {
+        currentPage = p;
+        pgInv.classList.add('hidden'); pgRec.classList.add('hidden'); pgSet.classList.add('hidden'); pgSI.classList.add('hidden');
+        navInv.classList.remove('active'); navRec.classList.remove('active'); navSet.classList.remove('active'); navSI.classList.remove('active');
+        fab.classList.add('hidden'); svBtn.classList.add('hidden');
 
-    if (p === 'inventory') {
-      pgInv.classList.remove('hidden');
-      navInv.classList.add('active');
-      fabLbl.textContent = 'Actions';
-      if (isDirty) svBtn.classList.remove('hidden');
-      fab.classList.toggle('hidden', !can('inventory', 'add'));
-    } else if (p === 'recipes') {
-      pgRec.classList.remove('hidden');
-      navRec.classList.add('active');
-      fabLbl.textContent = 'Add Recipe';
-      fab.classList.toggle('hidden', !can('recipes', 'create'));
-      if (recipeState.recipes.length === 0) loadRecipes(); else renderRecipes();
-      if (can('allocations', 'list')) loadPendingAllocations();
-    } else if (p === 'stockintake') {
-      pgSI.classList.remove('hidden');
-      navSI.classList.add('active');
-      fab.classList.add('hidden');
-      showStockIntakePage();
-    } else if (p === 'settings') {
-      pgSet.classList.remove('hidden');
-      navSet.classList.add('active');
-      fab.classList.add('hidden');
-      if (!settingsData) { loadSettings(); } else { showSettingsMenu(); }
-    }
-    applyUIPermissions();
-  }    
+        if (p === 'inventory') {
+          pgInv.classList.remove('hidden');
+          navInv.classList.add('active');
+          fabLbl.textContent = 'Actions';
+          if (isDirty) svBtn.classList.remove('hidden');
+          fab.classList.toggle('hidden', !can('inventory', 'add'));
+        } else if (p === 'recipes') {
+          pgRec.classList.remove('hidden');
+          navRec.classList.add('active');
+          fabLbl.textContent = 'Add Recipe';
+          fab.classList.toggle('hidden', !can('recipes', 'create'));
+          if (recipeState.recipes.length === 0) loadRecipes(); else renderRecipes();
+          if (can('allocations', 'list')) loadPendingAllocations();
+        } else if (p === 'stockintake') {
+          pgSI.classList.remove('hidden');
+          navSI.classList.add('active');
+          fab.classList.add('hidden');
+          showStockIntakePage();
+        } else if (p === 'settings') {
+          pgSet.classList.remove('hidden');
+          navSet.classList.add('active');
+          fab.classList.add('hidden');
+          if (!settingsData) { loadSettings(); } else { showSettingsMenu(); }
+        }
+        applyUIPermissions();
+      }
       navInv.addEventListener('click', () => switchPage('inventory'));
       navRec.addEventListener('click', () => switchPage('recipes'));
       navSI.addEventListener('click', () => switchPage('stockintake'));
@@ -3039,7 +3697,7 @@ document.getElementById('settingsBackBtn').addEventListener('click', showSetting
       const rootEl = document.getElementById('categoriesRoot');
       function render() { rootEl.innerHTML = ''; state.categories.forEach(c => rootEl.appendChild(renderCat(c))); document.getElementById('inventoryEmptyHero').classList.toggle('show', state.categories.length === 0); updateOverview(); applySearchFilter(); updateDirty(); }
       function renderCat(c) {
-        const card = document.createElement('div'); card.className = 'cat-card' + (expandedState[c.id] ? ' expanded' : ''); card.dataset.catId = c.id; const h = document.createElement('button'); h.className = 'cat-header'; h.setAttribute('aria-expanded', expandedState[c.id] ? 'true' : 'false'); h.innerHTML = `<div class="cat-icon">${ICONS[c.icon] || ICONS.default}</div><div class="cat-title-wrap"><div class="cat-name">${escapeHtml(c.name)}</div><div class="cat-count"><b>${c.items.length}</b> item${c.items.length === 1 ? '' : 's'}</div></div><svg class="cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>`;         
+        const card = document.createElement('div'); card.className = 'cat-card' + (expandedState[c.id] ? ' expanded' : ''); card.dataset.catId = c.id; const h = document.createElement('button'); h.className = 'cat-header'; h.setAttribute('aria-expanded', expandedState[c.id] ? 'true' : 'false'); h.innerHTML = `<div class="cat-icon">${ICONS[c.icon] || ICONS.default}</div><div class="cat-title-wrap"><div class="cat-name">${escapeHtml(c.name)}</div><div class="cat-count"><b>${c.items.length}</b> item${c.items.length === 1 ? '' : 's'}</div></div><svg class="cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>`;
         if (can('categories', 'edit') || can('categories', 'delete')) {
           const mb = document.createElement('button');
           mb.className = 'cat-menu-btn';
@@ -3047,7 +3705,7 @@ document.getElementById('settingsBackBtn').addEventListener('click', showSetting
           mb.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>';
           mb.addEventListener('click', ev => { ev.stopPropagation(); const items = []; if (can('categories', 'edit')) items.push({ label: 'Rename Category', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>', action: () => openCatDialog('rename', c) }); if (can('categories', 'delete')) items.push({ label: 'Delete Category', icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>', danger: true, action: () => delCat(c) }); if (items.length) openCtx(mb, items); });
           h.appendChild(mb);
-        } 
+        }
         h.addEventListener('click', ev => { if (ev.target.closest('.cat-menu-btn')) return; expandedState[c.id] = !expandedState[c.id]; card.classList.toggle('expanded'); h.setAttribute('aria-expanded', expandedState[c.id] ? 'true' : 'false'); try { localStorage.setItem(EXPANDED_KEY, JSON.stringify(expandedState)); } catch (e) { } }); const body = document.createElement('div'); body.className = 'cat-body'; const bi = document.createElement('div'); bi.className = 'cat-body-inner'; c.items.forEach(it => bi.appendChild(renderItemRow(c, it))); body.appendChild(bi); card.appendChild(h); card.appendChild(body); return card;
       }
 
@@ -3169,7 +3827,7 @@ document.getElementById('settingsBackBtn').addEventListener('click', showSetting
         openModal(arModalOverlay);
       }
 
-      function validateAdjustReasonForm() {
+function validateAdjustReasonForm() {
         const rows = arList.querySelectorAll('.adjust-reason-row');
         let allValid = rows.length > 0;
         rows.forEach(row => {
@@ -3210,7 +3868,7 @@ document.getElementById('settingsBackBtn').addEventListener('click', showSetting
           isSaving = false; svBtn.disabled = false; svBtn.classList.remove('is-saving'); document.getElementById('saveBtnLabel').textContent = 'Save Changes';
         }
       });
-
+      
       function doSave() { if (isSaving) return; const u = dirtyUpdates(); if (!u.length) return; openAdjustReasonModal(u); }
       svBtn.addEventListener('click', doSave);
       document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (isDirty) doSave(); } });
@@ -3466,7 +4124,7 @@ document.getElementById('settingsBackBtn').addEventListener('click', showSetting
         catch (e) { toast(e.message || 'Failed to save recipe.', true); } finally { rmf.disabled = false; rmf.textContent = 'Save Recipe'; }
       });
 
-  
+
       // ==================== STOCK INTAKE ====================
       function buildItemOptionsHtml() {
         let html = '<option value="">-- Select item --</option>';
@@ -3839,8 +4497,8 @@ document.getElementById('settingsBackBtn').addEventListener('click', showSetting
 
       tick(); setInterval(tick, 60000); init();
       window.api = api;   // temporary – remove after testing#
-       window.can = can;
-        window.userPermissions = userPermissions;   // temporary – remove after testing
+      window.can = can;
+      window.userPermissions = userPermissions;   // temporary – remove after testing
     })();
   </script>
 </body>
