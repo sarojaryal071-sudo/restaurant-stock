@@ -2935,14 +2935,16 @@
         });
       }
 
-      function showSettingsDetail(sectionKey) {
-        settingsSubPage = sectionKey;
-        const titles = {
-          inventory: 'Inventory Behaviour',
-          sales: 'Sales',
-          staff: 'Staff Management',
-          permissions: 'Staff Permissions'
-        };
+  function showSettingsDetail(sectionKey) {
+    settingsSubPage = sectionKey;
+    const container = document.getElementById('settingsContainer');
+    if (!container) return;
+    const titles = {
+      inventory: 'Inventory Behaviour',
+      sales: 'Sales',
+      staff: 'Staff Management',
+      permissions: 'Staff Permissions'
+    };
         const descriptions = {
           inventory: 'Control how negative stock is handled and warned about.',
           sales: 'Import POS sales reports and view sales summary.',
@@ -3868,7 +3870,7 @@ function validateAdjustReasonForm() {
           isSaving = false; svBtn.disabled = false; svBtn.classList.remove('is-saving'); document.getElementById('saveBtnLabel').textContent = 'Save Changes';
         }
       });
-      
+
       function doSave() { if (isSaving) return; const u = dirtyUpdates(); if (!u.length) return; openAdjustReasonModal(u); }
       svBtn.addEventListener('click', doSave);
       document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (isDirty) doSave(); } });
@@ -4343,6 +4345,8 @@ function validateAdjustReasonForm() {
 
       function showAuthLoading() {
         document.querySelector('#authScreen .auth-form').classList.add('hidden');
+        const subtitle = document.querySelector('#authScreen .auth-subtitle');
+        if (subtitle) subtitle.classList.add('hidden');
         const ls = document.getElementById('authLoadingState');
         ls.classList.remove('hidden');
         const dotsEl = document.getElementById('authLoadingDots');
@@ -4360,6 +4364,8 @@ function validateAdjustReasonForm() {
         if (ls) ls.classList.add('hidden');
         const af = document.querySelector('#authScreen .auth-form');
         if (af) af.classList.remove('hidden');
+        const subtitle = document.querySelector('#authScreen .auth-subtitle');
+        if (subtitle) subtitle.classList.remove('hidden');
       }
 
       async function preloadWorkspace() {
