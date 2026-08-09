@@ -2853,7 +2853,7 @@
         <video id="barcodeVideo" autoplay playsinline style="width:100%; display:block;"></video>
         <div id="barcodeScanFrame" style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:70%; height:50%; border:2px solid var(--gold-bright); border-radius:8px; pointer-events:none;"></div>
       </div>
-      <p style="text-align:center; font-size:0.85rem; color:var(--paper-dim); margin-bottom:var(--space-2);">Point your camera at the barcode</p>
+      <p id="barcodeScannerHint" style="text-align:center; font-size:0.85rem; color:var(--paper-dim); margin-bottom:var(--space-2);">Point your camera at the barcode</p>
       <div id="barcodeManualFallback" class="hidden" style="margin-bottom:var(--space-2);">
         <input type="text" id="barcodeManualInput" placeholder="Enter barcode number" class="field-input" style="margin-bottom:8px;">
         <button class="btn btn-gold btn-small" id="barcodeManualLookup">Lookup</button>
@@ -4229,8 +4229,12 @@ function validateAdjustReasonForm() {
         const manualInput = document.getElementById('barcodeManualInput');
         const manualLookup = document.getElementById('barcodeManualLookup');
         const cancelBtn = document.getElementById('barcodeScannerCancel');
+        const scanFrame = document.getElementById('barcodeScanFrame');
+        const hint = document.getElementById('barcodeScannerHint');
 
-        // Check for BarcodeDetector support
+        // Check for BarcodeDetector support — used only for auto-detection.
+        // The camera itself must open regardless of whether this API exists.
+        barcodeDetector = null;
         if (typeof BarcodeDetector !== 'undefined') {
           try {
             barcodeDetector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e'] });
@@ -4243,26 +4247,39 @@ function validateAdjustReasonForm() {
         // Reset UI
         fallback.classList.add('hidden');
         video.style.display = 'block';
-        document.getElementById('barcodeScanFrame').style.display = 'block';
-        if (barcodeDetector) {
+        scanFrame.style.display = 'block';
+        if (hint) hint.textContent = 'Point your camera at the barcode';
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          // Camera API not available at all in this browser/context
+          video.style.display = 'none';
+          scanFrame.style.display = 'none';
+          fallback.classList.remove('hidden');
+          if (hint) hint.textContent = 'Camera access is unavailable. Please allow camera permission and try again.';
+          toast('Camera access is unavailable. Please allow camera permission and try again.', true);
+        } else {
           try {
             const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
             barcodeScannerStream = stream;
             video.srcObject = stream;
             await video.play();
-            scanLoop();
+            if (barcodeDetector) {
+              // Supported browser: auto-detect barcodes from the live feed
+              scanLoop();
+            } else {
+              // Camera works fine, but this browser has no BarcodeDetector support.
+              // Keep the live preview visible and let the user type what they see.
+              fallback.classList.remove('hidden');
+              if (hint) hint.textContent = 'Point the camera at the barcode, then type the number below.';
+            }
           } catch (err) {
-            // Camera permission denied or error
+            // Permission denied, no camera, or insecure context
             video.style.display = 'none';
-            document.getElementById('barcodeScanFrame').style.display = 'none';
+            scanFrame.style.display = 'none';
             fallback.classList.remove('hidden');
-            toast('Camera access is required to scan a barcode.', true);
+            if (hint) hint.textContent = 'Camera access is unavailable. Please allow camera permission and try again.';
+            toast('Camera access is unavailable. Please allow camera permission and try again.', true);
           }
-        } else {
-          // BarcodeDetector not available, show manual fallback
-          video.style.display = 'none';
-          document.getElementById('barcodeScanFrame').style.display = 'none';
-          fallback.classList.remove('hidden');
         }
 
         cancelBtn.onclick = () => {
