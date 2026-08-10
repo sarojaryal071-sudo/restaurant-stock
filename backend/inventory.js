@@ -132,11 +132,21 @@ async function saveStock(req, res) {
         // Reason required for every change
         const reason = (upd.reason || '').trim();
         if (!reason) throw { code: 'VALIDATION_ERROR', error: `Reason is required for item "${itemMap[itemId] || itemId}".` };
-        // Validate reason against the database
-        if (!(await isValidReason(reason))) {
-          throw { code: 'VALIDATION_ERROR', error: `Invalid reason "${reason}" for item "${itemMap[itemId] || itemId}".` };
+
+        // Determine direction from quantity change
+        const direction = newQty > oldQty ? 'increase' : 'decrease';
+
+        // Validate reason against the database – must exist, be enabled, and have the correct direction
+        const reasonCheck = await tx(
+          `SELECT id FROM inventory_adjustment_reasons WHERE value = $1 AND enabled = TRUE AND direction = $2`,
+          [reason, direction]
+        );
+        if (reasonCheck.rows.length === 0) {
+          throw { code: 'VALIDATION_ERROR', error: `Invalid reason "${reason}" for a ${direction} adjustment on item "${itemMap[itemId] || itemId}".` };
         }
-        if (reason === 'Other' && !(upd.note || '').trim()) {
+
+        // Special handling for "other" reasons – note required
+        if (reason.startsWith('other_') && !(upd.note || '').trim()) {
           throw { code: 'VALIDATION_ERROR', error: `A note is required when reason is "Other" for item "${itemMap[itemId] || itemId}".` };
         }
 

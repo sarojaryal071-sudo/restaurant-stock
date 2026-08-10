@@ -2720,8 +2720,7 @@
         id="editItemCategory"></select>
       <label class="field-label" for="editItemQty">Quantity</label><input class="field-input" id="editItemQty"
         type="number" min="0" inputmode="numeric">
-      <label class="field-label" for="editItemUnit">Unit</label><input class="field-input" id="editItemUnit" type="text"
-        maxlength="20" placeholder="e.g. bottles, kg, trays">
+      <label class="field-label" for="editItemUnit">Unit</label><select class="field-select" id="editItemUnit"></select>
       <label class="field-label" for="editItemContainerVolume">Container Volume (ml)</label><input class="field-input"
         id="editItemContainerVolume" type="number" min="0" inputmode="numeric" placeholder="e.g. 700">
       <div class="modal-actions"><button class="btn btn-ghost" id="editItemCancel">Cancel</button><button
@@ -3801,10 +3800,13 @@ const titles = {
         updates.forEach(u => {
           const f = findItem(u.itemId);
           const name = f ? f.item.name : 'Item';
-          const oldQty = f ? f.item.lastConfirmedQty : '';
+          const oldQty = f ? f.item.lastConfirmedQty : 0;
           const row = document.createElement('div');
           row.className = 'adjust-reason-row';
           row.dataset.itemId = u.itemId;
+          // Determine direction
+          const direction = u.quantity > oldQty ? 'increase' : 'decrease';
+          const reasons = (appConfig.adjustmentReasons && appConfig.adjustmentReasons[direction]) || [];
           row.innerHTML = `
             <div class="adjust-reason-header">
               <span class="adjust-reason-name">${escapeHtml(name)}</span>
@@ -3812,15 +3814,17 @@ const titles = {
             </div>
             <select class="adjust-reason-select">
               <option value="">-- Select reason --</option>
-              ${appConfig.adjustmentReasons.map(r => `<option value="${escapeHtml(r.value)}">${escapeHtml(r.label)}</option>`).join('')}
+              ${reasons.map(r => `<option value="${escapeHtml(r.value)}">${escapeHtml(r.label)}</option>`).join('')}
             </select>
             <textarea class="adjust-reason-note hidden" rows="2" placeholder="Reason note (required)"></textarea>
           `;
           const sel = row.querySelector('.adjust-reason-select');
           const note = row.querySelector('.adjust-reason-note');
           sel.addEventListener('change', () => {
-            note.classList.toggle('hidden', sel.value !== 'Other');
-            if (sel.value !== 'Other') note.value = '';
+            // Show note for any "other" reason (backend value contains "other")
+            const isOther = sel.value && (sel.value.includes('other_') || sel.value === 'Other');
+            note.classList.toggle('hidden', !isOther);
+            if (!isOther) note.value = '';
             validateAdjustReasonForm();
           });
           note.addEventListener('input', validateAdjustReasonForm);
@@ -3837,7 +3841,7 @@ function validateAdjustReasonForm() {
           const sel = row.querySelector('.adjust-reason-select');
           const note = row.querySelector('.adjust-reason-note');
           if (!sel.value) { allValid = false; return; }
-          if (sel.value === 'Other' && !note.value.trim()) { allValid = false; }
+          if ((sel.value && sel.value.includes('other_')) && !note.value.trim()) { allValid = false; }
         });
         arConfirmBtn.disabled = !allValid;
       }
@@ -3852,7 +3856,7 @@ function validateAdjustReasonForm() {
           const sel = row.querySelector('.adjust-reason-select');
           const note = row.querySelector('.adjust-reason-note');
           const u = pendingAdjustmentUpdates.find(x => x.itemId === itemId);
-          if (u) payload.push({ itemId: u.itemId, quantity: u.quantity, reason: sel.value, note: sel.value === 'Other' ? note.value.trim() : '' });
+          if (u) payload.push({ itemId: u.itemId, quantity: u.quantity, reason: sel.value, note: (sel.value && sel.value.includes('other_')) ? note.value.trim() : '' });
         });
         arConfirmBtn.disabled = true; arConfirmBtn.textContent = 'Saving…';
         isSaving = true; svBtn.disabled = true; svBtn.classList.add('is-saving'); document.getElementById('saveBtnLabel').textContent = 'Saving…';
@@ -3883,9 +3887,24 @@ function validateAdjustReasonForm() {
 
       const eio = document.getElementById('editItemOverlay'), ein = document.getElementById('editItemName'), eic = document.getElementById('editItemCategory'), eiq = document.getElementById('editItemQty'), eiu = document.getElementById('editItemUnit'), eicv = document.getElementById('editItemContainerVolume'), eicf = document.getElementById('editItemConfirm');
       function popEditCat(sel) { eic.innerHTML = ''; state.categories.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; if (c.id === sel) o.selected = true; eic.appendChild(o); }); }
-      function openEditItem(it) { editingItemId = it.id; ein.value = it.name; const f = findItem(it.id); popEditCat(f ? f.cat.id : ''); eiq.value = it.qty; eiu.value = it.unit || ''; eicv.value = it.containerVolume || ''; openModal(eio); setTimeout(() => ein.focus(), 250); }
+      function openEditItem(it) {
+        editingItemId = it.id; ein.value = it.name;
+        const f = findItem(it.id); popEditCat(f ? f.cat.id : '');
+        eiq.value = it.qty;
+        // Populate unit dropdown from backend config
+        eiu.innerHTML = '<option value="">--</option>';
+        (appConfig.units || []).forEach(u => {
+          const opt = document.createElement('option');
+          opt.value = u.value;
+          opt.textContent = u.label;
+          if (u.value === (it.unit || '')) opt.selected = true;
+          eiu.appendChild(opt);
+        });
+        eicv.value = it.containerVolume || '';
+        openModal(eio); setTimeout(() => ein.focus(), 250);
+      }
       document.getElementById('editItemCancel').addEventListener('click', () => { closeModal(eio); editingItemId = null; });
-      eicf.addEventListener('click', async () => { if (!editingItemId) return; const name = ein.value.trim(); if (!name) { ein.focus(); return; } const cid = eic.value; let q = parseInt(eiq.value, 10); if (isNaN(q) || q < 0) q = 0; const unit = eiu.value.trim(); const cv = eicv.value ? parseInt(eicv.value, 10) : undefined; const f = findItem(editingItemId); if (!f) return; const { item, cat } = f; const oid = cat.id; eicf.disabled = true; eicf.textContent = 'Saving…'; try { await api.updateItem(editingItemId, { name, categoryId: cid, quantity: q, unit, containerVolume: cv }); item.name = name; item.qty = q; item.lastConfirmedQty = q; item.unit = unit || undefined; item.containerVolume = cv; if (cid !== oid) { moveItem(editingItemId, oid, cid); } else { refreshItem(editingItemId); } updateOverview(); updateDirty(); closeModal(eio); editingItemId = null; toast('Item updated.'); } catch (e) { toast(e.message || 'Failed to update item', true); } finally { eicf.disabled = false; eicf.textContent = 'Save Changes'; } });
+      eicf.addEventListener('click', async () => { if (!editingItemId) return; const name = ein.value.trim(); if (!name) { ein.focus(); return; } const cid = eic.value; let q = parseInt(eiq.value, 10); if (isNaN(q) || q < 0) q = 0;       const unit = eiu.value; const cv = eicv.value ? parseInt(eicv.value, 10) : undefined; const f = findItem(editingItemId); if (!f) return; const { item, cat } = f; const oid = cat.id; eicf.disabled = true; eicf.textContent = 'Saving…'; try { await api.updateItem(editingItemId, { name, categoryId: cid, quantity: q, unit, containerVolume: cv }); item.name = name; item.qty = q; item.lastConfirmedQty = q; item.unit = unit || undefined; item.containerVolume = cv; if (cid !== oid) { moveItem(editingItemId, oid, cid); } else { refreshItem(editingItemId); } updateOverview(); updateDirty(); closeModal(eio); editingItemId = null; toast('Item updated.'); } catch (e) { toast(e.message || 'Failed to update item', true); } finally { eicf.disabled = false; eicf.textContent = 'Save Changes'; } });
 
       function delItem(it) { openConfirm('Delete Item', 'Delete "<b>' + escapeHtml(it.name) + '</b>"?<br>This will permanently delete the item.', async () => { try { await api.deleteItem(it.id); removeItem(it.id); toast('Item deleted.'); } catch (e) { toast(e.message || 'Failed to delete item', true); } }, 'Delete'); }
 
@@ -4393,7 +4412,7 @@ function validateAdjustReasonForm() {
         recipeState.recipes = (recipesRes && Array.isArray(recipesRes.recipes)) ? recipesRes.recipes : (recipesRes && Array.isArray(recipesRes) ? recipesRes : []);
 
         appConfig.units = (configRes && configRes.inventory && Array.isArray(configRes.inventory.units)) ? configRes.inventory.units : [];
-        appConfig.adjustmentReasons = (configRes && configRes.inventory && Array.isArray(configRes.inventory.adjustmentReasons)) ? configRes.inventory.adjustmentReasons : [];
+        appConfig.adjustmentReasons = (configRes && configRes.inventory && configRes.inventory.adjustmentReasons) ? configRes.inventory.adjustmentReasons : { increase: [], decrease: [] };
 
         if (canManageSettings) {
           settingsData = (settingsRes && settingsRes.settings) ? settingsRes.settings : settingsRes;

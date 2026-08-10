@@ -651,6 +651,86 @@ async function runMigrations() {
       );
     `);
     await tx(`CREATE INDEX IF NOT EXISTS idx_product_barcodes_restaurant ON product_barcodes(restaurant_id, barcode);`);
+
+        // =================================================================
+    // Configuration tables – inventory units & adjustment reasons
+    // =================================================================
+    await tx(`
+      CREATE TABLE IF NOT EXISTS inventory_units (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        value TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        sort_order INTEGER DEFAULT 0,
+        enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        UNIQUE(value)
+      );
+    `);
+    await tx(`
+      INSERT INTO inventory_units (value, display_name, sort_order)
+      VALUES
+        ('ml', 'ml', 1),
+        ('cl', 'cl', 2),
+        ('L', 'L', 3),
+        ('pcs', 'pcs', 4),
+        ('bottle', 'Bottle', 5),
+        ('can', 'Can', 6),
+        ('case', 'Case', 7),
+        ('box', 'Box', 8),
+        ('pack', 'Pack', 9),
+        ('slice', 'slice', 10),
+        ('wedge', 'wedge', 11),
+        ('dash', 'dash', 12),
+        ('drop', 'drop', 13),
+        ('sprig', 'sprig', 14),
+        ('leaf', 'leaf', 15),
+        ('pinch', 'pinch', 16)
+      ON CONFLICT (value) DO UPDATE SET
+        display_name = EXCLUDED.display_name,
+        sort_order = EXCLUDED.sort_order,
+        enabled = TRUE;
+    `);
+
+    // Add direction column to inventory_adjustment_reasons (if missing)
+    await tx(`ALTER TABLE inventory_adjustment_reasons ADD COLUMN IF NOT EXISTS direction TEXT`);
+
+    // Migrate existing reasons: assign direction based on current value
+    await tx(`
+      UPDATE inventory_adjustment_reasons
+      SET direction = CASE
+        WHEN value IN ('Broken','Spillage','Staff Consumption','Expired') THEN 'decrease'
+        WHEN value = 'Inventory Count Correction' THEN 'both'   -- will be split later
+        WHEN value = 'Other' THEN 'both'
+        ELSE 'decrease'
+      END
+      WHERE direction IS NULL
+    `);
+
+    // Remove old generic reasons that we will replace with directional ones
+    await tx(`DELETE FROM inventory_adjustment_reasons WHERE value IN ('Broken','Spillage','Staff Consumption','Expired','Inventory Count Correction','Other')`);
+
+    // Seed directional reasons
+    await tx(`
+      INSERT INTO inventory_adjustment_reasons (value, display_name, direction, sort_order, enabled)
+      VALUES
+        -- Increase reasons
+        ('purchase', 'Purchase', 'increase', 1, TRUE),
+        ('found_stock', 'Found Stock', 'increase', 2, TRUE),
+        ('return_to_stock', 'Return to Stock', 'increase', 3, TRUE),
+        ('inventory_count_correction_increase', 'Inventory Count Correction', 'increase', 4, TRUE),
+        ('other_increase', 'Other', 'increase', 5, TRUE),
+        -- Decrease reasons
+        ('staff_consumption', 'Staff Consumption', 'decrease', 1, TRUE),
+        ('spillage', 'Spillage', 'decrease', 2, TRUE),
+        ('broken', 'Broken', 'decrease', 3, TRUE),
+        ('expired', 'Expired', 'decrease', 4, TRUE),
+        ('inventory_count_correction_decrease', 'Inventory Count Correction', 'decrease', 5, TRUE),
+        ('other_decrease', 'Other', 'decrease', 6, TRUE)
+      ON CONFLICT (value) DO UPDATE SET
+        display_name = EXCLUDED.display_name,
+        direction = EXCLUDED.direction,
+        sort_order = EXCLUDED.sort_order,
+        enabled = TRUE;
+    `);
     
     console.log('Migrations completed successfully.');
   });

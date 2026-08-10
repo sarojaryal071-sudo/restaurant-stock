@@ -114,13 +114,27 @@ app.get('/api/config', async (req, res) => {
       `SELECT value, display_name AS label FROM inventory_units WHERE enabled = TRUE ORDER BY sort_order ASC`
     );
     const reasonsRes = await pool.query(
-      `SELECT value, display_name AS label FROM inventory_adjustment_reasons WHERE enabled = TRUE ORDER BY sort_order ASC`
+      `SELECT value, display_name AS label, direction
+       FROM inventory_adjustment_reasons
+       WHERE enabled = TRUE
+       ORDER BY direction, sort_order ASC`
     );
+
+    const increaseReasons = [];
+    const decreaseReasons = [];
+    for (const row of reasonsRes.rows) {
+      if (row.direction === 'increase') increaseReasons.push({ value: row.value, label: row.label });
+      else if (row.direction === 'decrease') decreaseReasons.push({ value: row.value, label: row.label });
+    }
+
     res.json({
       ok: true,
       inventory: {
         units: unitsRes.rows,
-        adjustmentReasons: reasonsRes.rows
+        adjustmentReasons: {
+          increase: increaseReasons,
+          decrease: decreaseReasons
+        }
       }
     });
   } catch (err) {
@@ -128,7 +142,6 @@ app.get('/api/config', async (req, res) => {
     res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
   }
 });
-
 app.post('/api/logout', logout);
 
 // ---------------------------------------------------------------
