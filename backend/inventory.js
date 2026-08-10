@@ -94,6 +94,8 @@ async function saveStock(req, res) {
       return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'No updates provided.' });
     }
 
+    let changed;   // <--- declared here, before the transaction
+
     await transaction(async (tx) => {
       // 1. Load current stock and item names for this restaurant
       const stockRows = await tx(
@@ -113,7 +115,7 @@ async function saveStock(req, res) {
       for (const r of itemRows.rows) { itemMap[r.id] = r.name; }
 
       // 2. Collect only items whose quantity actually changes, validate reasons
-      const changed = [];
+      changed = [];   // <--- initialized here
       for (const upd of updates) {
         const itemId = upd.itemId;
         const newQty = parseFloat(upd.quantity);
