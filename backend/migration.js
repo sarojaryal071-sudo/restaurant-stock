@@ -652,7 +652,7 @@ async function runMigrations() {
     `);
     await tx(`CREATE INDEX IF NOT EXISTS idx_product_barcodes_restaurant ON product_barcodes(restaurant_id, barcode);`);
 
-        // =================================================================
+    // =================================================================
     // Configuration tables – inventory units & adjustment reasons
     // =================================================================
     await tx(`
@@ -668,31 +668,81 @@ async function runMigrations() {
     await tx(`
       INSERT INTO inventory_units (value, display_name, sort_order)
       VALUES
-        ('ml', 'ml', 1),
-        ('cl', 'cl', 2),
-        ('L', 'L', 3),
-        ('pcs', 'pcs', 4),
-        ('bottle', 'Bottle', 5),
-        ('can', 'Can', 6),
-        ('case', 'Case', 7),
-        ('box', 'Box', 8),
-        ('pack', 'Pack', 9),
-        ('slice', 'slice', 10),
-        ('wedge', 'wedge', 11),
-        ('dash', 'dash', 12),
-        ('drop', 'drop', 13),
-        ('sprig', 'sprig', 14),
-        ('leaf', 'leaf', 15),
-        ('pinch', 'pinch', 16)
+        ('ml', 'ml', 1), ('cl', 'cl', 2), ('L', 'L', 3), ('pcs', 'pcs', 4),
+        ('bottle', 'Bottle', 5), ('can', 'Can', 6), ('case', 'Case', 7),
+        ('box', 'Box', 8), ('pack', 'Pack', 9), ('slice', 'slice', 10),
+        ('wedge', 'wedge', 11), ('dash', 'dash', 12), ('drop', 'drop', 13),
+        ('sprig', 'sprig', 14), ('leaf', 'leaf', 15), ('pinch', 'pinch', 16)
       ON CONFLICT (value) DO UPDATE SET
-        display_name = EXCLUDED.display_name,
-        sort_order = EXCLUDED.sort_order,
-        enabled = TRUE;
+        display_name = EXCLUDED.display_name, sort_order = EXCLUDED.sort_order, enabled = TRUE;
     `);
 
     // Add direction column to inventory_adjustment_reasons (if missing)
     await tx(`ALTER TABLE inventory_adjustment_reasons ADD COLUMN IF NOT EXISTS direction TEXT`);
 
+    // Migrate existing reasons
+    await tx(`
+      UPDATE inventory_adjustment_reasons
+      SET direction = CASE
+        WHEN value IN ('Broken','Spillage','Staff Consumption','Expired') THEN 'decrease'
+        WHEN value IN ('Inventory Count Correction','Other') THEN 'both'
+        ELSE 'decrease'
+      END
+      WHERE direction IS NULL
+    `);
+
+    // Remove old generic reasons
+    await tx(`DELETE FROM inventory_adjustment_reasons WHERE value IN ('Broken','Spillage','Staff Consumption','Expired','Inventory Count Correction','Other')`);
+
+    // Seed directional reasons
+    await tx(`
+      INSERT INTO inventory_adjustment_reasons (value, display_name, direction, sort_order, enabled)
+      VALUES
+        ('purchase', 'Purchase', 'increase', 1, TRUE),
+        ('found_stock', 'Found Stock', 'increase', 2, TRUE),
+        ('return_to_stock', 'Return to Stock', 'increase', 3, TRUE),
+        ('inventory_count_correction_increase', 'Inventory Count Correction', 'increase', 4, TRUE),
+        ('other_increase', 'Other', 'increase', 5, TRUE),
+        ('staff_consumption', 'Staff Consumption', 'decrease', 1, TRUE),
+        ('spillage', 'Spillage', 'decrease', 2, TRUE),
+        ('broken', 'Broken', 'decrease', 3, TRUE),
+        ('expired', 'Expired', 'decrease', 4, TRUE),
+        ('inventory_count_correction_decrease', 'Inventory Count Correction', 'decrease', 5, TRUE),
+        ('other_decrease', 'Other', 'decrease', 6, TRUE)
+      ON CONFLICT (value) DO UPDATE SET
+        display_name = EXCLUDED.display_name, direction = EXCLUDED.direction,
+        sort_order = EXCLUDED.sort_order, enabled = TRUE;
+    `);
+
+    // =================================================================
+    // NEW: Item packages, volume fields, and stock intake extension
+    // =================================================================
+
+    // Volume and volume unit on items
+    await tx(`ALTER TABLE items ADD COLUMN IF NOT EXISTS volume DECIMAL(10,2)`);
+    await tx(`ALTER TABLE items ADD COLUMN IF NOT EXISTS volume_unit TEXT`);
+
+    // Item purchase packages
+    await tx(`
+      CREATE TABLE IF NOT EXISTS item_packages (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        restaurant_id UUID REFERENCES restaurants(id) ON DELETE CASCADE,
+        item_id UUID REFERENCES items(id) ON DELETE CASCADE,
+        package_unit TEXT NOT NULL,
+        units_per_package DECIMAL(10,2) NOT NULL DEFAULT 1,
+        enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        sort_order INTEGER DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (restaurant_id, item_id, package_unit)
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_item_packages_restaurant_item ON item_packages(restaurant_id, item_id);`);
+
+    // Extend stock_intake_items to preserve package info
+    await tx(`ALTER TABLE stock_intake_items ADD COLUMN IF NOT EXISTS package_id UUID REFERENCES item_packages(id)`);
+    await tx(`ALTER TABLE stock_intake_items ADD COLUMN IF NOT EXISTS quantity_purchased DECIMAL(10,2)`);
+    await tx(`ALTER TABLE stock_intake_items ADD COLUMN IF NOT EXISTS units_per_package_at_time DECIMAL(10,2)`);
     // Migrate existing reasons: assign direction based on current value
     await tx(`
       UPDATE inventory_adjustment_reasons

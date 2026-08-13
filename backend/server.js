@@ -16,6 +16,7 @@ const posActions = require('./src/posIntegration/posIntegration.actions');
 const posSalesActions = require('./src/posSales/posSales.actions');
 const stockIntakeActions = require('./src/stockIntake/stockIntake.actions');
 const productBarcodeActions = require('./src/productBarcode/productBarcode.actions');
+const packageActions = require('./src/inventoryPackages/package.actions');
 
 const app = express();
 
@@ -362,6 +363,31 @@ app.post('/api/stock-intake', (req, res, next) => {
 app.post('/api/stock-intake/barcode/lookup', (req, res, next) => {
   requireAuth(req, res, () => {
     requirePermission('settings', 'manage')(req, res, () => productBarcodeActions.lookup(req, res));
+  });
+});
+
+// ---------- Package Management (manager only) ----------
+app.get('/api/packages', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => packageActions.list(req, res));
+  });
+});
+
+app.post('/api/packages', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => packageActions.create(req, res));
+  });
+});
+
+app.patch('/api/packages/:id', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => packageActions.update(req, res));
+  });
+});
+
+app.delete('/api/packages/:id', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => packageActions.remove(req, res));
   });
 });
 
