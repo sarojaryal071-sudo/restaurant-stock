@@ -1638,6 +1638,104 @@
       white-space: nowrap
     }
 
+    /* Responsive desktop/tablet navigation + layout */
+    @media (min-width: 900px) {
+      :root {
+        --sidebar-width: 232px;
+        --desktop-gutter: clamp(20px, 3vw, 36px);
+      }
+
+      body {
+        padding-left: var(--sidebar-width);
+        padding-bottom: 80px;
+        overflow-x: hidden;
+      }
+
+      .bottom-nav {
+        top: 0;
+        bottom: 0;
+        left: 0;
+        right: auto;
+        width: var(--sidebar-width);
+        height: 100vh;
+        flex-direction: column;
+        justify-content: flex-start;
+        align-items: stretch;
+        padding: 18px 0 24px;
+        border-top: none;
+        border-right: 1px solid var(--line);
+        background: var(--charcoal-1);
+        overflow-y: auto;
+        overflow-x: hidden;
+      }
+
+      .bottom-nav-btn {
+        flex: none;
+        width: 100%;
+        min-height: 56px;
+        flex-direction: row;
+        justify-content: flex-start;
+        gap: 12px;
+        padding: 0 18px 0 16px;
+        font-size: 0.76rem;
+        letter-spacing: 0.08em;
+        border-left: 3px solid transparent;
+        border-radius: 0;
+      }
+
+      .bottom-nav-btn svg {
+        width: 20px;
+        height: 20px;
+        flex-shrink: 0;
+      }
+
+      .bottom-nav-btn:hover {
+        color: var(--paper-dim);
+        background: rgba(212, 175, 55, 0.04);
+      }
+
+      .bottom-nav-btn.active {
+        color: var(--gold-bright);
+        background: rgba(212, 175, 55, 0.06);
+        border-left-color: var(--gold-bright);
+      }
+
+      .app-header {
+        padding: 10px var(--desktop-gutter);
+      }
+
+      .app-header .header-row {
+        max-width: 1200px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      .app-header .conn-banner {
+        max-width: 1200px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: var(--space-4) var(--desktop-gutter) 0;
+      }
+
+      .fab {
+        right: var(--desktop-gutter);
+        bottom: 28px;
+      }
+
+      .fab-save {
+        bottom: calc(28px + var(--tap) + 14px);
+      }
+
+      .toast-stack {
+        bottom: 24px;
+      }
+    }
+
     @media(prefers-reduced-motion:reduce) {
       * {
         transition-duration: 0.01ms !important;
@@ -2850,6 +2948,9 @@
       <label class="field-label" for="editItemVolume">Volume (optional)</label><input class="field-input" id="editItemVolume"
         type="number" min="0" step="0.01" placeholder="e.g. 0.3">
       <label class="field-label" for="editItemVolumeUnit">Volume Unit</label><select class="field-select" id="editItemVolumeUnit"></select>
+      <div style="margin-top:var(--space-3);">
+        <button class="btn btn-ghost btn-small" id="editItemPackagesBtn" type="button">Manage Packages</button>
+      </div>
       <div class="modal-actions"><button class="btn btn-ghost" id="editItemCancel">Cancel</button><button
           class="btn btn-gold" id="editItemConfirm">Save Changes</button></div>    </div>
   </div>
@@ -3287,7 +3388,7 @@ const titles = {
           document.getElementById('newItemName').value = '';
           document.getElementById('newItemQty').value = 0;
           document.getElementById('newItemVolume').value = '';
-          popVolumeUnitSel(document.getElementById('newItemUnit'));
+          popStockUnitSel(document.getElementById('newItemUnit'));
           popVolumeUnitSel(document.getElementById('newItemVolumeUnit'));
           openModal(document.getElementById('addModalOverlay'));
         });
@@ -3303,16 +3404,21 @@ const titles = {
       }
 
       let managingPackagesForItemId = null;
+      let editingPackageId = null;
 
       function openPackageManager(itemId) {
         managingPackagesForItemId = itemId;
+        editingPackageId = null;
         const f = findItem(itemId);
         document.getElementById('packageManagerTitle').textContent = f ? `Packages — ${f.item.name}` : 'Packages';
         document.getElementById('packageUnitInput').value = '';
         document.getElementById('packageUnitsPerInput').value = '';
+        const addBtn = document.getElementById('packageAddBtn');
+        if (addBtn) { addBtn.textContent = 'Add Package'; addBtn.classList.remove('btn-ghost'); addBtn.classList.add('btn-gold'); }
         renderPackageManagerList();
         openModal(document.getElementById('packageManagerModalOverlay'));
       }
+
 
       function renderPackageManagerList() {
         const list = document.getElementById('packageManagerList');
@@ -3329,12 +3435,22 @@ const titles = {
                 <span class="adjust-reason-name">${escapeHtml(p.package_unit)} → ${p.units_per_package} ${escapeHtml(stockUnit)}</span>
                 <span style="font-size:0.72rem;color:${p.enabled ? 'var(--qty-good)' : 'var(--paper-faint)'};">${p.enabled ? 'Enabled' : 'Disabled'}</span>
               </div>
-              <div style="display:flex;gap:6px;">
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <button class="btn btn-ghost btn-small pkg-edit-btn" data-package-id="${p.id}" data-unit="${escapeHtml(p.package_unit)}" data-units="${p.units_per_package}">Edit</button>
                 <button class="btn btn-ghost btn-small pkg-toggle-btn" data-package-id="${p.id}" data-enabled="${p.enabled}">${p.enabled ? 'Disable' : 'Enable'}</button>
                 <button class="btn btn-danger btn-small pkg-delete-btn" data-package-id="${p.id}">Delete</button>
               </div>
             </div>
           `).join('');
+          list.querySelectorAll('.pkg-edit-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              editingPackageId = btn.dataset.packageId;
+              document.getElementById('packageUnitInput').value = btn.dataset.unit;
+              document.getElementById('packageUnitsPerInput').value = btn.dataset.units;
+              const addBtn = document.getElementById('packageAddBtn');
+              if (addBtn) { addBtn.textContent = 'Update Package'; addBtn.classList.remove('btn-gold'); addBtn.classList.add('btn-ghost'); }
+            });
+          });
           list.querySelectorAll('.pkg-toggle-btn').forEach(btn => {
             btn.addEventListener('click', async () => {
               btn.disabled = true;
@@ -3372,19 +3488,28 @@ const titles = {
         if (!unitVal) { toast('Enter a purchase unit name (e.g. Case).', true); return; }
         if (!perPackage || perPackage <= 0) { toast('Enter how many stock units this package contains.', true); return; }
         const btn = document.getElementById('packageAddBtn');
-        btn.disabled = true; btn.textContent = 'Adding…';
+        btn.disabled = true;
         try {
-          await api.createPackage(managingPackagesForItemId, unitVal, perPackage, 0);
+          if (editingPackageId) {
+            await api.updatePackage(editingPackageId, { package_unit: unitVal, units_per_package: perPackage });
+            toast('Package updated.');
+            editingPackageId = null;
+          } else {
+            await api.createPackage(managingPackagesForItemId, unitVal, perPackage, 0);
+            toast('Package added.');
+          }
           cachedPackagesData = null;
           await loadPackagesIfNeeded();
           unitInput.value = ''; perPackageInput.value = '';
+          btn.textContent = 'Add Package';
+          btn.classList.remove('btn-ghost');
+          btn.classList.add('btn-gold');
           renderPackageManagerList();
           renderInventoryConfig();
-          toast('Package added.');
         } catch (e) {
-          toast(e.message || 'Failed to add package', true);
+          toast(e.message || 'Failed to save package', true);
         } finally {
-          btn.disabled = false; btn.textContent = 'Add Package';
+          btn.disabled = false;
         }
       });
 
@@ -4277,6 +4402,10 @@ function validateAdjustReasonForm() {
         openModal(eio); setTimeout(() => ein.focus(), 250);
       }
       document.getElementById('editItemCancel').addEventListener('click', () => { closeModal(eio); editingItemId = null; });
+      document.getElementById('editItemPackagesBtn').addEventListener('click', () => {
+        if (!editingItemId) return;
+        openPackageManager(editingItemId);
+      });
       eicf.addEventListener('click', async () => {
         if (!editingItemId) return;
 
@@ -4358,15 +4487,32 @@ function validateAdjustReasonForm() {
 
       const aso = document.getElementById('actionSheetOverlay');
       document.getElementById('actionSheetCancel').addEventListener('click', () => closeModal(aso));
-      document.getElementById('actionAddItem').addEventListener('click', () => { closeModal(aso); if (!state.categories.length) { toast('No categories loaded.', true); return; } popCatSel(); document.getElementById('newItemName').value = ''; document.getElementById('newItemQty').value = 0; document.getElementById('newItemVolume').value = ''; popVolumeUnitSel(document.getElementById('newItemUnit')); popVolumeUnitSel(document.getElementById('newItemVolumeUnit')); openModal(document.getElementById('addModalOverlay')); setTimeout(() => document.getElementById('newItemName').focus(), 250); });
+      document.getElementById('actionAddItem').addEventListener('click', () => { closeModal(aso); if (!state.categories.length) { toast('No categories loaded.', true); return; } popCatSel(); document.getElementById('newItemName').value = ''; document.getElementById('newItemQty').value = 0; document.getElementById('newItemVolume').value = ''; popStockUnitSel(document.getElementById('newItemUnit')); popVolumeUnitSel(document.getElementById('newItemVolumeUnit')); openModal(document.getElementById('addModalOverlay')); setTimeout(() => document.getElementById('newItemName').focus(), 250); });
       document.getElementById('actionAddCategory').addEventListener('click', () => { closeModal(aso); openCatDialog('add'); });
 
       const ao = document.getElementById('addModalOverlay'), cs = document.getElementById('newItemCategory'), nin = document.getElementById('newItemName'), niq = document.getElementById('newItemQty'), acf = document.getElementById('addModalConfirm');
       const niUnit = document.getElementById('newItemUnit'), niVol = document.getElementById('newItemVolume'), niVolUnit = document.getElementById('newItemVolumeUnit');
       function popCatSel() { cs.innerHTML = ''; state.categories.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; cs.appendChild(o); }); }
-      function popVolumeUnitSel(selectEl) { selectEl.innerHTML = '<option value="">--</option>'; (appConfig.units || []).forEach(u => { const o = document.createElement('option'); o.value = u.value; o.textContent = u.label; selectEl.appendChild(o); }); }
+      function popStockUnitSel(selectEl) {
+        selectEl.innerHTML = '<option value="">--</option>';
+        (appConfig.units || []).forEach(u => {
+          const o = document.createElement('option');
+          o.value = u.value;
+          o.textContent = u.label;
+          selectEl.appendChild(o);
+        });
+      }
+      function popVolumeUnitSel(selectEl) {
+        selectEl.innerHTML = '<option value="">--</option>';
+        (appConfig.units || []).filter(u => ['ml', 'cl', 'L'].includes(u.value)).forEach(u => {
+          const o = document.createElement('option');
+          o.value = u.value;
+          o.textContent = u.label;
+          selectEl.appendChild(o);
+        });
+      }
       document.getElementById('addModalCancel').addEventListener('click', () => closeModal(ao));
-      acf.addEventListener('click', async () => { const name = nin.value.trim(); if (!name) { nin.focus(); return; } let q = parseInt(niq.value, 10); if (isNaN(q) || q < 0) q = 0; const cid = cs.value; const c = state.categories.find(x => x.id === cid); if (!c) return; const unit = niUnit.value || undefined; const vol = niVol.value ? parseFloat(niVol.value) : undefined; const volUnit = niVolUnit.value || undefined; acf.disabled = true; acf.textContent = 'Adding…'; try { const r = await api.addCustomItem(cid, name, q, { unit, volume: vol, volumeUnit: volUnit }); const ni = (r && r.item) ? r.item : { id: uid(), name, q, custom: true }; ni.custom = true; ni.lastConfirmedQty = ni.qty; ni.unit = unit; ni.volume = vol; ni.volumeUnit = volUnit; appendItem(cid, ni); closeModal(ao); toast('Added "' + name + '"'); if (settingsSubPage === 'inventoryConfig') renderInventoryConfig(); } catch (e) { toast(e.message || 'Could not add item', true); } finally { acf.disabled = false; acf.textContent = 'Add Item'; } });
+      acf.addEventListener('click', async () => { const name = nin.value.trim(); if (!name) { nin.focus(); return; } let q = parseInt(niq.value, 10); if (isNaN(q) || q < 0) q = 0; const cid = cs.value; const c = state.categories.find(x => x.id === cid); if (!c) return; const unit = niUnit.value || undefined; const vol = niVol.value ? parseFloat(niVol.value) : undefined; const volUnit = niVolUnit.value || undefined; acf.disabled = true; acf.textContent = 'Adding…'; try { const r = await api.addCustomItem(cid, name, q, { unit, volume: vol, volumeUnit: volUnit }); const ni = (r && r.item) ? r.item : { id: uid(), name, q, custom: true }; ni.custom = true; ni.lastConfirmedQty = ni.qty; ni.unit = unit; ni.volume = vol; ni.volumeUnit = volUnit; appendItem(cid, ni); closeModal(ao); toast('Added "' + name + '"'); if (settingsSubPage === 'inventoryConfig') renderInventoryConfig(); openPackageManager(ni.id); } catch (e) { toast(e.message || 'Could not add item', true); } finally { acf.disabled = false; acf.textContent = 'Add Item'; } });
 
       document.getElementById('exportBtn').addEventListener('click', async () => { try { const blob = await api.exportInventory(); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'inventory_export.csv'; document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(() => URL.revokeObjectURL(url), 1500); toast('Inventory exported.'); } catch (e) { toast(e.message || 'Export failed', true); } });
 
