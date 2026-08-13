@@ -1880,6 +1880,115 @@
       color: var(--danger);
     }
 
+    /* ========== FORM FIELD DISABLED STATES (NEW) ========== */
+    .field-input:disabled,
+    .field-select:disabled,
+    .adjust-reason-select:disabled,
+    .adjust-reason-note:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      background: var(--charcoal-2);
+    }
+
+    /* ========== PACKAGE READ-ONLY SUMMARY (NEW) ========== */
+    .package-readonly-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 6px
+    }
+
+    .package-readonly-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-2);
+      background: var(--charcoal-2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px
+    }
+
+    .package-readonly-unit {
+      font-size: 0.84rem;
+      font-weight: 700;
+      color: var(--paper)
+    }
+
+    .package-readonly-qty {
+      font-size: 0.78rem;
+      color: var(--paper-dim);
+      font-family: var(--font-mono);
+      text-align: right
+    }
+
+    .package-readonly-status {
+      color: var(--paper-faint);
+      font-family: var(--font-body);
+      font-style: italic
+    }
+
+    .package-readonly-empty {
+      font-size: 0.8rem;
+      color: var(--paper-faint);
+      padding: 10px 0
+    }
+
+    /* ========== FILE UPLOAD CONTROL (NEW) ========== */
+    .file-upload-input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0
+    }
+
+    .file-upload-wrap {
+      display: flex;
+      align-items: stretch;
+      gap: 0;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      cursor: pointer;
+      background: var(--charcoal-1);
+      transition: border-color 0.15s ease;
+      max-width: 420px
+    }
+
+    .file-upload-wrap:hover {
+      border-color: var(--gold-deep)
+    }
+
+    .file-upload-btn {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 18px;
+      background: linear-gradient(135deg, var(--gold-bright), var(--gold-deep));
+      color: #1c1305;
+      font-weight: 700;
+      font-size: 0.82rem;
+      white-space: nowrap
+    }
+
+    .file-upload-filename {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      font-size: 0.82rem;
+      color: var(--paper-dim);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap
+    }
+
     /* ========== SETTINGS UI POLISH (NEW) ========== */
 
     /* Settings menu cards */
@@ -2518,6 +2627,7 @@
     .staff-toolbar {
       display: flex;
       justify-content: flex-end;
+      gap: var(--space-2);
       margin-bottom: var(--space-3)
     }
 
@@ -2698,6 +2808,166 @@
       font-size: 0.76rem;
       color: var(--gold-bright);
       margin-top: 6px
+    }
+
+    /* Purchase Register */
+    .purchase-register-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: var(--space-2);
+      margin-bottom: var(--space-4);
+      flex-wrap: wrap;
+    }
+
+    .purchase-register-title {
+      font-family: var(--font-display);
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--gold-bright);
+    }
+
+    .purchase-register-subtitle {
+      font-size: 0.82rem;
+      color: var(--paper-faint);
+    }
+
+    .purchase-group-title {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--paper-dim);
+      margin: var(--space-4) 0 var(--space-2);
+    }
+
+    .purchase-card {
+      background: var(--charcoal-1);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: var(--space-3) var(--space-4);
+      margin-bottom: var(--space-2);
+      box-shadow: var(--shadow-card);
+      cursor: pointer;
+      transition: border-color 0.15s ease;
+    }
+
+    .purchase-card:hover {
+      border-color: var(--line-strong);
+    }
+
+    .purchase-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: var(--space-2);
+      margin-bottom: 6px;
+    }
+
+    .purchase-card-time {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--gold-bright);
+    }
+
+    .purchase-card-id {
+      font-size: 0.72rem;
+      color: var(--paper-faint);
+    }
+
+    .purchase-card-body {
+      font-size: 0.85rem;
+      color: var(--paper-dim);
+      line-height: 1.4;
+    }
+
+    .purchase-card-body .purchase-item-name {
+      font-weight: 700;
+      color: var(--paper);
+    }
+
+    .purchase-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .purchase-table th,
+    .purchase-table td {
+      text-align: left;
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .purchase-table th {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--paper-dim);
+    }
+
+    .purchase-table td {
+      font-size: 0.88rem;
+      color: var(--paper);
+    }
+
+    .purchase-modal-item {
+      background: var(--charcoal-1);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      padding: var(--space-3);
+      margin-bottom: var(--space-2);
+    }
+
+    .purchase-modal-item .field-label {
+      margin-top: var(--space-2);
+    }
+
+    .purchase-modal-item .field-label:first-child {
+      margin-top: 0;
+    }
+
+    .purchase-modal-item .intake-item-select,
+    .purchase-modal-item .intake-qty-input,
+    .purchase-modal-item .intake-package-select {
+      width: 100%;
+      flex: none;
+    }
+
+    .purchase-modal-item .purchase-row-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: var(--space-2);
+    }
+
+    @media(min-width:640px) {
+      .purchase-modal-item .purchase-row-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .purchase-preview {
+      font-size: 0.82rem;
+      color: var(--gold-bright);
+      margin-top: var(--space-2);
+      font-weight: 600;
+    }
+
+    .purchase-summary {
+      border-top: 1px solid var(--line);
+      margin-top: var(--space-3);
+      padding-top: var(--space-3);
+    }
+
+    .purchase-summary-line {
+      display: flex;
+      justify-content: space-between;
+      gap: var(--space-2);
+      font-size: 0.85rem;
+      padding: 4px 0;
+    }
+
+    .purchase-summary-line .purchase-summary-qty {
+      color: var(--gold-bright);
+      font-family: var(--font-mono);
     }
   </style>
 </head>
@@ -2948,6 +3218,8 @@
       <label class="field-label" for="editItemVolume">Volume (optional)</label><input class="field-input" id="editItemVolume"
         type="number" min="0" step="0.01" placeholder="e.g. 0.3">
       <label class="field-label" for="editItemVolumeUnit">Volume Unit</label><select class="field-select" id="editItemVolumeUnit"></select>
+      <label class="field-label">Packages</label>
+      <div id="editItemPackagesList" class="package-readonly-list"></div>
       <div style="margin-top:var(--space-3);">
         <button class="btn btn-ghost btn-small" id="editItemPackagesBtn" type="button">Manage Packages</button>
       </div>
@@ -3033,7 +3305,7 @@
     </div>
   </div>
 
-  <!-- ========== NEW: Staff Management Modals ========== -->
+  <!-- Staff Management Modals -->
   <div class="modal-overlay" id="staffAddModalOverlay">
     <div class="modal-card">
       <div class="modal-title">Add Staff</div>
@@ -3094,6 +3366,29 @@
     </div>
   </div>
 
+  <!-- Purchase Register Modals -->
+  <div class="modal-overlay" id="purchaseModalOverlay">
+    <div class="modal-card" style="max-width:560px">
+      <div class="modal-title">Add Purchase</div>
+      <p class="settings-detail-desc" style="margin-bottom:var(--space-2);">Record newly received stock. The backend calculates the final stock result.</p>
+      <div id="purchaseItemsList"></div>
+      <button class="add-ingredient-btn" id="addPurchaseItemBtn">+ Add Another Item</button>
+      <div class="purchase-summary" id="purchaseSummary"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="purchaseCancelBtn">Cancel</button>
+        <button class="btn btn-gold" id="purchaseSaveBtn" disabled>Save Purchase</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="purchaseDetailsModalOverlay">
+    <div class="modal-card">
+      <div class="modal-title">Purchase Details</div>
+      <div id="purchaseDetailsContent"></div>
+      <div class="modal-actions"><button class="btn btn-ghost" id="purchaseDetailsCloseBtn">Close</button></div>
+    </div>
+  </div>
+
   <div class="toast-stack" id="toastStack"></div>
 
   <script>
@@ -3136,7 +3431,7 @@
       let currentAllocationDetails = null;
       let authLoadingInterval = null;
       let settingsData = null;
-      let settingsSubPage = null; // 'menu' or a section key like 'restaurant'
+      let settingsSubPage = null;
       let salesFileHash = null;
       let salesPeriodStart = null;
       let salesPeriodEnd = null;
@@ -3144,7 +3439,7 @@
       let cachedPermissionsData = null;
       let cachedStaffData = null;
       let cachedPosSalesData = null;
-      let cachedPackagesData = null; // array from GET /api/packages, loaded once per session and reused
+      let cachedPackagesData = null;
 
       async function loadSettings() {
         try {
@@ -3242,15 +3537,13 @@ const titles = {
           if (!content) return;
           content.innerHTML = '';
 
-          // Group definitions by module
           const moduleMap = {};
           definitions.forEach(def => {
-            if (!def.enabled) return; // skip disabled definitions in UI
+            if (!def.enabled) return;
             if (!moduleMap[def.module]) moduleMap[def.module] = [];
             moduleMap[def.module].push(def);
           });
 
-          // Build controls per module
           Object.keys(moduleMap).forEach(mod => {
             content.innerHTML += `<div class="permission-group"><div class="permission-group-title">${mod.charAt(0).toUpperCase() + mod.slice(1)}</div>`;
             moduleMap[mod].forEach(def => {
@@ -3273,19 +3566,17 @@ const titles = {
             content.innerHTML += `</div>`;
           });
 
-          // Save button
           const btn = document.createElement('button');
           btn.className = 'btn-save-premium';
           btn.textContent = 'Save Permissions';
           btn.addEventListener('click', async () => {
             btn.disabled = true; btn.textContent = 'Saving…';
             try {
-              // Build complete staff permissions map based on enabled definitions
               const fullStaff = {};
               definitions.forEach(def => {
                 if (!def.enabled) return;
                 if (!fullStaff[def.module]) fullStaff[def.module] = {};
-                fullStaff[def.module][def.permission] = false; // default false
+                fullStaff[def.module][def.permission] = false;
               });
               content.querySelectorAll('input[data-mod]').forEach(cb => {
                 const mod = cb.dataset.mod;
@@ -3316,6 +3607,26 @@ const titles = {
 
       function packagesForItem(itemId) {
         return (cachedPackagesData || []).filter(p => p.item_id === itemId);
+      }
+
+      function renderEditItemPackageSummary(itemId) {
+        const list = document.getElementById('editItemPackagesList');
+        if (!list) return;
+        const f = findItem(itemId);
+        const stockUnit = f ? (f.item.unit || 'units') : 'units';
+        const pkgs = packagesForItem(itemId);
+        if (!pkgs.length) {
+          list.innerHTML = '<div class="package-readonly-empty">No packages configured</div>';
+          return;
+        }
+        list.innerHTML = pkgs.map(p => {
+          const num = parseFloat(p.units_per_package);
+          const status = p.enabled ? '' : ' <span class="package-readonly-status">Disabled</span>';
+          return `<div class="package-readonly-row">
+            <div class="package-readonly-unit">${escapeHtml(p.package_unit)}</div>
+            <div class="package-readonly-qty">${num} ${escapeHtml(stockUnit)}${num === 1 ? '' : 's'}${status}</div>
+          </div>`;
+        }).join('');
       }
 
       async function showInventoryConfigDetail() {
@@ -3419,7 +3730,6 @@ const titles = {
         openModal(document.getElementById('packageManagerModalOverlay'));
       }
 
-
       function renderPackageManagerList() {
         const list = document.getElementById('packageManagerList');
         if (!list) return;
@@ -3460,6 +3770,7 @@ const titles = {
                 await loadPackagesIfNeeded();
                 renderPackageManagerList();
                 renderInventoryConfig();
+                if (editingItemId) renderEditItemPackageSummary(editingItemId);
               } catch (e) { toast(e.message || 'Failed to update package', true); }
               finally { btn.disabled = false; }
             });
@@ -3473,11 +3784,13 @@ const titles = {
                 await loadPackagesIfNeeded();
                 renderPackageManagerList();
                 renderInventoryConfig();
+                if (editingItemId) renderEditItemPackageSummary(editingItemId);
                 toast('Package deleted.');
               } catch (e) { toast(e.message || 'Failed to delete package', true); btn.disabled = false; }
             });
           });
         }
+        if (editingItemId) renderEditItemPackageSummary(editingItemId);
       }
 
       document.getElementById('packageAddBtn').addEventListener('click', async () => {
@@ -3576,19 +3889,28 @@ const titles = {
         content.appendChild(btn);
       }
 
-      // ==================== SALES SECTION (replaces POS Integration UI) ====================
+      // ==================== SALES SECTION ====================
       function showSalesDetail() {
         const content = document.getElementById('settingsDetailContent');
         if (!content) return;
         content.innerHTML = `
-      <div id="salesImportSection" style="background:var(--charcoal-1);border:1px solid var(--line);border-radius:var(--radius-lg);padding:var(--space-4);margin-bottom:var(--space-4);">
-        <h3 style="margin:0 0 var(--space-1);">Sales Import</h3>
-        <p style="font-size:0.82rem;color:var(--paper-dim);margin-bottom:var(--space-3);">Import your POS sales report to automatically deduct sold drinks from inventory.</p>
-        <input type="file" id="salesCsvFile" accept=".csv" style="margin-bottom:var(--space-2);">
+      <div id="salesImportSection" class="sales-summary-card" style="margin-top:0;">
+        <div class="sales-summary-header">
+          <div class="sales-summary-title">Sales Import</div>
+          <div class="sales-summary-desc">Import your POS sales report to automatically deduct sold drinks from inventory.</div>
+        </div>
+        <label class="file-upload-wrap" for="salesCsvFile">
+          <span class="file-upload-btn">Choose CSV File</span>
+          <span class="file-upload-filename" id="salesCsvFileName">No file selected</span>
+        </label>
+        <input type="file" id="salesCsvFile" accept=".csv" class="file-upload-input">
         <div id="salesImportPreview"></div>
       </div>
-      <div id="salesSummarySection" style="background:var(--charcoal-1);border:1px solid var(--line);border-radius:var(--radius-lg);padding:var(--space-4);">
-        <h3 style="margin:0 0 var(--space-1);">Sales Summary</h3>
+      <div id="salesSummarySection" class="sales-summary-card">
+        <div class="sales-summary-header">
+          <div class="sales-summary-title">Sales Summary</div>
+          <div class="sales-summary-desc">Quantities sold per item for the selected period.</div>
+        </div>
         <div id="salesSummaryContent"></div>
       </div>
     `;
@@ -3600,6 +3922,8 @@ const titles = {
       async function handleSalesFileSelect(e) {
         const file = e.target.files[0];
         if (!file) return;
+        const nameEl = document.getElementById('salesCsvFileName');
+        if (nameEl) nameEl.textContent = file.name;
         const formData = new FormData();
         formData.append('file', file);
         try {
@@ -3627,7 +3951,7 @@ const titles = {
           const itemName = item.itemName || '—';
           html += `<tr>
         <td>${escapeHtml(item.sourceProductName)}</td>
-        <td>${item.matched ? escapeHtml(itemName) : `<select class="field-select" id="mapSelect_${idx}" style="width:auto;display:inline-block;"><option value="">-- Select --</option></select>`}</td>
+        <td>${item.matched ? escapeHtml(itemName) : `<select class="field-select" id="mapSelect_${idx}" style="width:auto;min-width:160px;display:inline-block;padding:8px 10px;font-size:0.82rem;"><option value="">-- Select --</option></select>`}</td>
         <td>${item.quantitySold}</td>
         <td>${status}</td>
       </tr>`;
@@ -3636,12 +3960,10 @@ const titles = {
         html += `<button id="applySalesBtn" class="btn btn-gold btn-small" style="margin-top:var(--space-2);" ${salesItems.some(it => !it.matched) ? 'disabled' : ''}>Apply Sales</button>`;
         previewDiv.innerHTML = html;
 
-        // Populate dropdowns for unmatched items
         salesItems.forEach((item, idx) => {
           if (!item.matched) {
             const select = document.getElementById(`mapSelect_${idx}`);
             if (!select) return;
-            // Add blank option already present
             state.categories.forEach(cat => {
               cat.items.forEach(it => {
                 const option = document.createElement('option');
@@ -3655,7 +3977,6 @@ const titles = {
               if (!itemId) return;
               try {
                 await api.saveSalesMapping(item.sourceProductName, itemId);
-                // Update local state
                 item.itemId = itemId;
                 item.itemName = e.target.selectedOptions[0].textContent;
                 item.matched = true;
@@ -3681,14 +4002,12 @@ const titles = {
                 quantitySold: it.quantitySold
               })));
               toast('Sales imported successfully. Inventory has been updated.');
-              // Reset import state
               salesFileHash = null;
               salesPeriodStart = null;
               salesPeriodEnd = null;
               salesItems = [];
               document.getElementById('salesCsvFile').value = '';
               renderSalesPreview();
-              // Refresh inventory and sales summary
               loadInventory();
               loadSalesSummary('today');
             } catch (err) {
@@ -3728,7 +4047,6 @@ const titles = {
           }
           summaryDiv.innerHTML = html;
 
-          // Period button active state and handler
           summaryDiv.querySelectorAll('.period-btn').forEach(btn => {
             if (btn.dataset.period === period) btn.classList.add('btn-gold');
             btn.addEventListener('click', () => loadSalesSummary(btn.dataset.period));
@@ -3738,7 +4056,7 @@ const titles = {
         }
       }
 
-      let editingStaffId = null;  // NEW: for staff edit modal
+      let editingStaffId = null;
 
       async function showStaffManagementDetail() {
         const content = document.getElementById('settingsDetailContent');
@@ -3818,7 +4136,6 @@ const titles = {
         setTimeout(() => document.getElementById('staffEditName').focus(), 250);
       }
 
-      // Staff modal event handlers
       document.getElementById('staffAddCancel').addEventListener('click', () => {
         closeModal(document.getElementById('staffAddModalOverlay'));
       });
@@ -3873,7 +4190,6 @@ const titles = {
 
       let shouldOpenAllocations = false;
 
-      // --- Permissions ---
       const PERMISSIONS_KEY = 'sc_permissions';
       let userPermissions = {};
 
@@ -3882,45 +4198,32 @@ const titles = {
       }
       function savePermissions(perms) {
         try { localStorage.setItem(PERMISSIONS_KEY, JSON.stringify(perms)); } catch (e) {
-          console.error('Failed to save permissions:', e);  // ← add this line}
+          console.error('Failed to save permissions:', e);
         }
       }
       function clearPermissions() {
         try { localStorage.removeItem(PERMISSIONS_KEY); } catch (e) { }
       }
 
-      /**
-       * Check a permission path like 'inventory.edit'
-       */
       function can(module, action) {
         const modPerms = userPermissions[module];
         return modPerms && typeof modPerms === 'object' && modPerms[action] === true;
       }
-      /** Hide/show UI elements based on permissions */
+
       function applyUIPermissions() {
-        // Inventory page static buttons
         const exportBtn = document.getElementById('exportBtn');
-        // Export is not a separate permission; show to anyone who can view inventory
         if (exportBtn) exportBtn.classList.toggle('hidden', !can('inventory', 'view'));
 
-        // FAB visibility
         if (currentPage === 'inventory') {
-          // Show FAB only if staff can add items or categories
           const showFab = can('inventory', 'add');
           fab.classList.toggle('hidden', !showFab);
         } else if (currentPage === 'recipes') {
-          // Recipes page: show FAB only if can add recipes
           fab.classList.toggle('hidden', !can('recipes', 'create'));
         } else {
-          // Settings or other pages: hide FAB completely
           fab.classList.add('hidden');
-        }            // Show Settings tab for managers
+        }
         navSet.classList.toggle('hidden', !can('settings', 'manage'));
-        // Stock Intake tab: manager only (settings.manage), same permission the backend enforces
         navSI.classList.toggle('hidden', !can('settings', 'manage'));
-
-        // Reset button (allowed for both roles)
-        // No change required.
       }
 
       function escapeHtml(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
@@ -4048,16 +4351,10 @@ const titles = {
         getInventoryConfig: () => apiCall('GET', '/config'),
         exportInventory: () => apiCall('GET', '/?action=exportInventory', null, 'blob'),
         resetStock: () => apiCall('POST', '/', { action: 'resetStock' }),
-
-        // Settings
         getSettings: () => apiCall('GET', '/settings'),
         updateSettings: (section, data) => apiCall('PATCH', `/settings/${section}`, data),
-
-        // Permissions (staff management)
         getPermissions: () => apiCall('GET', '/permissions'),
         updatePermissions: (role, permissions) => apiCall('PATCH', '/permissions', { role, permissions }),
-
-        // POS actions
         connectPos: (provider) => apiCall('POST', '/pos/connect', { provider }),
         disconnectPos: () => apiCall('POST', '/pos/disconnect'),
         syncPos: () => apiCall('POST', '/pos/sync'),
@@ -4068,7 +4365,6 @@ const titles = {
           }
           return apiCall('GET', q);
         },
-        // Stock Intake
         getStockIntake: (start, end) => {
           let q = '/stock-intake';
           const params = [];
@@ -4079,20 +4375,16 @@ const titles = {
         },
         createStockIntake: (items) => apiCall('POST', '/stock-intake', { items }),
         previewStockIntake: (itemId, packageId, quantityPurchased) => apiCall('POST', '/stock-intake/preview', { itemId, packageId, quantityPurchased }),
-        // Item Packages
         getPackages: () => apiCall('GET', '/packages'),
         createPackage: (itemId, packageUnit, unitsPerPackage, sortOrder) => apiCall('POST', '/packages', { itemId, packageUnit, unitsPerPackage, sortOrder }),
         updatePackage: (id, data) => apiCall('PATCH', `/packages/${id}`, data),
         deletePackage: (id) => apiCall('DELETE', `/packages/${id}`),
-        // Pending Allocations
         listPendingAllocations: () => apiCall('GET', '/?action=listPendingAllocations'),
         getPendingAllocationDetails: (allocationId) => apiCall('GET', '/?action=getPendingAllocationDetails&allocationId=' + encodeURIComponent(allocationId)),
         resolvePendingAllocation: (allocationId, mappings) => apiCall('POST', '/', { action: 'resolvePendingAllocation', allocationId, mappings }),
-        // NEW: Staff management
         listStaff: () => apiCall('GET', '/staff'),
         createStaff: (name, pin) => apiCall('POST', '/staff', { name, pin }),
         updateStaff: (id, data) => apiCall('PATCH', `/staff/${id}`, data),
-        // NEW: CSV Sales Import
         getSalesSummary: (period) => apiCall('GET', '/pos/sales?period=' + encodeURIComponent(period)),
         saveSalesMapping: (sourceProductName, itemId) => apiCall('POST', '/pos/sales/mappings', { sourceProductName, itemId }),
         applySalesImport: (fileHash, periodStart, periodEnd, items) => apiCall('POST', '/pos/sales/import/apply', { fileHash, periodStart, periodEnd, items })
@@ -4201,7 +4493,6 @@ const titles = {
         h.addEventListener('click', ev => { if (ev.target.closest('.cat-menu-btn')) return; expandedState[c.id] = !expandedState[c.id]; card.classList.toggle('expanded'); h.setAttribute('aria-expanded', expandedState[c.id] ? 'true' : 'false'); try { localStorage.setItem(EXPANDED_KEY, JSON.stringify(expandedState)); } catch (e) { } }); const body = document.createElement('div'); body.className = 'cat-body'; const bi = document.createElement('div'); bi.className = 'cat-body-inner'; c.items.forEach(it => bi.appendChild(renderItemRow(c, it))); body.appendChild(bi); card.appendChild(h); card.appendChild(body); return card;
       }
 
-      // Original renderItemRow – we will wrap it later to add the warning
       function renderItemRowOrig(c, it) {
         const row = document.createElement('div');
         row.className = 'item-row' + (it.qty !== it.lastConfirmedQty ? ' is-pending' : '');
@@ -4251,7 +4542,6 @@ const titles = {
         return row;
       }
 
-      // Override renderItemRow to add pending allocation warning
       function renderItemRow(c, it) {
         const row = renderItemRowOrig(c, it);
         if (it.qty < 0) {
@@ -4294,7 +4584,6 @@ const titles = {
           const row = document.createElement('div');
           row.className = 'adjust-reason-row';
           row.dataset.itemId = u.itemId;
-          // Determine direction
           const direction = u.quantity > oldQty ? 'increase' : 'decrease';
           const reasons = (appConfig.adjustmentReasons && appConfig.adjustmentReasons[direction]) || [];
           row.innerHTML = `
@@ -4311,7 +4600,6 @@ const titles = {
           const sel = row.querySelector('.adjust-reason-select');
           const note = row.querySelector('.adjust-reason-note');
           sel.addEventListener('change', () => {
-            // Show note for any "other" reason (backend value contains "other")
             const isOther = sel.value && (sel.value.includes('other_') || sel.value === 'Other');
             note.classList.toggle('hidden', !isOther);
             if (!isOther) note.value = '';
@@ -4324,7 +4612,7 @@ const titles = {
         openModal(arModalOverlay);
       }
 
-function validateAdjustReasonForm() {
+      function validateAdjustReasonForm() {
         const rows = arList.querySelectorAll('.adjust-reason-row');
         let allValid = rows.length > 0;
         rows.forEach(row => {
@@ -4378,10 +4666,9 @@ function validateAdjustReasonForm() {
       const eio = document.getElementById('editItemOverlay'), ein = document.getElementById('editItemName'), eic = document.getElementById('editItemCategory'), eiu = document.getElementById('editItemUnit'), eicf = document.getElementById('editItemConfirm');
       function popEditCat(sel) { eic.innerHTML = ''; state.categories.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; if (c.id === sel) o.selected = true; eic.appendChild(o); }); }
       const eiVol = document.getElementById('editItemVolume'), eiVolUnit = document.getElementById('editItemVolumeUnit');
-      function openEditItem(it) {
+      async function openEditItem(it) {
         editingItemId = it.id; ein.value = it.name;
         const f = findItem(it.id); popEditCat(f ? f.cat.id : '');
-        // Populate stock unit dropdown from backend config
         eiu.innerHTML = '<option value="">--</option>';
         (appConfig.units || []).forEach(u => {
           const opt = document.createElement('option');
@@ -4399,6 +4686,8 @@ function validateAdjustReasonForm() {
           if (u.value === (it.volumeUnit || '')) opt.selected = true;
           eiVolUnit.appendChild(opt);
         });
+        try { await loadPackagesIfNeeded(); } catch (e) { }
+        renderEditItemPackageSummary(it.id);
         openModal(eio); setTimeout(() => ein.focus(), 250);
       }
       document.getElementById('editItemCancel').addEventListener('click', () => { closeModal(eio); editingItemId = null; });
@@ -4408,55 +4697,28 @@ function validateAdjustReasonForm() {
       });
       eicf.addEventListener('click', async () => {
         if (!editingItemId) return;
-
         const name = ein.value.trim();
         if (!name) { ein.focus(); return; }
-
         const cid = eic.value;
         const unit = eiu.value || undefined;
-
         const volRaw = eiVol.value;
         const vol = volRaw ? parseFloat(volRaw) : undefined;
         const volUnit = eiVolUnit.value || undefined;
-
-        if (vol !== undefined && (isNaN(vol) || vol <= 0)) {
-          toast('Volume must be greater than 0.', true);
-          return;
-        }
-        if (vol !== undefined && !volUnit) {
-          toast('Select a volume unit.', true);
-          return;
-        }
-
+        if (vol !== undefined && (isNaN(vol) || vol <= 0)) { toast('Volume must be greater than 0.', true); return; }
+        if (vol !== undefined && !volUnit) { toast('Select a volume unit.', true); return; }
         const f = findItem(editingItemId);
         if (!f) return;
         const { item, cat } = f;
         const oid = cat.id;
-
         eicf.disabled = true; eicf.textContent = 'Saving…';
         try {
-          await api.updateItem(editingItemId, {
-            name,
-            categoryId: cid,
-            unit,
-            volume: vol,
-            volumeUnit: volUnit
-          });
-
+          await api.updateItem(editingItemId, { name, categoryId: cid, unit, volume: vol, volumeUnit: volUnit });
           item.name = name;
           item.unit = unit;
           item.volume = vol;
           item.volumeUnit = volUnit;
-
-          // Stock quantity is intentionally not changed here.
-          // Stock adjustments happen through Inventory or Stock Intake only.
-
-          if (cid !== oid) {
-            moveItem(editingItemId, oid, cid);
-          } else {
-            refreshItem(editingItemId);
-          }
-
+          if (cid !== oid) moveItem(editingItemId, oid, cid);
+          else refreshItem(editingItemId);
           updateOverview();
           updateDirty();
           closeModal(eio);
@@ -4493,24 +4755,8 @@ function validateAdjustReasonForm() {
       const ao = document.getElementById('addModalOverlay'), cs = document.getElementById('newItemCategory'), nin = document.getElementById('newItemName'), niq = document.getElementById('newItemQty'), acf = document.getElementById('addModalConfirm');
       const niUnit = document.getElementById('newItemUnit'), niVol = document.getElementById('newItemVolume'), niVolUnit = document.getElementById('newItemVolumeUnit');
       function popCatSel() { cs.innerHTML = ''; state.categories.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; cs.appendChild(o); }); }
-      function popStockUnitSel(selectEl) {
-        selectEl.innerHTML = '<option value="">--</option>';
-        (appConfig.units || []).forEach(u => {
-          const o = document.createElement('option');
-          o.value = u.value;
-          o.textContent = u.label;
-          selectEl.appendChild(o);
-        });
-      }
-      function popVolumeUnitSel(selectEl) {
-        selectEl.innerHTML = '<option value="">--</option>';
-        (appConfig.units || []).filter(u => ['ml', 'cl', 'L'].includes(u.value)).forEach(u => {
-          const o = document.createElement('option');
-          o.value = u.value;
-          o.textContent = u.label;
-          selectEl.appendChild(o);
-        });
-      }
+      function popStockUnitSel(selectEl) { selectEl.innerHTML = '<option value="">--</option>'; (appConfig.units || []).forEach(u => { const o = document.createElement('option'); o.value = u.value; o.textContent = u.label; selectEl.appendChild(o); }); }
+      function popVolumeUnitSel(selectEl) { selectEl.innerHTML = '<option value="">--</option>'; (appConfig.units || []).filter(u => ['ml', 'cl', 'L'].includes(u.value)).forEach(u => { const o = document.createElement('option'); o.value = u.value; o.textContent = u.label; selectEl.appendChild(o); }); }
       document.getElementById('addModalCancel').addEventListener('click', () => closeModal(ao));
       acf.addEventListener('click', async () => { const name = nin.value.trim(); if (!name) { nin.focus(); return; } let q = parseInt(niq.value, 10); if (isNaN(q) || q < 0) q = 0; const cid = cs.value; const c = state.categories.find(x => x.id === cid); if (!c) return; const unit = niUnit.value || undefined; const vol = niVol.value ? parseFloat(niVol.value) : undefined; const volUnit = niVolUnit.value || undefined; acf.disabled = true; acf.textContent = 'Adding…'; try { const r = await api.addCustomItem(cid, name, q, { unit, volume: vol, volumeUnit: volUnit }); const ni = (r && r.item) ? r.item : { id: uid(), name, q, custom: true }; ni.custom = true; ni.lastConfirmedQty = ni.qty; ni.unit = unit; ni.volume = vol; ni.volumeUnit = volUnit; appendItem(cid, ni); closeModal(ao); toast('Added "' + name + '"'); if (settingsSubPage === 'inventoryConfig') renderInventoryConfig(); openPackageManager(ni.id); } catch (e) { toast(e.message || 'Could not add item', true); } finally { acf.disabled = false; acf.textContent = 'Add Item'; } });
 
@@ -4523,8 +4769,8 @@ function validateAdjustReasonForm() {
 
       function openModal(o) { o.classList.add('open'); }
       function closeModal(o) { o.classList.remove('open'); }
-      [ao, ro, eio, co, cdo, aso, document.getElementById('recipeModalOverlay'), document.getElementById('resolveAllocationModal'), document.getElementById('staffAddModalOverlay'), document.getElementById('staffEditModalOverlay'), document.getElementById('adjustReasonModalOverlay'), document.getElementById('packageManagerModalOverlay')].forEach(o => { if (o) o.addEventListener('click', e => { if (e.target === o) closeModal(o); }); });
-      document.addEventListener('keydown', e => { if (e.key === 'Escape') { [ao, ro, eio, co, cdo, aso, document.getElementById('recipeModalOverlay'), document.getElementById('resolveAllocationModal'), document.getElementById('staffAddModalOverlay'), document.getElementById('staffEditModalOverlay'), document.getElementById('adjustReasonModalOverlay'), document.getElementById('packageManagerModalOverlay')].forEach(closeModal); } });
+      [ao, ro, eio, co, cdo, aso, document.getElementById('recipeModalOverlay'), document.getElementById('resolveAllocationModal'), document.getElementById('staffAddModalOverlay'), document.getElementById('staffEditModalOverlay'), document.getElementById('adjustReasonModalOverlay'), document.getElementById('packageManagerModalOverlay'), document.getElementById('purchaseModalOverlay'), document.getElementById('purchaseDetailsModalOverlay')].forEach(o => { if (o) o.addEventListener('click', e => { if (e.target === o) closeModal(o); }); });
+      document.addEventListener('keydown', e => { if (e.key === 'Escape') { [ao, ro, eio, co, cdo, aso, document.getElementById('recipeModalOverlay'), document.getElementById('resolveAllocationModal'), document.getElementById('staffAddModalOverlay'), document.getElementById('staffEditModalOverlay'), document.getElementById('adjustReasonModalOverlay'), document.getElementById('packageManagerModalOverlay'), document.getElementById('purchaseModalOverlay'), document.getElementById('purchaseDetailsModalOverlay')].forEach(closeModal); } });
 
       async function loadRecipes() { try { const d = await api.listRecipes(); recipeState.recipes = (d && Array.isArray(d.recipes)) ? d.recipes : (d && Array.isArray(d) ? d : []); renderRecipes(); } catch (e) { toast('Could not load recipes.', true); } }
       function renderRecipes() { const root = document.getElementById('recipesRoot'); root.innerHTML = ''; const sorted = [...recipeState.recipes].sort((a, b) => (a.name || '').localeCompare(b.name || '')); sorted.forEach(r => root.appendChild(renderRecipeCard(r))); document.getElementById('recipesEmptyHero').classList.toggle('show', recipeState.recipes.length === 0); applyRecipeSearch(); }
@@ -4555,7 +4801,6 @@ function validateAdjustReasonForm() {
         row.style.flexWrap = 'wrap';
         row.style.alignItems = 'flex-start';
 
-        // --- Mode toggle (Inventory / Recipe Ingredient) ---
         const modeWrap = document.createElement('div');
         modeWrap.style.display = 'flex'; modeWrap.style.gap = '4px'; modeWrap.style.flex = '1 1 100%';
         const invBtn = document.createElement('button');
@@ -4568,20 +4813,17 @@ function validateAdjustReasonForm() {
         recBtn.style.flex = '1'; recBtn.style.fontSize = '0.7rem'; recBtn.style.minHeight = '30px';
         modeWrap.appendChild(invBtn); modeWrap.appendChild(recBtn);
 
-        // --- Category dropdown ---
         const catSel = document.createElement('select');
         catSel.className = 'ing-cat-select';
         catSel.style.minWidth = '120px'; catSel.style.flex = '1';
         catSel.innerHTML = '<option value="">-- Category --</option>';
         state.categories.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; catSel.appendChild(o); });
 
-        // --- Item dropdown (filtered) ---
         const itemSel = document.createElement('select');
         itemSel.className = 'ing-item-select';
         itemSel.style.minWidth = '120px'; itemSel.style.flex = '2';
         itemSel.innerHTML = '<option value="">-- Select item --</option>';
 
-        // Populate item dropdown based on selected category
         function populateItemSel(catId, selectedItemId = null) {
           itemSel.innerHTML = '<option value="">-- Select item --</option>';
           if (!catId) return;
@@ -4599,7 +4841,6 @@ function validateAdjustReasonForm() {
           populateItemSel(catSel.value);
         });
 
-        // --- Custom name input (for Recipe Ingredient mode) ---
         const customInput = document.createElement('input');
         customInput.type = 'text';
         customInput.className = 'ing-custom-name';
@@ -4607,7 +4848,6 @@ function validateAdjustReasonForm() {
         customInput.style.flex = '2';
         customInput.style.display = 'none';
 
-        // --- Amount & Unit ---
         const ai = document.createElement('input');
         ai.type = 'number'; ai.min = '0'; ai.placeholder = 'Amt'; ai.className = 'ing-amount';
         ai.style.width = '65px'; ai.style.flex = 'none';
@@ -4616,7 +4856,6 @@ function validateAdjustReasonForm() {
         us.style.width = '80px'; us.style.flex = 'none';
         appConfig.units.forEach(u => { const o = document.createElement('option'); o.value = u.value; o.textContent = u.label; us.appendChild(o); });
 
-        // --- Delete & Convert buttons ---
         const db = document.createElement('button');
         db.className = 'ingredient-delete-btn';
         db.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
@@ -4637,7 +4876,6 @@ function validateAdjustReasonForm() {
           convertBtn.style.display = 'none';
         });
 
-        // --- Mode switching ---
         invBtn.addEventListener('click', () => {
           invBtn.classList.add('active'); invBtn.classList.add('btn-gold'); invBtn.classList.remove('btn-ghost');
           recBtn.classList.remove('active'); recBtn.classList.remove('btn-gold'); recBtn.classList.add('btn-ghost');
@@ -4653,17 +4891,14 @@ function validateAdjustReasonForm() {
           itemSel.style.display = 'none';
           customInput.style.display = 'inline-block';
           convertBtn.style.display = 'none';
-          // clear inventory selections
           catSel.value = '';
           itemSel.innerHTML = '<option value="">-- Select item --</option>';
         });
 
-        // --- Pre-fill if editing ---
         if (ing) {
           const hasInventory = ing.inventoryItemId && !ing.customName;
           if (hasInventory) {
-            invBtn.click(); // ensure active
-            // Find the category of this item
+            invBtn.click();
             const cat = state.categories.find(c => c.items.some(it => it.id === ing.inventoryItemId));
             if (cat) {
               catSel.value = cat.id;
@@ -4672,13 +4907,12 @@ function validateAdjustReasonForm() {
           } else {
             recBtn.click();
             customInput.value = ing.customName || '';
-            // If the ingredient is custom, show the Convert button
             convertBtn.style.display = 'inline-block';
           }
           ai.value = ing.amount || '';
           us.value = ing.unit || 'ml';
         } else {
-          invBtn.click(); // default
+          invBtn.click();
         }
 
         row.appendChild(modeWrap);
@@ -4711,10 +4945,8 @@ function validateAdjustReasonForm() {
           const customInput = row.querySelector('input.ing-custom-name');
           const ai = row.querySelector('input.ing-amount');
           const us = row.querySelector('.unit-select');
-
           const amount = parseFloat(ai?.value) || 0;
           const unit = us?.value || 'ml';
-
           if (isInventory) {
             const iid = itemSel?.value || null;
             if (iid) ings.push({ inventoryItemId: iid, amount, unit });
@@ -4730,167 +4962,308 @@ function validateAdjustReasonForm() {
         catch (e) { toast(e.message || 'Failed to save recipe.', true); } finally { rmf.disabled = false; rmf.textContent = 'Save Recipe'; }
       });
 
-
-      // ==================== STOCK INTAKE ====================
-      function buildItemOptionsHtml() {
+      // ==================== STOCK INTAKE / PURCHASE REGISTER ====================
+      function buildItemOptionsHtml(selectedId) {
         let html = '<option value="">-- Select item --</option>';
         state.categories.forEach(c => {
           html += `<optgroup label="${escapeHtml(c.name)}">`;
           c.items.forEach(it => {
-            html += `<option value="${it.id}">${escapeHtml(it.name)}</option>`;
+            const sel = it.id === selectedId ? ' selected' : '';
+            html += `<option value="${it.id}"${sel}>${escapeHtml(it.name)}</option>`;
           });
           html += '</optgroup>';
         });
         return html;
       }
 
-      function buildPackageOptionsHtml(itemId) {
+      function buildPackageOptionsHtml(itemId, selectedId) {
         const pkgs = packagesForItem(itemId).filter(p => p.enabled);
         if (!pkgs.length) return '';
         let html = '<option value="">-- Select purchase unit --</option>';
         pkgs.forEach(p => {
-          html += `<option value="${p.id}" data-units-per="${p.units_per_package}">${escapeHtml(p.package_unit)}</option>`;
+          const sel = p.id === selectedId ? ' selected' : '';
+          html += `<option value="${p.id}"${sel}>${escapeHtml(p.package_unit)}</option>`;
         });
         return html;
       }
 
-      function scheduleIntakeRowPreview(row) {
+      function schedulePurchaseRowPreview(row) {
         if (row._previewTimer) clearTimeout(row._previewTimer);
-        row._previewTimer = setTimeout(() => { updateIntakeRowPreview(row); }, 350);
+        row._previewTimer = setTimeout(() => { updatePurchaseRowPreview(row); }, 400);
       }
 
-      async function updateIntakeRowPreview(row) {
-        const itemSel = row.querySelector('.intake-item-select');
-        const pkgSel = row.querySelector('.intake-package-select');
-        const qtyInput = row.querySelector('.intake-qty-input');
-        const preview = row.querySelector('.intake-row-preview');
-        const f = findItem(itemSel.value);
-        const stockUnit = f ? (f.item.unit || 'units') : 'units';
+      async function updatePurchaseRowPreview(row) {
+        const itemSel = row.querySelector('.purchase-item-select');
+        const pkgSel = row.querySelector('.purchase-package-select');
+        const qtyInput = row.querySelector('.purchase-qty-input');
+        const preview = row.querySelector('.purchase-preview');
+        const itemId = itemSel.value;
+        const packageId = pkgSel && pkgSel.style.display !== 'none' ? pkgSel.value : '';
         const qty = parseFloat(qtyInput.value) || 0;
 
         row.dataset.previewQuantityAdded = '';
         row.dataset.previewStockUnit = '';
         row.dataset.previewPurchaseUnit = '';
 
-        if (!f || qty <= 0) { preview.textContent = ''; return; }
+        if (!itemId || qty <= 0) {
+          preview.textContent = '';
+          updatePurchaseFormValidity();
+          return;
+        }
 
-        if (pkgSel && pkgSel.style.display !== 'none' && pkgSel.value) {
-          // Package selected — backend is authoritative for the conversion, never computed here.
-          const opt = pkgSel.options[pkgSel.selectedIndex];
-          const packageLabel = opt ? opt.textContent : '';
+        if (packageId) {
           const requestId = (row._previewRequestId = (row._previewRequestId || 0) + 1);
           preview.textContent = 'Calculating…';
           try {
-            const data = await api.previewStockIntake(itemSel.value, pkgSel.value, qty);
-            if (row._previewRequestId !== requestId) return; // a newer request superseded this one
+            const data = await api.previewStockIntake(itemId, packageId, qty);
+            if (row._previewRequestId !== requestId) return;
             const calc = data && data.calculation ? data.calculation : null;
-            if (!calc) { preview.textContent = ''; return; }
+            if (!calc) { preview.textContent = ''; updatePurchaseFormValidity(); return; }
             row.dataset.previewQuantityAdded = calc.quantityAdded;
-            row.dataset.previewStockUnit = calc.stockUnit || stockUnit;
-            row.dataset.previewPurchaseUnit = calc.purchaseUnit || packageLabel;
-            preview.textContent = `${calc.quantityPurchased} ${calc.purchaseUnit}${calc.quantityPurchased === 1 ? '' : 's'} → ${calc.quantityAdded} ${calc.stockUnit} expected (not yet added — press Save Intake to confirm)`;
+            row.dataset.previewStockUnit = calc.stockUnit || '';
+            row.dataset.previewPurchaseUnit = calc.purchaseUnit || '';
+            preview.textContent = `${calc.quantityPurchased} ${calc.purchaseUnit}${calc.quantityPurchased === 1 ? '' : 's'} → ${calc.quantityAdded} ${calc.stockUnit}`;
           } catch (e) {
             if (row._previewRequestId !== requestId) return;
-            preview.textContent = 'Could not calculate this purchase. Try again.';
+            preview.textContent = 'Could not calculate this purchase. Check package and quantity.';
           }
         } else {
-          // No package selected — quantity is already in stock units, no conversion needed.
-          preview.textContent = `${qty} ${stockUnit} expected (not yet added — press Save Intake to confirm)`;
+          const f = findItem(itemId);
+          const stockUnit = f ? (f.item.unit || 'units') : 'units';
+          preview.textContent = `${qty} ${stockUnit}`;
           row.dataset.previewQuantityAdded = qty;
           row.dataset.previewStockUnit = stockUnit;
           row.dataset.previewPurchaseUnit = '';
         }
+        updatePurchaseFormValidity();
       }
 
-      function addStockIntakeRow() {
-        const wrap = document.getElementById('stockIntakeRows');
-        if (!wrap) return;
-        const row = document.createElement('div');
-        row.className = 'adjust-reason-row';
-        row.innerHTML = `
-          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-            <select class="intake-item-select">${buildItemOptionsHtml()}</select>
-            <select class="intake-package-select" style="display:none;"></select>
-            <input type="number" min="0" step="0.01" class="intake-qty-input" placeholder="Qty">
-            <button class="ingredient-delete-btn" type="button" aria-label="Remove row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
-          </div>
-          <div class="intake-row-preview"></div>
-        `;
-        row.querySelector('.ingredient-delete-btn').addEventListener('click', () => row.remove());
-        const itemSel = row.querySelector('.intake-item-select');
-        const pkgSel = row.querySelector('.intake-package-select');
-        const qtyInput = row.querySelector('.intake-qty-input');
-        itemSel.addEventListener('change', () => {
-          const pkgHtml = buildPackageOptionsHtml(itemSel.value);
-          if (pkgHtml) { pkgSel.innerHTML = pkgHtml; pkgSel.style.display = 'block'; }
-          else { pkgSel.innerHTML = ''; pkgSel.style.display = 'none'; }
-          scheduleIntakeRowPreview(row);
+      function updatePurchaseFormValidity() {
+        const rows = document.querySelectorAll('#purchaseItemsList .purchase-modal-item');
+        let allValid = rows.length > 0;
+        rows.forEach(row => {
+          const itemSel = row.querySelector('.purchase-item-select');
+          const pkgSel = row.querySelector('.purchase-package-select');
+          const qtyInput = row.querySelector('.purchase-qty-input');
+          const itemId = itemSel.value;
+          const qty = parseFloat(qtyInput.value) || 0;
+          const needPackage = pkgSel && pkgSel.style.display !== 'none';
+          if (!itemId || qty <= 0) allValid = false;
+          if (needPackage && !pkgSel.value) allValid = false;
+          if (needPackage && pkgSel.value && !row.dataset.previewQuantityAdded) allValid = false;
         });
-        pkgSel.addEventListener('change', () => scheduleIntakeRowPreview(row));
-        qtyInput.addEventListener('input', () => scheduleIntakeRowPreview(row));
-        wrap.appendChild(row);
+        const saveBtn = document.getElementById('purchaseSaveBtn');
+        if (saveBtn) saveBtn.disabled = !allValid;
+        renderPurchaseSummary();
       }
 
-      function buildIntakeSummary() {
-        const rows = document.querySelectorAll('#stockIntakeRows .adjust-reason-row');
+      function renderPurchaseSummary() {
+        const summary = document.getElementById('purchaseSummary');
+        if (!summary) return;
+        const rows = document.querySelectorAll('#purchaseItemsList .purchase-modal-item');
         const lines = [];
         rows.forEach(row => {
-          const itemSel = row.querySelector('.intake-item-select');
-          const qtyInput = row.querySelector('.intake-qty-input');
+          const itemSel = row.querySelector('.purchase-item-select');
+          const qtyInput = row.querySelector('.purchase-qty-input');
           const f = findItem(itemSel.value);
           const qty = parseFloat(qtyInput.value) || 0;
+          const previewText = row.querySelector('.purchase-preview').textContent;
           if (!f || qty <= 0) return;
-          const purchaseUnit = row.dataset.previewPurchaseUnit || '';
-          const quantityAdded = row.dataset.previewQuantityAdded || qty;
-          const stockUnit = row.dataset.previewStockUnit || f.item.unit || 'units';
-          if (purchaseUnit) {
-            lines.push(`${escapeHtml(f.item.name)}\n${qty} ${escapeHtml(purchaseUnit)}${qty === 1 ? '' : 's'}\n${escapeHtml(String(quantityAdded))} ${escapeHtml(stockUnit)}`);
+          lines.push({ name: f.item.name, preview: previewText });
+        });
+        if (!lines.length) {
+          summary.innerHTML = '';
+          return;
+        }
+        summary.innerHTML = '<div class="field-label">Purchase Summary</div>' + lines.map(l => `
+          <div class="purchase-summary-line">
+            <span>${escapeHtml(l.name)}</span>
+            <span class="purchase-summary-qty">${escapeHtml(l.preview)}</span>
+          </div>
+        `).join('');
+      }
+
+      function addPurchaseRow() {
+        const list = document.getElementById('purchaseItemsList');
+        if (!list) return;
+        const row = document.createElement('div');
+        row.className = 'purchase-modal-item';
+        row.innerHTML = `
+          <label class="field-label">Item</label>
+          <select class="purchase-item-select intake-item-select">${buildItemOptionsHtml()}</select>
+          <div class="purchase-row-grid">
+            <div>
+              <label class="field-label">Purchase Quantity</label>
+              <input type="number" min="0" step="0.01" class="purchase-qty-input intake-qty-input" placeholder="Qty">
+            </div>
+            <div>
+              <label class="field-label">Purchase Unit</label>
+              <select class="purchase-package-select intake-package-select" style="display:none;"></select>
+            </div>
+          </div>
+          <div class="purchase-preview"></div>
+          <div style="display:flex;justify-content:flex-end;margin-top:8px;">
+            <button class="ingredient-delete-btn" type="button" aria-label="Remove row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+          </div>
+        `;
+        const itemSel = row.querySelector('.purchase-item-select');
+        const pkgSel = row.querySelector('.purchase-package-select');
+        const qtyInput = row.querySelector('.purchase-qty-input');
+        const delBtn = row.querySelector('.ingredient-delete-btn');
+        delBtn.addEventListener('click', () => { row.remove(); updatePurchaseFormValidity(); });
+        itemSel.addEventListener('change', () => {
+          const pkgHtml = buildPackageOptionsHtml(itemSel.value);
+          if (pkgHtml) {
+            pkgSel.innerHTML = pkgHtml;
+            pkgSel.style.display = 'block';
           } else {
-            lines.push(`${escapeHtml(f.item.name)}\n${qty} ${escapeHtml(stockUnit)}\n${escapeHtml(String(quantityAdded))} ${escapeHtml(stockUnit)}`);
+            pkgSel.innerHTML = '';
+            pkgSel.style.display = 'none';
           }
+          schedulePurchaseRowPreview(row);
         });
-        return lines;
+        pkgSel.addEventListener('change', () => schedulePurchaseRowPreview(row));
+        qtyInput.addEventListener('input', () => schedulePurchaseRowPreview(row));
+        list.appendChild(row);
+        updatePurchaseFormValidity();
       }
 
-      function confirmStockIntakeSave() {
-        const rows = document.querySelectorAll('#stockIntakeRows .adjust-reason-row');
-        let hasValidRow = false;
-        let hasPendingPreview = false;
-        const seen = new Set();
-        let hasDuplicate = false;
-        rows.forEach(row => {
-          const itemId = row.querySelector('.intake-item-select').value;
-          const pkgSel = row.querySelector('.intake-package-select');
-          const qty = parseFloat(row.querySelector('.intake-qty-input').value);
-          if (itemId && qty > 0) {
-            hasValidRow = true;
-            if (pkgSel.style.display !== 'none' && pkgSel.value && !row.dataset.previewQuantityAdded) {
-              hasPendingPreview = true;
-            }
-          }
-          const key = itemId + '::' + (pkgSel.style.display !== 'none' ? pkgSel.value : '');
-          if (itemId && seen.has(key)) hasDuplicate = true;
-          seen.add(key);
-        });
-        if (!hasValidRow) { toast('Add at least one item with a quantity.', true); return; }
-        if (hasPendingPreview) { toast('Still calculating one or more rows — please wait a moment and try again.', true); return; }
-        if (hasDuplicate) { toast('The same item/purchase unit is selected more than once — you can still save, but consider combining the quantities.', true); }
-        const lines = buildIntakeSummary();
-        const bodyHtml = '<div style="text-align:left;">' + lines.map(l => {
-          const parts = l.split('\n');
-          return `<div style="border-top:1px solid var(--line);padding:8px 0;"><b style="color:var(--paper);">${parts[0]}</b><br><span style="color:var(--paper-dim);font-size:0.85rem;">${parts[1]}</span><br><span style="color:var(--gold-bright);font-size:0.85rem;">Expected: +${parts[2]} (not yet added to inventory)</span></div>`;
-        }).join('') + '</div>';
-        openConfirm('Purchase Summary', bodyHtml, () => performStockIntakeSave(), 'Save Intake');
+      function clearPurchaseModal() {
+        document.getElementById('purchaseItemsList').innerHTML = '';
+        document.getElementById('purchaseSummary').innerHTML = '';
+        document.getElementById('purchaseSaveBtn').disabled = true;
       }
 
-      async function performStockIntakeSave() {
-        const btn = document.getElementById('stockIntakeSaveBtn');
-        const rows = document.querySelectorAll('#stockIntakeRows .adjust-reason-row');
+      function openAddPurchaseModal() {
+        clearPurchaseModal();
+        addPurchaseRow();
+        openModal(document.getElementById('purchaseModalOverlay'));
+      }
+
+      async function loadPurchaseRegister() {
+        const container = document.getElementById('stockIntakeContainer');
+        if (!container) return;
+        container.innerHTML = '<div class="loading-spinner" style="margin:2rem auto;"></div>';
+        try {
+          await loadPackagesIfNeeded();
+          const data = await api.getStockIntake();
+          const intakes = (data && Array.isArray(data.intakes)) ? data.intakes : [];
+          renderPurchaseRegister(intakes);
+        } catch (e) {
+          container.innerHTML = `<div class="empty-state show"><div>Could not load purchase history. ${escapeHtml(e.message)}</div></div>`;
+        }
+      }
+
+      function renderPurchaseRegister(intakes) {
+        const container = document.getElementById('stockIntakeContainer');
+        if (!container) return;
+        const sorted = [...intakes].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        const grouped = { today: [], yesterday: [], earlier: [] };
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        const yesterdayStart = todayStart - 86400000;
+        sorted.forEach(intake => {
+          const dt = intake.createdAt ? new Date(intake.createdAt) : new Date();
+          const t = dt.getTime();
+          if (t >= todayStart) grouped.today.push(intake);
+          else if (t >= yesterdayStart && t < todayStart) grouped.yesterday.push(intake);
+          else grouped.earlier.push(intake);
+        });
+
+        let html = `
+          <div class="purchase-register-toolbar">
+            <div>
+              <div class="purchase-register-title">Purchase Register</div>
+              <div class="purchase-register-subtitle">Purchase history and stock received</div>
+            </div>
+            <button class="btn btn-gold btn-small" id="addPurchaseBtn">+ Add Purchase</button>
+          </div>
+        `;
+
+        function renderGroup(label, items) {
+          if (!items.length) return '';
+          return `<div class="purchase-group-title">${label}</div>` + items.map(intake => {
+            const dt = intake.createdAt ? new Date(intake.createdAt) : new Date();
+            const time = fmtTime(dt);
+            const dateLabel = fmtDate(dt);
+            const itemSummary = intake.items && intake.items.length ? intake.items.map(it => {
+              const qtyPurchased = it.quantityPurchased ? parseFloat(it.quantityPurchased) : null;
+              const packageUnit = it.packageUnit || '';
+              const quantityAdded = parseFloat(it.quantityAdded);
+              const stockUnit = it.itemName && packageUnit ? `${it.itemName} — ${qtyPurchased} ${packageUnit} → ${quantityAdded} units` : '';
+              return it.itemName;
+            }).join(', ') : 'No items';
+            const itemCount = intake.items ? intake.items.length : 0;
+            const purchaseSummary = itemCount > 1 ? `${itemCount} items` : (itemSummary || '—');
+            return `<div class="purchase-card" data-intake-id="${intake.id}">
+              <div class="purchase-card-header">
+                <span class="purchase-card-time">${time}</span>
+                <span class="purchase-card-id">${intake.id ? '#' + intake.id.slice(0,8) : ''}</span>
+              </div>
+              <div class="purchase-card-body">
+                <div>${escapeHtml(purchaseSummary)}</div>
+                <div style="margin-top:4px;font-size:0.75rem;color:var(--paper-faint);">${escapeHtml(dateLabel)}</div>
+              </div>
+            </div>`;
+          }).join('');
+        }
+
+        html += renderGroup('TODAY', grouped.today);
+        html += renderGroup('YESTERDAY', grouped.yesterday);
+        html += renderGroup('EARLIER', grouped.earlier);
+
+        if (!sorted.length) {
+          html += '<div class="empty-state show"><div>No purchases recorded yet.</div></div>';
+        }
+
+        container.innerHTML = html;
+
+        document.getElementById('addPurchaseBtn').addEventListener('click', openAddPurchaseModal);
+
+        container.querySelectorAll('.purchase-card').forEach(card => {
+          card.addEventListener('click', () => {
+            const intake = sorted.find(i => i.id === card.dataset.intakeId);
+            if (intake) openPurchaseDetails(intake);
+          });
+        });
+      }
+
+      function openPurchaseDetails(intake) {
+        const content = document.getElementById('purchaseDetailsContent');
+        const dt = intake.createdAt ? new Date(intake.createdAt) : new Date();
+        const dateLabel = fmtDate(dt);
+        const time = fmtTime(dt);
+        const items = intake.items || [];
+        let html = `<div style="font-size:0.85rem;color:var(--paper-dim);margin-bottom:var(--space-3);">${escapeHtml(dateLabel)} · ${time}</div>`;
+        items.forEach(item => {
+          const qtyPurchased = item.quantityPurchased ? parseFloat(item.quantityPurchased) : '';
+          const packageUnit = item.packageUnit || '';
+          const quantityAdded = parseFloat(item.quantityAdded);
+          const stockUnit = item.itemName && packageUnit ? `${qtyPurchased} ${packageUnit} → ${quantityAdded} units` : `${quantityAdded} units`;
+          html += `<div class="purchase-summary-line">
+            <span>${escapeHtml(item.itemName || 'Item')}</span>
+            <span class="purchase-summary-qty">${escapeHtml(stockUnit)}</span>
+          </div>`;
+        });
+        html += `<div style="margin-top:var(--space-3);padding-top:var(--space-2);border-top:1px solid var(--line);font-size:0.8rem;color:var(--paper-faint);">Total items: ${items.length}</div>`;
+        content.innerHTML = html;
+        openModal(document.getElementById('purchaseDetailsModalOverlay'));
+      }
+
+      async function showStockIntakePage() {
+        await loadPurchaseRegister();
+      }
+
+      document.getElementById('addPurchaseItemBtn').addEventListener('click', () => { addPurchaseRow(); });
+      document.getElementById('purchaseCancelBtn').addEventListener('click', () => { closeModal(document.getElementById('purchaseModalOverlay')); clearPurchaseModal(); });
+      document.getElementById('purchaseDetailsCloseBtn').addEventListener('click', () => { closeModal(document.getElementById('purchaseDetailsModalOverlay')); });
+      document.getElementById('purchaseSaveBtn').addEventListener('click', async () => {
+        const rows = document.querySelectorAll('#purchaseItemsList .purchase-modal-item');
         const items = [];
         rows.forEach(row => {
-          const itemId = row.querySelector('.intake-item-select').value;
-          const pkgSel = row.querySelector('.intake-package-select');
-          const qty = parseFloat(row.querySelector('.intake-qty-input').value);
+          const itemId = row.querySelector('.purchase-item-select').value;
+          const qty = parseFloat(row.querySelector('.purchase-qty-input').value);
+          const pkgSel = row.querySelector('.purchase-package-select');
           if (!itemId || !qty || qty <= 0) return;
           if (pkgSel.style.display !== 'none' && pkgSel.value) {
             items.push({ itemId, packageId: pkgSel.value, quantityPurchased: qty });
@@ -4898,42 +5271,22 @@ function validateAdjustReasonForm() {
             items.push({ itemId, quantity: qty });
           }
         });
-        if (!items.length) { toast('Add at least one item with a quantity.', true); return; }
-        if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+        if (!items.length) { toast('Add at least one valid item.', true); return; }
+        const btn = document.getElementById('purchaseSaveBtn');
+        btn.disabled = true; btn.textContent = 'Saving…';
         try {
           await api.createStockIntake(items);
-          toast('Stock intake saved. Inventory updated.');
+          toast('Purchase recorded. Inventory updated.');
+          closeModal(document.getElementById('purchaseModalOverlay'));
+          clearPurchaseModal();
+          await loadPurchaseRegister();
           await loadInventory();
-          showStockIntakePage();
         } catch (e) {
-          toast(e.message || 'Failed to record stock intake.', true);
+          toast(e.message || 'Failed to save purchase.', true);
         } finally {
-          if (btn) { btn.disabled = false; btn.textContent = 'Save Intake'; }
+          btn.disabled = false; btn.textContent = 'Save Purchase';
         }
-      }
-
-      async function showStockIntakePage() {
-        const container = document.getElementById('stockIntakeContainer');
-        if (!container) return;
-        container.innerHTML = '<div class="loading-spinner" style="margin:2rem auto;"></div>';
-        try {
-          await loadPackagesIfNeeded();
-        } catch (e) {
-          toast('Could not load package data.', true);
-        }
-        container.innerHTML = `
-          <div class="settings-detail-header">
-            <div class="settings-detail-title">Stock Intake</div>
-            <div class="settings-detail-desc">Record incoming stock purchases. Select a purchase unit (e.g. Case) where available — the backend calculates the expected stock addition below. Nothing is added to inventory until you press Save Intake.</div>
-          </div>
-          <div id="stockIntakeRows"></div>
-          <button class="add-ingredient-btn" id="addIntakeRowBtn">+ Add Item</button>
-          <button class="btn-save-premium" id="stockIntakeSaveBtn">Save Intake</button>
-        `;
-        document.getElementById('addIntakeRowBtn').addEventListener('click', () => addStockIntakeRow());
-        document.getElementById('stockIntakeSaveBtn').addEventListener('click', confirmStockIntakeSave);
-        addStockIntakeRow();
-      }
+      });
 
       // ==================== PENDING ALLOCATIONS ====================
       async function loadPendingAllocations() {
@@ -5051,7 +5404,6 @@ function validateAdjustReasonForm() {
           await api.resolvePendingAllocation(allocationId, mappings);
           closeModal(resolveModal);
           toast('Allocation resolved. Inventory updated.');
-          // Reload all data
           await loadInventory();
           await loadRecipes();
           await loadPendingAllocations();
@@ -5243,9 +5595,9 @@ function validateAdjustReasonForm() {
       }
 
       tick(); setInterval(tick, 60000); init();
-      window.api = api;   // temporary – remove after testing#
+      window.api = api;
       window.can = can;
-      window.userPermissions = userPermissions;   // temporary – remove after testing
+      window.userPermissions = userPermissions;
     })();
   </script>
 </body>
