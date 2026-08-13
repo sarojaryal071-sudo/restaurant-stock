@@ -2879,8 +2879,9 @@
 
     .purchase-card-time {
       font-family: var(--font-mono);
-      font-size: 0.8rem;
-      color: var(--gold-bright);
+      font-size: 0.74rem;
+      color: var(--paper-faint);
+      letter-spacing: 0.02em;
     }
 
     .purchase-card-id {
@@ -2894,9 +2895,31 @@
       line-height: 1.4;
     }
 
+    .purchase-card-item {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: var(--space-3);
+      padding: 6px 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .purchase-card-item:first-child {
+      border-top: none;
+    }
+
     .purchase-card-body .purchase-item-name {
       font-weight: 700;
       color: var(--paper);
+      flex-shrink: 0;
+    }
+
+    .purchase-item-result {
+      font-family: var(--font-mono);
+      font-size: 0.82rem;
+      color: var(--gold-bright);
+      text-align: right;
+      white-space: nowrap;
     }
 
     .purchase-table {
@@ -2959,9 +2982,45 @@
     }
 
     .purchase-preview {
-      font-size: 0.82rem;
-      color: var(--gold-bright);
+      display: none;
       margin-top: var(--space-2);
+      background: rgba(212, 175, 55, 0.06);
+      border: 1px solid rgba(212, 175, 55, 0.22);
+      border-radius: var(--radius-sm);
+      padding: 8px 12px;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .purchase-preview.is-loading,
+    .purchase-preview.is-ready,
+    .purchase-preview.is-error {
+      display: flex;
+    }
+
+    .purchase-preview.is-error {
+      background: rgba(224, 80, 63, 0.08);
+      border-color: rgba(224, 80, 63, 0.3);
+    }
+
+    .purchase-preview-label {
+      font-size: 0.62rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--paper-faint);
+      font-weight: 700;
+    }
+
+    .purchase-preview-value {
+      font-size: 0.86rem;
+      font-weight: 700;
+      color: var(--gold-bright);
+      font-family: var(--font-mono);
+    }
+
+    .purchase-preview.is-error .purchase-preview-value {
+      color: var(--danger);
+      font-family: var(--font-body);
       font-weight: 600;
     }
 
@@ -2982,6 +3041,55 @@
     .purchase-summary-line .purchase-summary-qty {
       color: var(--gold-bright);
       font-family: var(--font-mono);
+    }
+
+    .purchase-items-label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--paper-dim);
+      margin: var(--space-3) 0 var(--space-2);
+    }
+
+    .purchase-summary-count {
+      font-size: 0.78rem;
+      color: var(--paper-faint);
+      margin: 2px 0 var(--space-2);
+    }
+
+    .purchase-row-remove-wrap {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 8px;
+    }
+
+    .purchase-row-remove {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--paper-faint);
+      font-size: 0.76rem;
+      font-weight: 600;
+      padding: 6px 8px;
+      border-radius: var(--radius-sm);
+      transition: background 0.12s ease, color 0.12s ease;
+    }
+
+    .purchase-row-remove svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .purchase-row-remove:hover {
+      background: rgba(224, 80, 63, 0.1);
+      color: var(--danger);
+    }
+
+    input[type="date"].field-input {
+      color-scheme: dark;
     }
   </style>
 </head>
@@ -3382,9 +3490,12 @@
 
   <!-- Purchase Register Modals -->
   <div class="modal-overlay" id="purchaseModalOverlay">
-    <div class="modal-card" style="max-width:560px">
+    <div class="modal-card" style="max-width:600px">
       <div class="modal-title">Add Purchase</div>
-      <p class="settings-detail-desc" style="margin-bottom:var(--space-2);">Record newly received stock. The backend calculates the final stock result.</p>
+      <p class="settings-detail-desc" style="margin-bottom:var(--space-3);">Record newly received stock. The backend calculates the final stock result.</p>
+      <label class="field-label" for="purchaseDateInput">Purchase Date</label>
+      <input type="date" class="field-input" id="purchaseDateInput">
+      <div class="purchase-items-label">Items</div>
       <div id="purchaseItemsList"></div>
       <button class="add-ingredient-btn" id="addPurchaseItemBtn">+ Add Another Item</button>
       <div class="purchase-summary" id="purchaseSummary"></div>
@@ -4243,6 +4354,7 @@ const titles = {
       function escapeHtml(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
       function cssEscape(s) { return window.CSS && CSS.escape ? CSS.escape(s) : String(s).replace(/[^a-zA-Z0-9_-]/g, '\\$&'); }
       function qtyClass(q) { if (q < 0) return 'negative'; if (q <= 0) return 'zero'; if (q <= 5) return 'low'; return 'good'; }
+      function pluralizeUnit(qty, unit) { if (!unit) return ''; const n = parseFloat(qty); if (isNaN(n) || n === 1) return unit; return /s$/i.test(unit) ? unit : unit + 's'; }
       function fmtTime(d) { return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }); }
       function fmtDate(d) { return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' }); }
       function uid() { return 'tmp_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
@@ -4387,7 +4499,7 @@ const titles = {
           if (params.length) q += '?' + params.join('&');
           return apiCall('GET', q);
         },
-        createStockIntake: (items) => apiCall('POST', '/stock-intake', { items }),
+        createStockIntake: (items, purchaseDate) => apiCall('POST', '/stock-intake', purchaseDate ? { items, purchaseDate } : { items }),
         previewStockIntake: (itemId, packageId, quantityPurchased) => apiCall('POST', '/stock-intake/preview', { itemId, packageId, quantityPurchased }),
         getPackages: () => apiCall('GET', '/packages'),
         createPackage: (itemId, packageUnit, unitsPerPackage, sortOrder) => apiCall('POST', '/packages', { itemId, packageUnit, unitsPerPackage, sortOrder }),
@@ -4990,12 +5102,19 @@ const titles = {
         return html;
       }
 
-      function buildPackageOptionsHtml(itemId, selectedId) {
+      function buildPurchaseUnitOptionsHtml(itemId, selectedValue) {
+        if (!itemId) return '<option value="">-- Select item first --</option>';
+        const f = findItem(itemId);
+        const stockUnit = f ? (f.item.unit || '').trim() : '';
         const pkgs = packagesForItem(itemId).filter(p => p.enabled);
-        if (!pkgs.length) return '';
         let html = '<option value="">-- Select purchase unit --</option>';
+        if (stockUnit) {
+          const sel = selectedValue === '__stock__' ? ' selected' : '';
+          html += `<option value="__stock__"${sel}>${escapeHtml(stockUnit)}</option>`;
+        }
         pkgs.forEach(p => {
-          const sel = p.id === selectedId ? ' selected' : '';
+          if (stockUnit && p.package_unit && p.package_unit.trim().toLowerCase() === stockUnit.toLowerCase()) return;
+          const sel = p.id === selectedValue ? ' selected' : '';
           html += `<option value="${p.id}"${sel}>${escapeHtml(p.package_unit)}</option>`;
         });
         return html;
@@ -5012,42 +5131,44 @@ const titles = {
         const qtyInput = row.querySelector('.purchase-qty-input');
         const preview = row.querySelector('.purchase-preview');
         const itemId = itemSel.value;
-        const packageId = pkgSel && pkgSel.style.display !== 'none' ? pkgSel.value : '';
+        const unitValue = pkgSel.value;
         const qty = parseFloat(qtyInput.value) || 0;
 
         row.dataset.previewQuantityAdded = '';
         row.dataset.previewStockUnit = '';
         row.dataset.previewPurchaseUnit = '';
 
-        if (!itemId || qty <= 0) {
-          preview.textContent = '';
+        if (!itemId || !unitValue || qty <= 0) {
+          preview.className = 'purchase-preview';
+          preview.innerHTML = '';
           updatePurchaseFormValidity();
           return;
         }
 
-        if (packageId) {
-          const requestId = (row._previewRequestId = (row._previewRequestId || 0) + 1);
-          preview.textContent = 'Calculating…';
-          try {
-            const data = await api.previewStockIntake(itemId, packageId, qty);
-            if (row._previewRequestId !== requestId) return;
-            const calc = data && data.calculation ? data.calculation : null;
-            if (!calc) { preview.textContent = ''; updatePurchaseFormValidity(); return; }
-            row.dataset.previewQuantityAdded = calc.quantityAdded;
-            row.dataset.previewStockUnit = calc.stockUnit || '';
-            row.dataset.previewPurchaseUnit = calc.purchaseUnit || '';
-            preview.textContent = `${calc.quantityPurchased} ${calc.purchaseUnit}${calc.quantityPurchased === 1 ? '' : 's'} → ${calc.quantityAdded} ${calc.stockUnit}`;
-          } catch (e) {
-            if (row._previewRequestId !== requestId) return;
-            preview.textContent = 'Could not calculate this purchase. Check package and quantity.';
+        const packageId = unitValue === '__stock__' ? null : unitValue;
+        const requestId = (row._previewRequestId = (row._previewRequestId || 0) + 1);
+        preview.className = 'purchase-preview is-loading';
+        preview.innerHTML = '<span class="purchase-preview-label">Receiving Result</span><span class="purchase-preview-value">Calculating…</span>';
+        try {
+          const data = await api.previewStockIntake(itemId, packageId, qty);
+          if (row._previewRequestId !== requestId) return;
+          const calc = data && data.calculation ? data.calculation : null;
+          if (!calc) {
+            preview.className = 'purchase-preview is-error';
+            preview.innerHTML = '<span class="purchase-preview-label">Receiving Result</span><span class="purchase-preview-value">Could not calculate this purchase.</span>';
+            updatePurchaseFormValidity();
+            return;
           }
-        } else {
-          const f = findItem(itemId);
-          const stockUnit = f ? (f.item.unit || 'units') : 'units';
-          preview.textContent = `${qty} ${stockUnit}`;
-          row.dataset.previewQuantityAdded = qty;
-          row.dataset.previewStockUnit = stockUnit;
-          row.dataset.previewPurchaseUnit = '';
+          row.dataset.previewQuantityAdded = calc.quantityAdded;
+          row.dataset.previewStockUnit = calc.stockUnit || '';
+          row.dataset.previewPurchaseUnit = calc.purchaseUnit || '';
+          preview.className = 'purchase-preview is-ready';
+          preview.innerHTML = `<span class="purchase-preview-label">Receiving Result</span><span class="purchase-preview-value">${calc.quantityPurchased} ${escapeHtml(pluralizeUnit(calc.quantityPurchased, calc.purchaseUnit))} → ${calc.quantityAdded} ${escapeHtml(pluralizeUnit(calc.quantityAdded, calc.stockUnit))}</span>`;
+        } catch (e) {
+          if (row._previewRequestId !== requestId) return;
+          preview.className = 'purchase-preview is-error';
+          preview.innerHTML = `<span class="purchase-preview-label">Receiving Result</span><span class="purchase-preview-value">${escapeHtml(e.message || 'Could not calculate this purchase.')}</span>`;
+          updatePurchaseFormValidity();
         }
         updatePurchaseFormValidity();
       }
@@ -5060,11 +5181,10 @@ const titles = {
           const pkgSel = row.querySelector('.purchase-package-select');
           const qtyInput = row.querySelector('.purchase-qty-input');
           const itemId = itemSel.value;
+          const unitValue = pkgSel.value;
           const qty = parseFloat(qtyInput.value) || 0;
-          const needPackage = pkgSel && pkgSel.style.display !== 'none';
-          if (!itemId || qty <= 0) allValid = false;
-          if (needPackage && !pkgSel.value) allValid = false;
-          if (needPackage && pkgSel.value && !row.dataset.previewQuantityAdded) allValid = false;
+          if (!itemId || !unitValue || qty <= 0) { allValid = false; return; }
+          if (!row.dataset.previewQuantityAdded) allValid = false;
         });
         const saveBtn = document.getElementById('purchaseSaveBtn');
         if (saveBtn) saveBtn.disabled = !allValid;
@@ -5081,15 +5201,17 @@ const titles = {
           const qtyInput = row.querySelector('.purchase-qty-input');
           const f = findItem(itemSel.value);
           const qty = parseFloat(qtyInput.value) || 0;
-          const previewText = row.querySelector('.purchase-preview').textContent;
-          if (!f || qty <= 0) return;
+          const valueEl = row.querySelector('.purchase-preview-value');
+          const previewText = valueEl ? valueEl.textContent : '';
+          if (!f || qty <= 0 || !row.dataset.previewQuantityAdded) return;
           lines.push({ name: f.item.name, preview: previewText });
         });
         if (!lines.length) {
           summary.innerHTML = '';
           return;
         }
-        summary.innerHTML = '<div class="field-label">Purchase Summary</div>' + lines.map(l => `
+        const countLabel = lines.length === 1 ? '1 item receiving' : `${lines.length} items receiving`;
+        summary.innerHTML = '<div class="field-label">Purchase Summary</div><div class="purchase-summary-count">' + escapeHtml(countLabel) + '</div>' + lines.map(l => `
           <div class="purchase-summary-line">
             <span>${escapeHtml(l.name)}</span>
             <span class="purchase-summary-qty">${escapeHtml(l.preview)}</span>
@@ -5107,33 +5229,26 @@ const titles = {
           <select class="purchase-item-select intake-item-select">${buildItemOptionsHtml()}</select>
           <div class="purchase-row-grid">
             <div>
-              <label class="field-label">Purchase Quantity</label>
+              <label class="field-label">Quantity</label>
               <input type="number" min="0" step="0.01" class="purchase-qty-input intake-qty-input" placeholder="Qty">
             </div>
             <div>
               <label class="field-label">Purchase Unit</label>
-              <select class="purchase-package-select intake-package-select" style="display:none;"></select>
+              <select class="purchase-package-select intake-package-select"><option value="">-- Select item first --</option></select>
             </div>
           </div>
           <div class="purchase-preview"></div>
-          <div style="display:flex;justify-content:flex-end;margin-top:8px;">
-            <button class="ingredient-delete-btn" type="button" aria-label="Remove row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+          <div class="purchase-row-remove-wrap">
+            <button class="purchase-row-remove" type="button" aria-label="Remove item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg><span>Remove</span></button>
           </div>
         `;
         const itemSel = row.querySelector('.purchase-item-select');
         const pkgSel = row.querySelector('.purchase-package-select');
         const qtyInput = row.querySelector('.purchase-qty-input');
-        const delBtn = row.querySelector('.ingredient-delete-btn');
+        const delBtn = row.querySelector('.purchase-row-remove');
         delBtn.addEventListener('click', () => { row.remove(); updatePurchaseFormValidity(); });
         itemSel.addEventListener('change', () => {
-          const pkgHtml = buildPackageOptionsHtml(itemSel.value);
-          if (pkgHtml) {
-            pkgSel.innerHTML = pkgHtml;
-            pkgSel.style.display = 'block';
-          } else {
-            pkgSel.innerHTML = '';
-            pkgSel.style.display = 'none';
-          }
+          pkgSel.innerHTML = buildPurchaseUnitOptionsHtml(itemSel.value, '');
           schedulePurchaseRowPreview(row);
         });
         pkgSel.addEventListener('change', () => schedulePurchaseRowPreview(row));
@@ -5150,6 +5265,14 @@ const titles = {
 
       function openAddPurchaseModal() {
         clearPurchaseModal();
+        const dateInput = document.getElementById('purchaseDateInput');
+        if (dateInput) {
+          const now = new Date();
+          const yyyy = now.getFullYear();
+          const mm = String(now.getMonth() + 1).padStart(2, '0');
+          const dd = String(now.getDate()).padStart(2, '0');
+          dateInput.value = `${yyyy}-${mm}-${dd}`;
+        }
         addPurchaseRow();
         openModal(document.getElementById('purchaseModalOverlay'));
       }
@@ -5171,63 +5294,70 @@ const titles = {
       function renderPurchaseRegister(intakes) {
         const container = document.getElementById('stockIntakeContainer');
         if (!container) return;
-        const sorted = [...intakes].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-        const grouped = { today: [], yesterday: [], earlier: [] };
-        const now = new Date();
-        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-        const yesterdayStart = todayStart - 86400000;
+        const sorted = [...intakes].sort((a, b) => {
+          const ad = a.purchaseDate || (a.createdAt ? a.createdAt.slice(0, 10) : '');
+          const bd = b.purchaseDate || (b.createdAt ? b.createdAt.slice(0, 10) : '');
+          if (ad !== bd) return bd.localeCompare(ad);
+          return new Date(b.createdAt) - new Date(a.createdAt);
+        });
+
+        const grouped = {};
+        const order = [];
         sorted.forEach(intake => {
-          const dt = intake.createdAt ? new Date(intake.createdAt) : new Date();
-          const t = dt.getTime();
-          if (t >= todayStart) grouped.today.push(intake);
-          else if (t >= yesterdayStart && t < todayStart) grouped.yesterday.push(intake);
-          else grouped.earlier.push(intake);
+          const key = intake.purchaseDate || (intake.createdAt ? intake.createdAt.slice(0, 10) : 'unknown');
+          if (!grouped[key]) { grouped[key] = []; order.push(key); }
+          grouped[key].push(intake);
         });
 
         let html = `
           <div class="purchase-register-toolbar">
             <div>
               <div class="purchase-register-title">Purchase Register</div>
-              <div class="purchase-register-subtitle">Purchase history and stock received</div>
+              <div class="purchase-register-subtitle">Received inventory and stock purchases</div>
             </div>
             <button class="btn btn-gold btn-small" id="addPurchaseBtn">+ Add Purchase</button>
           </div>
         `;
 
-        function renderGroup(label, items) {
-          if (!items.length) return '';
-          return `<div class="purchase-group-title">${label}</div>` + items.map(intake => {
-            const dt = intake.createdAt ? new Date(intake.createdAt) : new Date();
-            const time = fmtTime(dt);
-            const dateLabel = fmtDate(dt);
-            const itemSummary = intake.items && intake.items.length ? intake.items.map(it => {
-              const qtyPurchased = it.quantityPurchased ? parseFloat(it.quantityPurchased) : null;
-              const packageUnit = it.packageUnit || '';
-              const quantityAdded = parseFloat(it.quantityAdded);
-              const stockUnit = it.itemName && packageUnit ? `${it.itemName} — ${qtyPurchased} ${packageUnit} → ${quantityAdded} units` : '';
-              return it.itemName;
-            }).join(', ') : 'No items';
-            const itemCount = intake.items ? intake.items.length : 0;
-            const purchaseSummary = itemCount > 1 ? `${itemCount} items` : (itemSummary || '—');
-            return `<div class="purchase-card" data-intake-id="${intake.id}">
-              <div class="purchase-card-header">
-                <span class="purchase-card-time">${time}</span>
-                <span class="purchase-card-id">${intake.id ? '#' + intake.id.slice(0,8) : ''}</span>
-              </div>
-              <div class="purchase-card-body">
-                <div>${escapeHtml(purchaseSummary)}</div>
-                <div style="margin-top:4px;font-size:0.75rem;color:var(--paper-faint);">${escapeHtml(dateLabel)}</div>
-              </div>
-            </div>`;
-          }).join('');
-        }
-
-        html += renderGroup('TODAY', grouped.today);
-        html += renderGroup('YESTERDAY', grouped.yesterday);
-        html += renderGroup('EARLIER', grouped.earlier);
-
         if (!sorted.length) {
           html += '<div class="empty-state show"><div>No purchases recorded yet.</div></div>';
+        } else {
+          order.forEach(key => {
+            const dateObj = key && key !== 'unknown' ? new Date(key + 'T00:00:00') : null;
+            const groupLabel = dateObj && !isNaN(dateObj) ? fmtDate(dateObj).toUpperCase() : 'UNDATED';
+            html += `<div class="purchase-group-title">${escapeHtml(groupLabel)}</div>`;
+            grouped[key].forEach(intake => {
+              const enteredDt = intake.createdAt ? new Date(intake.createdAt) : null;
+              const enteredTime = enteredDt ? fmtTime(enteredDt) : '';
+              const items = intake.items || [];
+              const itemRows = items.map(it => {
+                const f = findItem(it.itemId);
+                const stockUnit = f ? (f.item.unit || '') : '';
+                const qtyPurchased = it.quantityPurchased !== undefined && it.quantityPurchased !== null ? parseFloat(it.quantityPurchased) : null;
+                const quantityAdded = it.quantityAdded !== undefined ? parseFloat(it.quantityAdded) : null;
+                const packageUnit = it.packageUnit || '';
+                let resultLine;
+                if (packageUnit && qtyPurchased !== null && quantityAdded !== null) {
+                  resultLine = `${qtyPurchased} ${escapeHtml(pluralizeUnit(qtyPurchased, packageUnit))} → ${quantityAdded} ${escapeHtml(pluralizeUnit(quantityAdded, stockUnit || packageUnit))}`;
+                } else if (quantityAdded !== null) {
+                  resultLine = `${quantityAdded} ${escapeHtml(pluralizeUnit(quantityAdded, stockUnit))}`;
+                } else {
+                  resultLine = '—';
+                }
+                return `<div class="purchase-card-item">
+                  <span class="purchase-item-name">${escapeHtml(it.itemName || 'Item')}</span>
+                  <span class="purchase-item-result">${resultLine}</span>
+                </div>`;
+              }).join('');
+              html += `<div class="purchase-card" data-intake-id="${intake.id}">
+                <div class="purchase-card-header">
+                  <span class="purchase-card-time">${escapeHtml(enteredTime ? 'Entered ' + enteredTime : '')}</span>
+                  <span class="purchase-card-id">${intake.id ? '#' + intake.id.slice(0, 8) : ''}</span>
+                </div>
+                <div class="purchase-card-body">${itemRows || '<div class="purchase-card-item"><span class="purchase-item-name">No items</span></div>'}</div>
+              </div>`;
+            });
+          });
         }
 
         container.innerHTML = html;
@@ -5244,19 +5374,29 @@ const titles = {
 
       function openPurchaseDetails(intake) {
         const content = document.getElementById('purchaseDetailsContent');
-        const dt = intake.createdAt ? new Date(intake.createdAt) : new Date();
-        const dateLabel = fmtDate(dt);
-        const time = fmtTime(dt);
+        const purchaseDt = intake.purchaseDate ? new Date(intake.purchaseDate + 'T00:00:00') : (intake.createdAt ? new Date(intake.createdAt) : new Date());
+        const dateLabel = !isNaN(purchaseDt) ? fmtDate(purchaseDt) : '';
+        const enteredDt = intake.createdAt ? new Date(intake.createdAt) : null;
+        const enteredTime = enteredDt ? fmtTime(enteredDt) : '';
         const items = intake.items || [];
-        let html = `<div style="font-size:0.85rem;color:var(--paper-dim);margin-bottom:var(--space-3);">${escapeHtml(dateLabel)} · ${time}</div>`;
+        let html = `<div style="font-size:0.85rem;color:var(--paper-dim);margin-bottom:var(--space-3);">${escapeHtml(dateLabel)}${enteredTime ? ' · Entered ' + escapeHtml(enteredTime) : ''}</div>`;
         items.forEach(item => {
-          const qtyPurchased = item.quantityPurchased ? parseFloat(item.quantityPurchased) : '';
+          const f = findItem(item.itemId);
+          const stockUnit = f ? (f.item.unit || '') : '';
+          const qtyPurchased = item.quantityPurchased !== undefined && item.quantityPurchased !== null ? parseFloat(item.quantityPurchased) : null;
+          const quantityAdded = item.quantityAdded !== undefined ? parseFloat(item.quantityAdded) : null;
           const packageUnit = item.packageUnit || '';
-          const quantityAdded = parseFloat(item.quantityAdded);
-          const stockUnit = item.itemName && packageUnit ? `${qtyPurchased} ${packageUnit} → ${quantityAdded} units` : `${quantityAdded} units`;
+          let resultLine;
+          if (packageUnit && qtyPurchased !== null && quantityAdded !== null) {
+            resultLine = `${qtyPurchased} ${pluralizeUnit(qtyPurchased, packageUnit)} → ${quantityAdded} ${pluralizeUnit(quantityAdded, stockUnit || packageUnit)}`;
+          } else if (quantityAdded !== null) {
+            resultLine = `${quantityAdded} ${pluralizeUnit(quantityAdded, stockUnit)}`;
+          } else {
+            resultLine = '—';
+          }
           html += `<div class="purchase-summary-line">
             <span>${escapeHtml(item.itemName || 'Item')}</span>
-            <span class="purchase-summary-qty">${escapeHtml(stockUnit)}</span>
+            <span class="purchase-summary-qty">${escapeHtml(resultLine)}</span>
           </div>`;
         });
         html += `<div style="margin-top:var(--space-3);padding-top:var(--space-2);border-top:1px solid var(--line);font-size:0.8rem;color:var(--paper-faint);">Total items: ${items.length}</div>`;
@@ -5274,22 +5414,24 @@ const titles = {
       document.getElementById('purchaseSaveBtn').addEventListener('click', async () => {
         const rows = document.querySelectorAll('#purchaseItemsList .purchase-modal-item');
         const items = [];
+        let allValid = true;
         rows.forEach(row => {
           const itemId = row.querySelector('.purchase-item-select').value;
           const qty = parseFloat(row.querySelector('.purchase-qty-input').value);
           const pkgSel = row.querySelector('.purchase-package-select');
-          if (!itemId || !qty || qty <= 0) return;
-          if (pkgSel.style.display !== 'none' && pkgSel.value) {
-            items.push({ itemId, packageId: pkgSel.value, quantityPurchased: qty });
-          } else {
-            items.push({ itemId, quantity: qty });
-          }
+          const unitValue = pkgSel.value;
+          if (!itemId || !unitValue || !qty || qty <= 0) { allValid = false; return; }
+          const entry = { itemId, quantityPurchased: qty };
+          if (unitValue !== '__stock__') entry.packageId = unitValue;
+          items.push(entry);
         });
-        if (!items.length) { toast('Add at least one valid item.', true); return; }
+        if (!allValid || !items.length) { toast('Add at least one valid item.', true); return; }
+        const purchaseDateInput = document.getElementById('purchaseDateInput');
+        const purchaseDate = purchaseDateInput && purchaseDateInput.value ? purchaseDateInput.value : undefined;
         const btn = document.getElementById('purchaseSaveBtn');
         btn.disabled = true; btn.textContent = 'Saving…';
         try {
-          await api.createStockIntake(items);
+          await api.createStockIntake(items, purchaseDate);
           toast('Purchase recorded. Inventory updated.');
           closeModal(document.getElementById('purchaseModalOverlay'));
           clearPurchaseModal();
