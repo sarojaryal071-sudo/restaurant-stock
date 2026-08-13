@@ -2584,6 +2584,23 @@
       color: var(--paper);
       font-size: 0.82rem
     }
+
+    .intake-package-select {
+      min-width: 110px;
+      flex: 1;
+      background: var(--charcoal-1);
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      color: var(--paper);
+      font-size: 0.82rem
+    }
+
+    .intake-row-preview {
+      font-size: 0.76rem;
+      color: var(--gold-bright);
+      margin-top: 6px
+    }
   </style>
 </head>
 
@@ -2831,12 +2848,14 @@
         id="editItemCategory"></select>
       <label class="field-label" for="editItemQty">Quantity</label><input class="field-input" id="editItemQty"
         type="number" min="0" inputmode="numeric">
-      <label class="field-label" for="editItemUnit">Unit</label><select class="field-select" id="editItemUnit"></select>
+<label class="field-label" for="editItemUnit">Unit</label><select class="field-select" id="editItemUnit"></select>
+      <label class="field-label" for="editItemVolume">Volume (optional)</label><input class="field-input" id="editItemVolume"
+        type="number" min="0" step="0.01" placeholder="e.g. 0.3">
+      <label class="field-label" for="editItemVolumeUnit">Volume Unit</label><select class="field-select" id="editItemVolumeUnit"></select>
       <label class="field-label" for="editItemContainerVolume">Container Volume (ml)</label><input class="field-input"
         id="editItemContainerVolume" type="number" min="0" inputmode="numeric" placeholder="e.g. 700">
       <div class="modal-actions"><button class="btn btn-ghost" id="editItemCancel">Cancel</button><button
-          class="btn btn-gold" id="editItemConfirm">Save Changes</button></div>
-    </div>
+          class="btn btn-gold" id="editItemConfirm">Save Changes</button></div>    </div>
   </div>
 
   <div class="modal-overlay" id="confirmOverlay">
@@ -2867,6 +2886,10 @@
         type="text" placeholder="e.g. Negroni Mix" maxlength="60">
       <label class="field-label" for="newItemQty">Initial Quantity</label><input class="field-input" id="newItemQty"
         type="number" min="0" value="0" inputmode="numeric">
+      <label class="field-label" for="newItemUnit">Stock Unit</label><select class="field-select" id="newItemUnit"></select>
+      <label class="field-label" for="newItemVolume">Volume (optional)</label><input class="field-input" id="newItemVolume"
+        type="number" min="0" step="0.01" placeholder="e.g. 0.3">
+      <label class="field-label" for="newItemVolumeUnit">Volume Unit</label><select class="field-select" id="newItemVolumeUnit"></select>
       <div class="modal-actions"><button class="btn btn-ghost" id="addModalCancel">Cancel</button><button
           class="btn btn-gold" id="addModalConfirm">Add Item</button></div>
     </div>
@@ -2961,6 +2984,19 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="packageManagerModalOverlay">
+    <div class="modal-card" style="max-width:480px">
+      <div class="modal-title" id="packageManagerTitle">Packages</div>
+      <div id="packageManagerList"></div>
+      <div style="display:flex;gap:6px;margin-top:var(--space-3);flex-wrap:wrap;">
+        <input type="text" id="packageUnitInput" class="field-input" placeholder="Purchase unit (e.g. Case)" style="flex:1;min-width:120px;">
+        <input type="number" id="packageUnitsPerInput" class="field-input" placeholder="Contains (e.g. 24)" min="0" step="0.01" style="width:110px;">
+        <button class="btn btn-gold btn-small" id="packageAddBtn">Add Package</button>
+      </div>
+      <div class="modal-actions"><button class="btn btn-ghost" id="packageManagerCloseBtn">Close</button></div>
+    </div>
+  </div>
+
   <div class="toast-stack" id="toastStack"></div>
 
   <script>
@@ -3011,6 +3047,7 @@
       let cachedPermissionsData = null;
       let cachedStaffData = null;
       let cachedPosSalesData = null;
+      let cachedPackagesData = null; // array from GET /api/packages, loaded once per session and reused
 
       async function loadSettings() {
         try {
@@ -3027,6 +3064,7 @@
         container.innerHTML = '';
 
         const sections = [
+          { key: 'inventoryConfig', title: 'Inventory Configuration', icon: '🗂️', desc: 'Categories, items, and purchase packages' },
           { key: 'inventory', title: 'Inventory Behaviour', icon: '📦', desc: 'Negative stock rules & warnings' },
           { key: 'sales', title: 'Sales', icon: '📊', desc: 'Import POS sales and view summary' },
           { key: 'staff', title: 'Staff Management', icon: '👥', desc: 'Manage staff accounts' },
@@ -3056,6 +3094,7 @@
     const container = document.getElementById('settingsContainer');
     if (!container) return;
 const titles = {
+      inventoryConfig: 'Inventory Configuration',
       inventory: 'Inventory Behaviour',
       sales: 'Sales',
       staff: 'Staff Management',
@@ -3063,6 +3102,7 @@ const titles = {
     };
     const title = titles[sectionKey] || sectionKey;
     const descriptions = {
+      inventoryConfig: 'Manage categories, items, and purchase packages.',
       inventory: 'Control how negative stock is handled and warned about.',
       sales: 'Import POS sales reports and view sales summary.',
       staff: 'Create and manage staff accounts and their active status.',
@@ -3081,7 +3121,9 @@ const titles = {
 
         document.getElementById('settingsBackBtn').addEventListener('click', showSettingsMenu);
 
-        if (sectionKey === 'inventory') {
+        if (sectionKey === 'inventoryConfig') {
+          showInventoryConfigDetail();
+        } else if (sectionKey === 'inventory') {
           showInventoryBehaviourDetail();
         } else if (sectionKey === 'sales') {
           showSalesDetail();
@@ -3168,6 +3210,192 @@ const titles = {
           toast('Could not load permissions.', true);
         }
       }
+      async function loadPackagesIfNeeded() {
+        if (cachedPackagesData) return cachedPackagesData;
+        const data = await api.getPackages();
+        cachedPackagesData = (data && Array.isArray(data.packages)) ? data.packages : [];
+        return cachedPackagesData;
+      }
+
+      function packagesForItem(itemId) {
+        return (cachedPackagesData || []).filter(p => p.item_id === itemId);
+      }
+
+      async function showInventoryConfigDetail() {
+        const content = document.getElementById('settingsDetailContent');
+        if (!content) return;
+        content.innerHTML = '<div class="loading-spinner" style="margin:2rem auto;"></div>';
+        try {
+          await loadPackagesIfNeeded();
+        } catch (e) {
+          content.innerHTML = `<div class="empty-state show"><div>Could not load package data. ${escapeHtml(e.message)}</div></div>`;
+          return;
+        }
+        renderInventoryConfig();
+      }
+
+      function renderInventoryConfig() {
+        const content = document.getElementById('settingsDetailContent');
+        if (!content) return;
+        let html = `<div class="staff-toolbar"><button class="btn btn-gold btn-small" id="icAddCategoryBtn">+ Add Category</button><button class="btn btn-ghost btn-small" id="icAddItemBtn">+ Add Item</button></div>`;
+        if (!state.categories.length) {
+          html += '<div class="empty-state show"><div>No categories yet.</div></div>';
+        } else {
+          state.categories.forEach(cat => {
+            html += `<div class="settings-card" style="margin-bottom:var(--space-3);" data-cat-id="${cat.id}">
+              <button class="settings-header ic-cat-header" type="button">
+                <span class="section-title">${escapeHtml(cat.name)}</span>
+                <span style="display:flex;align-items:center;gap:8px;">
+                  <span style="font-size:0.72rem;color:var(--paper-faint);">${cat.items.length} item${cat.items.length === 1 ? '' : 's'}</span>
+                  <svg class="cat-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;width:18px;height:18px;"><path d="M6 9l6 6 6-6"/></svg>
+                </span>
+              </button>
+              <div class="settings-body"><div style="padding-bottom:var(--space-2);">`;
+            if (!cat.items.length) {
+              html += `<div style="font-size:0.8rem;color:var(--paper-faint);padding:8px 0;">No items in this category.</div>`;
+            } else {
+              cat.items.forEach(it => {
+                const volLabel = it.volume ? `${it.volume}${it.volumeUnit ? ' ' + it.volumeUnit : ''}` : '—';
+                const pkgs = packagesForItem(it.id);
+                html += `<div style="border-top:1px solid var(--line);padding:10px 0;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                    <div>
+                      <div style="font-weight:700;font-size:0.9rem;color:var(--paper);">${escapeHtml(it.name)}</div>
+                      <div style="font-size:0.72rem;color:var(--paper-faint);">Volume: ${escapeHtml(volLabel)} · Stock unit: ${escapeHtml(it.unit || '—')}</div>
+                    </div>
+                    <div style="display:flex;gap:6px;">
+                      <button class="btn btn-ghost btn-small ic-edit-item-btn" data-item-id="${it.id}">Edit</button>
+                      <button class="btn btn-ghost btn-small ic-packages-btn" data-item-id="${it.id}">Packages</button>
+                    </div>
+                  </div>
+                  <div style="margin-top:6px;font-size:0.76rem;color:var(--paper-dim);">
+                    ${pkgs.length ? pkgs.map(p => `${escapeHtml(p.package_unit)} → ${p.units_per_package} ${escapeHtml(it.unit || 'units')}${p.enabled ? '' : ' (disabled)'}`).join(' · ') : 'No packages configured yet.'}
+                  </div>
+                </div>`;
+              });
+            }
+            html += `</div></div></div>`;
+          });
+        }
+        content.innerHTML = html;
+
+        content.querySelectorAll('.ic-cat-header').forEach(h => {
+          h.addEventListener('click', () => { h.closest('.settings-card').classList.toggle('expanded'); });
+        });
+        const addCatBtn = document.getElementById('icAddCategoryBtn');
+        if (addCatBtn) addCatBtn.addEventListener('click', () => openCatDialog('add'));
+        const addItemBtn = document.getElementById('icAddItemBtn');
+        if (addItemBtn) addItemBtn.addEventListener('click', () => {
+          if (!state.categories.length) { toast('Add a category first.', true); return; }
+          popCatSel();
+          document.getElementById('newItemName').value = '';
+          document.getElementById('newItemQty').value = 0;
+          document.getElementById('newItemVolume').value = '';
+          popVolumeUnitSel(document.getElementById('newItemUnit'));
+          popVolumeUnitSel(document.getElementById('newItemVolumeUnit'));
+          openModal(document.getElementById('addModalOverlay'));
+        });
+        content.querySelectorAll('.ic-edit-item-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const f = findItem(btn.dataset.itemId);
+            if (f) openEditItem(f.item);
+          });
+        });
+        content.querySelectorAll('.ic-packages-btn').forEach(btn => {
+          btn.addEventListener('click', () => openPackageManager(btn.dataset.itemId));
+        });
+      }
+
+      let managingPackagesForItemId = null;
+
+      function openPackageManager(itemId) {
+        managingPackagesForItemId = itemId;
+        const f = findItem(itemId);
+        document.getElementById('packageManagerTitle').textContent = f ? `Packages — ${f.item.name}` : 'Packages';
+        document.getElementById('packageUnitInput').value = '';
+        document.getElementById('packageUnitsPerInput').value = '';
+        renderPackageManagerList();
+        openModal(document.getElementById('packageManagerModalOverlay'));
+      }
+
+      function renderPackageManagerList() {
+        const list = document.getElementById('packageManagerList');
+        if (!list) return;
+        const f = findItem(managingPackagesForItemId);
+        const stockUnit = f ? (f.item.unit || 'units') : 'units';
+        const pkgs = packagesForItem(managingPackagesForItemId);
+        if (!pkgs.length) {
+          list.innerHTML = '<div style="font-size:0.82rem;color:var(--paper-faint);padding:8px 0;">No packages yet. Add one below.</div>';
+        } else {
+          list.innerHTML = pkgs.map(p => `
+            <div class="adjust-reason-row" data-package-id="${p.id}">
+              <div class="adjust-reason-header">
+                <span class="adjust-reason-name">${escapeHtml(p.package_unit)} → ${p.units_per_package} ${escapeHtml(stockUnit)}</span>
+                <span style="font-size:0.72rem;color:${p.enabled ? 'var(--qty-good)' : 'var(--paper-faint)'};">${p.enabled ? 'Enabled' : 'Disabled'}</span>
+              </div>
+              <div style="display:flex;gap:6px;">
+                <button class="btn btn-ghost btn-small pkg-toggle-btn" data-package-id="${p.id}" data-enabled="${p.enabled}">${p.enabled ? 'Disable' : 'Enable'}</button>
+                <button class="btn btn-danger btn-small pkg-delete-btn" data-package-id="${p.id}">Delete</button>
+              </div>
+            </div>
+          `).join('');
+          list.querySelectorAll('.pkg-toggle-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+              btn.disabled = true;
+              try {
+                await api.updatePackage(btn.dataset.packageId, { enabled: btn.dataset.enabled !== 'true' });
+                cachedPackagesData = null;
+                await loadPackagesIfNeeded();
+                renderPackageManagerList();
+                renderInventoryConfig();
+              } catch (e) { toast(e.message || 'Failed to update package', true); }
+              finally { btn.disabled = false; }
+            });
+          });
+          list.querySelectorAll('.pkg-delete-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+              btn.disabled = true;
+              try {
+                await api.deletePackage(btn.dataset.packageId);
+                cachedPackagesData = null;
+                await loadPackagesIfNeeded();
+                renderPackageManagerList();
+                renderInventoryConfig();
+                toast('Package deleted.');
+              } catch (e) { toast(e.message || 'Failed to delete package', true); btn.disabled = false; }
+            });
+          });
+        }
+      }
+
+      document.getElementById('packageAddBtn').addEventListener('click', async () => {
+        const unitInput = document.getElementById('packageUnitInput');
+        const perPackageInput = document.getElementById('packageUnitsPerInput');
+        const unitVal = unitInput.value.trim();
+        const perPackage = parseFloat(perPackageInput.value);
+        if (!unitVal) { toast('Enter a purchase unit name (e.g. Case).', true); return; }
+        if (!perPackage || perPackage <= 0) { toast('Enter how many stock units this package contains.', true); return; }
+        const btn = document.getElementById('packageAddBtn');
+        btn.disabled = true; btn.textContent = 'Adding…';
+        try {
+          await api.createPackage(managingPackagesForItemId, unitVal, perPackage, 0);
+          cachedPackagesData = null;
+          await loadPackagesIfNeeded();
+          unitInput.value = ''; perPackageInput.value = '';
+          renderPackageManagerList();
+          renderInventoryConfig();
+          toast('Package added.');
+        } catch (e) {
+          toast(e.message || 'Failed to add package', true);
+        } finally {
+          btn.disabled = false; btn.textContent = 'Add Package';
+        }
+      });
+
+      document.getElementById('packageManagerCloseBtn').addEventListener('click', () => {
+        closeModal(document.getElementById('packageManagerModalOverlay'));
+      });
+
       function showInventoryBehaviourDetail() {
         const content = document.getElementById('settingsDetailContent');
         if (!content) return;
@@ -3681,7 +3909,7 @@ const titles = {
         logout: () => apiCall('POST', '/logout', {}),
         loadStock: () => apiCall('GET', '/?action=loadStock'),
         saveStock: (updates) => apiCall('POST', '/', { action: 'saveStock', updates }),
-        addCustomItem: (categoryId, name, quantity) => apiCall('POST', '/', { action: 'addCustomItem', categoryId, name, quantity }),
+        addCustomItem: (categoryId, name, quantity, extra) => apiCall('POST', '/', { action: 'addCustomItem', categoryId, name, quantity, ...(extra || {}) }),
         updateItem: (itemId, data) => apiCall('POST', '/', { action: 'updateItem', itemId, ...data }),
         deleteItem: (itemId) => apiCall('POST', '/', { action: 'deleteItem', itemId }),
         restoreItem: (itemId) => apiCall('POST', '/', { action: 'restoreItem', itemId }),
@@ -3729,6 +3957,11 @@ const titles = {
           return apiCall('GET', q);
         },
         createStockIntake: (items) => apiCall('POST', '/stock-intake', { items }),
+        // Item Packages
+        getPackages: () => apiCall('GET', '/packages'),
+        createPackage: (itemId, packageUnit, unitsPerPackage, sortOrder) => apiCall('POST', '/packages', { itemId, packageUnit, unitsPerPackage, sortOrder }),
+        updatePackage: (id, data) => apiCall('PATCH', `/packages/${id}`, data),
+        deletePackage: (id) => apiCall('DELETE', `/packages/${id}`),
         // Pending Allocations
         listPendingAllocations: () => apiCall('GET', '/?action=listPendingAllocations'),
         getPendingAllocationDetails: (allocationId) => apiCall('GET', '/?action=getPendingAllocationDetails&allocationId=' + encodeURIComponent(allocationId)),
@@ -4022,6 +4255,7 @@ function validateAdjustReasonForm() {
 
       const eio = document.getElementById('editItemOverlay'), ein = document.getElementById('editItemName'), eic = document.getElementById('editItemCategory'), eiq = document.getElementById('editItemQty'), eiu = document.getElementById('editItemUnit'), eicv = document.getElementById('editItemContainerVolume'), eicf = document.getElementById('editItemConfirm');
       function popEditCat(sel) { eic.innerHTML = ''; state.categories.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; if (c.id === sel) o.selected = true; eic.appendChild(o); }); }
+      const eiVol = document.getElementById('editItemVolume'), eiVolUnit = document.getElementById('editItemVolumeUnit');
       function openEditItem(it) {
         editingItemId = it.id; ein.value = it.name;
         const f = findItem(it.id); popEditCat(f ? f.cat.id : '');
@@ -4035,11 +4269,20 @@ function validateAdjustReasonForm() {
           if (u.value === (it.unit || '')) opt.selected = true;
           eiu.appendChild(opt);
         });
+        eiVol.value = it.volume || '';
+        eiVolUnit.innerHTML = '<option value="">--</option>';
+        (appConfig.units || []).forEach(u => {
+          const opt = document.createElement('option');
+          opt.value = u.value;
+          opt.textContent = u.label;
+          if (u.value === (it.volumeUnit || '')) opt.selected = true;
+          eiVolUnit.appendChild(opt);
+        });
         eicv.value = it.containerVolume || '';
         openModal(eio); setTimeout(() => ein.focus(), 250);
       }
       document.getElementById('editItemCancel').addEventListener('click', () => { closeModal(eio); editingItemId = null; });
-      eicf.addEventListener('click', async () => { if (!editingItemId) return; const name = ein.value.trim(); if (!name) { ein.focus(); return; } const cid = eic.value; let q = parseInt(eiq.value, 10); if (isNaN(q) || q < 0) q = 0;       const unit = eiu.value; const cv = eicv.value ? parseInt(eicv.value, 10) : undefined; const f = findItem(editingItemId); if (!f) return; const { item, cat } = f; const oid = cat.id; eicf.disabled = true; eicf.textContent = 'Saving…'; try { await api.updateItem(editingItemId, { name, categoryId: cid, quantity: q, unit, containerVolume: cv }); item.name = name; item.qty = q; item.lastConfirmedQty = q; item.unit = unit || undefined; item.containerVolume = cv; if (cid !== oid) { moveItem(editingItemId, oid, cid); } else { refreshItem(editingItemId); } updateOverview(); updateDirty(); closeModal(eio); editingItemId = null; toast('Item updated.'); } catch (e) { toast(e.message || 'Failed to update item', true); } finally { eicf.disabled = false; eicf.textContent = 'Save Changes'; } });
+      eicf.addEventListener('click', async () => { if (!editingItemId) return; const name = ein.value.trim(); if (!name) { ein.focus(); return; } const cid = eic.value; let q = parseInt(eiq.value, 10); if (isNaN(q) || q < 0) q = 0;       const unit = eiu.value; const cv = eicv.value ? parseInt(eicv.value, 10) : undefined; const vol = eiVol.value ? parseFloat(eiVol.value) : undefined; const volUnit = eiVolUnit.value || undefined; const f = findItem(editingItemId); if (!f) return; const { item, cat } = f; const oid = cat.id; eicf.disabled = true; eicf.textContent = 'Saving…'; try { await api.updateItem(editingItemId, { name, categoryId: cid, quantity: q, unit, containerVolume: cv, volume: vol, volumeUnit: volUnit }); item.name = name; item.qty = q; item.lastConfirmedQty = q; item.unit = unit || undefined; item.containerVolume = cv; item.volume = vol; item.volumeUnit = volUnit; if (cid !== oid) { moveItem(editingItemId, oid, cid); } else { refreshItem(editingItemId); } updateOverview(); updateDirty(); closeModal(eio); editingItemId = null; toast('Item updated.'); if (settingsSubPage === 'inventoryConfig') renderInventoryConfig(); } catch (e) { toast(e.message || 'Failed to update item', true); } finally { eicf.disabled = false; eicf.textContent = 'Save Changes'; } });
 
       function delItem(it) { openConfirm('Delete Item', 'Delete "<b>' + escapeHtml(it.name) + '</b>"?<br>This will permanently delete the item.', async () => { try { await api.deleteItem(it.id); removeItem(it.id); toast('Item deleted.'); } catch (e) { toast(e.message || 'Failed to delete item', true); } }, 'Delete'); }
 
@@ -4057,13 +4300,15 @@ function validateAdjustReasonForm() {
 
       const aso = document.getElementById('actionSheetOverlay');
       document.getElementById('actionSheetCancel').addEventListener('click', () => closeModal(aso));
-      document.getElementById('actionAddItem').addEventListener('click', () => { closeModal(aso); if (!state.categories.length) { toast('No categories loaded.', true); return; } popCatSel(); document.getElementById('newItemName').value = ''; document.getElementById('newItemQty').value = 0; openModal(document.getElementById('addModalOverlay')); setTimeout(() => document.getElementById('newItemName').focus(), 250); });
+      document.getElementById('actionAddItem').addEventListener('click', () => { closeModal(aso); if (!state.categories.length) { toast('No categories loaded.', true); return; } popCatSel(); document.getElementById('newItemName').value = ''; document.getElementById('newItemQty').value = 0; document.getElementById('newItemVolume').value = ''; popVolumeUnitSel(document.getElementById('newItemUnit')); popVolumeUnitSel(document.getElementById('newItemVolumeUnit')); openModal(document.getElementById('addModalOverlay')); setTimeout(() => document.getElementById('newItemName').focus(), 250); });
       document.getElementById('actionAddCategory').addEventListener('click', () => { closeModal(aso); openCatDialog('add'); });
 
       const ao = document.getElementById('addModalOverlay'), cs = document.getElementById('newItemCategory'), nin = document.getElementById('newItemName'), niq = document.getElementById('newItemQty'), acf = document.getElementById('addModalConfirm');
+      const niUnit = document.getElementById('newItemUnit'), niVol = document.getElementById('newItemVolume'), niVolUnit = document.getElementById('newItemVolumeUnit');
       function popCatSel() { cs.innerHTML = ''; state.categories.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; cs.appendChild(o); }); }
+      function popVolumeUnitSel(selectEl) { selectEl.innerHTML = '<option value="">--</option>'; (appConfig.units || []).forEach(u => { const o = document.createElement('option'); o.value = u.value; o.textContent = u.label; selectEl.appendChild(o); }); }
       document.getElementById('addModalCancel').addEventListener('click', () => closeModal(ao));
-      acf.addEventListener('click', async () => { const name = nin.value.trim(); if (!name) { nin.focus(); return; } let q = parseInt(niq.value, 10); if (isNaN(q) || q < 0) q = 0; const cid = cs.value; const c = state.categories.find(x => x.id === cid); if (!c) return; acf.disabled = true; acf.textContent = 'Adding…'; try { const r = await api.addCustomItem(cid, name, q); const ni = (r && r.item) ? r.item : { id: uid(), name, q, custom: true }; ni.custom = true; ni.lastConfirmedQty = ni.qty; appendItem(cid, ni); closeModal(ao); toast('Added "' + name + '"'); } catch (e) { toast(e.message || 'Could not add item', true); } finally { acf.disabled = false; acf.textContent = 'Add Item'; } });
+      acf.addEventListener('click', async () => { const name = nin.value.trim(); if (!name) { nin.focus(); return; } let q = parseInt(niq.value, 10); if (isNaN(q) || q < 0) q = 0; const cid = cs.value; const c = state.categories.find(x => x.id === cid); if (!c) return; const unit = niUnit.value || undefined; const vol = niVol.value ? parseFloat(niVol.value) : undefined; const volUnit = niVolUnit.value || undefined; acf.disabled = true; acf.textContent = 'Adding…'; try { const r = await api.addCustomItem(cid, name, q, { unit, volume: vol, volumeUnit: volUnit }); const ni = (r && r.item) ? r.item : { id: uid(), name, q, custom: true }; ni.custom = true; ni.lastConfirmedQty = ni.qty; ni.unit = unit; ni.volume = vol; ni.volumeUnit = volUnit; appendItem(cid, ni); closeModal(ao); toast('Added "' + name + '"'); if (settingsSubPage === 'inventoryConfig') renderInventoryConfig(); } catch (e) { toast(e.message || 'Could not add item', true); } finally { acf.disabled = false; acf.textContent = 'Add Item'; } });
 
       document.getElementById('exportBtn').addEventListener('click', async () => { try { const blob = await api.exportInventory(); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'inventory_export.csv'; document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(() => URL.revokeObjectURL(url), 1500); toast('Inventory exported.'); } catch (e) { toast(e.message || 'Export failed', true); } });
 
@@ -4074,8 +4319,8 @@ function validateAdjustReasonForm() {
 
       function openModal(o) { o.classList.add('open'); }
       function closeModal(o) { o.classList.remove('open'); }
-      [ao, ro, eio, co, cdo, aso, document.getElementById('recipeModalOverlay'), document.getElementById('resolveAllocationModal'), document.getElementById('staffAddModalOverlay'), document.getElementById('staffEditModalOverlay'), document.getElementById('adjustReasonModalOverlay')].forEach(o => { if (o) o.addEventListener('click', e => { if (e.target === o) closeModal(o); }); });
-      document.addEventListener('keydown', e => { if (e.key === 'Escape') { [ao, ro, eio, co, cdo, aso, document.getElementById('recipeModalOverlay'), document.getElementById('resolveAllocationModal'), document.getElementById('staffAddModalOverlay'), document.getElementById('staffEditModalOverlay'), document.getElementById('adjustReasonModalOverlay')].forEach(closeModal); } });
+      [ao, ro, eio, co, cdo, aso, document.getElementById('recipeModalOverlay'), document.getElementById('resolveAllocationModal'), document.getElementById('staffAddModalOverlay'), document.getElementById('staffEditModalOverlay'), document.getElementById('adjustReasonModalOverlay'), document.getElementById('packageManagerModalOverlay')].forEach(o => { if (o) o.addEventListener('click', e => { if (e.target === o) closeModal(o); }); });
+      document.addEventListener('keydown', e => { if (e.key === 'Escape') { [ao, ro, eio, co, cdo, aso, document.getElementById('recipeModalOverlay'), document.getElementById('resolveAllocationModal'), document.getElementById('staffAddModalOverlay'), document.getElementById('staffEditModalOverlay'), document.getElementById('adjustReasonModalOverlay'), document.getElementById('packageManagerModalOverlay')].forEach(closeModal); } });
 
       async function loadRecipes() { try { const d = await api.listRecipes(); recipeState.recipes = (d && Array.isArray(d.recipes)) ? d.recipes : (d && Array.isArray(d) ? d : []); renderRecipes(); } catch (e) { toast('Could not load recipes.', true); } }
       function renderRecipes() { const root = document.getElementById('recipesRoot'); root.innerHTML = ''; const sorted = [...recipeState.recipes].sort((a, b) => (a.name || '').localeCompare(b.name || '')); sorted.forEach(r => root.appendChild(renderRecipeCard(r))); document.getElementById('recipesEmptyHero').classList.toggle('show', recipeState.recipes.length === 0); applyRecipeSearch(); }
@@ -4295,57 +4540,160 @@ function validateAdjustReasonForm() {
         return html;
       }
 
+      function buildPackageOptionsHtml(itemId) {
+        const pkgs = packagesForItem(itemId).filter(p => p.enabled);
+        if (!pkgs.length) return '';
+        let html = '<option value="">-- Select purchase unit --</option>';
+        pkgs.forEach(p => {
+          html += `<option value="${p.id}" data-units-per="${p.units_per_package}">${escapeHtml(p.package_unit)}</option>`;
+        });
+        return html;
+      }
+
+      function updateIntakeRowPreview(row) {
+        const itemSel = row.querySelector('.intake-item-select');
+        const pkgSel = row.querySelector('.intake-package-select');
+        const qtyInput = row.querySelector('.intake-qty-input');
+        const preview = row.querySelector('.intake-row-preview');
+        const f = findItem(itemSel.value);
+        const stockUnit = f ? (f.item.unit || 'units') : 'units';
+        const qty = parseFloat(qtyInput.value) || 0;
+        if (pkgSel && pkgSel.style.display !== 'none' && pkgSel.value) {
+          const opt = pkgSel.options[pkgSel.selectedIndex];
+          const perPackage = parseFloat(opt.dataset.unitsPer) || 0;
+          const total = qty * perPackage;
+          preview.textContent = qty > 0 ? `${qty} ${opt.textContent}${qty === 1 ? '' : 's'} × ${perPackage} ${stockUnit} = ${total} ${stockUnit} added to stock` : '';
+        } else if (f) {
+          preview.textContent = qty > 0 ? `${qty} ${stockUnit} added to stock` : '';
+        } else {
+          preview.textContent = '';
+        }
+      }
+
       function addStockIntakeRow() {
         const wrap = document.getElementById('stockIntakeRows');
         if (!wrap) return;
         const row = document.createElement('div');
-        row.className = 'ingredient-editor-row';
+        row.className = 'adjust-reason-row';
         row.innerHTML = `
-          <select class="intake-item-select">${buildItemOptionsHtml()}</select>
-          <input type="number" min="0" step="0.01" class="intake-qty-input" placeholder="Qty">
-          <button class="ingredient-delete-btn" type="button" aria-label="Remove row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+            <select class="intake-item-select">${buildItemOptionsHtml()}</select>
+            <select class="intake-package-select" style="display:none;"></select>
+            <input type="number" min="0" step="0.01" class="intake-qty-input" placeholder="Qty">
+            <button class="ingredient-delete-btn" type="button" aria-label="Remove row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+          </div>
+          <div class="intake-row-preview"></div>
         `;
         row.querySelector('.ingredient-delete-btn').addEventListener('click', () => row.remove());
+        const itemSel = row.querySelector('.intake-item-select');
+        const pkgSel = row.querySelector('.intake-package-select');
+        const qtyInput = row.querySelector('.intake-qty-input');
+        itemSel.addEventListener('change', () => {
+          const pkgHtml = buildPackageOptionsHtml(itemSel.value);
+          if (pkgHtml) { pkgSel.innerHTML = pkgHtml; pkgSel.style.display = 'block'; }
+          else { pkgSel.innerHTML = ''; pkgSel.style.display = 'none'; }
+          updateIntakeRowPreview(row);
+        });
+        pkgSel.addEventListener('change', () => updateIntakeRowPreview(row));
+        qtyInput.addEventListener('input', () => updateIntakeRowPreview(row));
         wrap.appendChild(row);
       }
 
-      async function saveStockIntake() {
+      function buildIntakeSummary() {
+        const rows = document.querySelectorAll('#stockIntakeRows .adjust-reason-row');
+        const lines = [];
+        rows.forEach(row => {
+          const itemSel = row.querySelector('.intake-item-select');
+          const pkgSel = row.querySelector('.intake-package-select');
+          const qtyInput = row.querySelector('.intake-qty-input');
+          const f = findItem(itemSel.value);
+          const qty = parseFloat(qtyInput.value) || 0;
+          if (!f || qty <= 0) return;
+          const stockUnit = f.item.unit || 'units';
+          if (pkgSel.style.display !== 'none' && pkgSel.value) {
+            const opt = pkgSel.options[pkgSel.selectedIndex];
+            const perPackage = parseFloat(opt.dataset.unitsPer) || 0;
+            lines.push(`${escapeHtml(f.item.name)}\n${qty} ${escapeHtml(opt.textContent)}${qty === 1 ? '' : 's'}\n${qty * perPackage} ${escapeHtml(stockUnit)}`);
+          } else {
+            lines.push(`${escapeHtml(f.item.name)}\n${qty} ${escapeHtml(stockUnit)}\n${qty} ${escapeHtml(stockUnit)}`);
+          }
+        });
+        return lines;
+      }
+
+      function confirmStockIntakeSave() {
+        const rows = document.querySelectorAll('#stockIntakeRows .adjust-reason-row');
+        let hasValidRow = false;
+        const seen = new Set();
+        let hasDuplicate = false;
+        rows.forEach(row => {
+          const itemId = row.querySelector('.intake-item-select').value;
+          const pkgSel = row.querySelector('.intake-package-select');
+          const qty = parseFloat(row.querySelector('.intake-qty-input').value);
+          if (itemId && qty > 0) hasValidRow = true;
+          const key = itemId + '::' + (pkgSel.style.display !== 'none' ? pkgSel.value : '');
+          if (itemId && seen.has(key)) hasDuplicate = true;
+          seen.add(key);
+        });
+        if (!hasValidRow) { toast('Add at least one item with a quantity.', true); return; }
+        if (hasDuplicate) { toast('The same item/purchase unit is selected more than once — you can still save, but consider combining the quantities.', true); }
+        const lines = buildIntakeSummary();
+        const bodyHtml = '<div style="text-align:left;">' + lines.map(l => {
+          const parts = l.split('\n');
+          return `<div style="border-top:1px solid var(--line);padding:8px 0;"><b style="color:var(--paper);">${parts[0]}</b><br><span style="color:var(--paper-dim);font-size:0.85rem;">${parts[1]}</span><br><span style="color:var(--gold-bright);font-size:0.85rem;">${parts[2]} added</span></div>`;
+        }).join('') + '</div>';
+        openConfirm('Purchase Summary', bodyHtml, () => performStockIntakeSave(), 'Save Intake');
+      }
+
+      async function performStockIntakeSave() {
         const btn = document.getElementById('stockIntakeSaveBtn');
-        const rows = document.querySelectorAll('#stockIntakeRows .ingredient-editor-row');
+        const rows = document.querySelectorAll('#stockIntakeRows .adjust-reason-row');
         const items = [];
         rows.forEach(row => {
           const itemId = row.querySelector('.intake-item-select').value;
+          const pkgSel = row.querySelector('.intake-package-select');
           const qty = parseFloat(row.querySelector('.intake-qty-input').value);
-          if (itemId && qty > 0) items.push({ itemId, quantity: qty });
+          if (!itemId || !qty || qty <= 0) return;
+          if (pkgSel.style.display !== 'none' && pkgSel.value) {
+            items.push({ itemId, packageId: pkgSel.value, quantityPurchased: qty });
+          } else {
+            items.push({ itemId, quantity: qty });
+          }
         });
         if (!items.length) { toast('Add at least one item with a quantity.', true); return; }
-        btn.disabled = true; btn.textContent = 'Saving…';
+        if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
         try {
           await api.createStockIntake(items);
-          toast('Stock intake recorded.');
+          toast('Stock intake saved. Inventory updated.');
           await loadInventory();
           showStockIntakePage();
         } catch (e) {
           toast(e.message || 'Failed to record stock intake.', true);
         } finally {
-          btn.disabled = false; btn.textContent = 'Save Intake';
+          if (btn) { btn.disabled = false; btn.textContent = 'Save Intake'; }
         }
       }
 
-      function showStockIntakePage() {
+      async function showStockIntakePage() {
         const container = document.getElementById('stockIntakeContainer');
         if (!container) return;
+        container.innerHTML = '<div class="loading-spinner" style="margin:2rem auto;"></div>';
+        try {
+          await loadPackagesIfNeeded();
+        } catch (e) {
+          toast('Could not load package data.', true);
+        }
         container.innerHTML = `
           <div class="settings-detail-header">
             <div class="settings-detail-title">Stock Intake</div>
-            <div class="settings-detail-desc">Record incoming stock purchases.</div>
+            <div class="settings-detail-desc">Record incoming stock purchases. Select a purchase unit (e.g. Case) where available — the total added to stock is calculated automatically.</div>
           </div>
           <div id="stockIntakeRows"></div>
           <button class="add-ingredient-btn" id="addIntakeRowBtn">+ Add Item</button>
           <button class="btn-save-premium" id="stockIntakeSaveBtn">Save Intake</button>
         `;
         document.getElementById('addIntakeRowBtn').addEventListener('click', () => addStockIntakeRow());
-        document.getElementById('stockIntakeSaveBtn').addEventListener('click', saveStockIntake);
+        document.getElementById('stockIntakeSaveBtn').addEventListener('click', confirmStockIntakeSave);
         addStockIntakeRow();
       }
 
@@ -4541,7 +4889,7 @@ function validateAdjustReasonForm() {
         }
 
         const arr = (stockRes && Array.isArray(stockRes.categories)) ? stockRes.categories : (Array.isArray(stockRes) ? stockRes : []);
-        state.categories = arr.map(c => ({ id: c.id, name: c.name, icon: c.icon || 'default', items: (c.items || []).map(it => ({ id: it.id, name: it.name, qty: Number(it.qty) || 0, custom: !!it.custom, unit: it.unit || undefined, containerVolume: it.containerVolume, editable: it.editable, locked: it.locked, lastConfirmedQty: Number(it.qty) || 0 })) }));
+        state.categories = arr.map(c => ({ id: c.id, name: c.name, icon: c.icon || 'default', items: (c.items || []).map(it => ({ id: it.id, name: it.name, qty: Number(it.qty) || 0, custom: !!it.custom, unit: it.unit || undefined, volume: it.volume !== undefined ? it.volume : undefined, volumeUnit: it.volumeUnit || undefined, containerVolume: it.containerVolume, editable: it.editable, locked: it.locked, lastConfirmedQty: Number(it.qty) || 0 })) }));
         saveCache();
 
         recipeState.recipes = (recipesRes && Array.isArray(recipesRes.recipes)) ? recipesRes.recipes : (recipesRes && Array.isArray(recipesRes) ? recipesRes : []);
@@ -4611,7 +4959,7 @@ function validateAdjustReasonForm() {
         try {
           const cats = await api.loadStock();
           const arr = (cats && Array.isArray(cats.categories)) ? cats.categories : (Array.isArray(cats) ? cats : []);
-          state.categories = arr.map(c => ({ id: c.id, name: c.name, icon: c.icon || 'default', items: (c.items || []).map(it => ({ id: it.id, name: it.name, qty: Number(it.qty) || 0, custom: !!it.custom, unit: it.unit || undefined, containerVolume: it.containerVolume, editable: it.editable, locked: it.locked, lastConfirmedQty: Number(it.qty) || 0 })) }));
+          state.categories = arr.map(c => ({ id: c.id, name: c.name, icon: c.icon || 'default', items: (c.items || []).map(it => ({ id: it.id, name: it.name, qty: Number(it.qty) || 0, custom: !!it.custom, unit: it.unit || undefined, volume: it.volume !== undefined ? it.volume : undefined, volumeUnit: it.volumeUnit || undefined, containerVolume: it.containerVolume, editable: it.editable, locked: it.locked, lastConfirmedQty: Number(it.qty) || 0 })) }));
           saveCache(); render();
         } catch (e) {
           if (state.categories.length > 0) { toast('Could not refresh inventory. Using cached data.', true); }
