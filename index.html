@@ -2846,14 +2846,10 @@
         type="text" maxlength="60">
       <label class="field-label" for="editItemCategory">Category</label><select class="field-select"
         id="editItemCategory"></select>
-      <label class="field-label" for="editItemQty">Quantity</label><input class="field-input" id="editItemQty"
-        type="number" min="0" inputmode="numeric">
-<label class="field-label" for="editItemUnit">Unit</label><select class="field-select" id="editItemUnit"></select>
+      <label class="field-label" for="editItemUnit">Unit</label><select class="field-select" id="editItemUnit"></select>
       <label class="field-label" for="editItemVolume">Volume (optional)</label><input class="field-input" id="editItemVolume"
         type="number" min="0" step="0.01" placeholder="e.g. 0.3">
       <label class="field-label" for="editItemVolumeUnit">Volume Unit</label><select class="field-select" id="editItemVolumeUnit"></select>
-      <label class="field-label" for="editItemContainerVolume">Container Volume (ml)</label><input class="field-input"
-        id="editItemContainerVolume" type="number" min="0" inputmode="numeric" placeholder="e.g. 700">
       <div class="modal-actions"><button class="btn btn-ghost" id="editItemCancel">Cancel</button><button
           class="btn btn-gold" id="editItemConfirm">Save Changes</button></div>    </div>
   </div>
@@ -4254,14 +4250,13 @@ function validateAdjustReasonForm() {
       searchInput.addEventListener('input', applySearchFilter);
       function applySearchFilter() { const q = searchInput.value.trim().toLowerCase(); let any = false; state.categories.forEach(c => { const card = rootEl.querySelector(`.cat-card[data-cat-id="${cssEscape(c.id)}"]`); if (!card) return; let vc = 0; c.items.forEach(it => { const row = card.querySelector(`.item-row[data-item-id="${cssEscape(it.id)}"]`); if (!row) return; const m = !q || it.name.toLowerCase().includes(q); row.classList.toggle('is-hidden-search', !m); if (m) vc++; }); const empty = q && vc === 0; card.classList.toggle('is-empty-search', empty); if (!empty) any = true; if (q && vc > 0) card.classList.add('expanded'); else if (!q) card.classList.toggle('expanded', !!expandedState[c.id]); }); document.getElementById('emptyState').classList.toggle('show', q && !any); }
 
-      const eio = document.getElementById('editItemOverlay'), ein = document.getElementById('editItemName'), eic = document.getElementById('editItemCategory'), eiq = document.getElementById('editItemQty'), eiu = document.getElementById('editItemUnit'), eicv = document.getElementById('editItemContainerVolume'), eicf = document.getElementById('editItemConfirm');
+      const eio = document.getElementById('editItemOverlay'), ein = document.getElementById('editItemName'), eic = document.getElementById('editItemCategory'), eiu = document.getElementById('editItemUnit'), eicf = document.getElementById('editItemConfirm');
       function popEditCat(sel) { eic.innerHTML = ''; state.categories.forEach(c => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; if (c.id === sel) o.selected = true; eic.appendChild(o); }); }
       const eiVol = document.getElementById('editItemVolume'), eiVolUnit = document.getElementById('editItemVolumeUnit');
       function openEditItem(it) {
         editingItemId = it.id; ein.value = it.name;
         const f = findItem(it.id); popEditCat(f ? f.cat.id : '');
-        eiq.value = it.qty;
-        // Populate unit dropdown from backend config
+        // Populate stock unit dropdown from backend config
         eiu.innerHTML = '<option value="">--</option>';
         (appConfig.units || []).forEach(u => {
           const opt = document.createElement('option');
@@ -4270,20 +4265,82 @@ function validateAdjustReasonForm() {
           if (u.value === (it.unit || '')) opt.selected = true;
           eiu.appendChild(opt);
         });
-        eiVol.value = it.volume || '';
+        eiVol.value = it.volume !== undefined ? it.volume : '';
         eiVolUnit.innerHTML = '<option value="">--</option>';
-        (appConfig.units || []).forEach(u => {
+        (appConfig.units || []).filter(u => ['ml', 'cl', 'L'].includes(u.value)).forEach(u => {
           const opt = document.createElement('option');
           opt.value = u.value;
           opt.textContent = u.label;
           if (u.value === (it.volumeUnit || '')) opt.selected = true;
           eiVolUnit.appendChild(opt);
         });
-        eicv.value = it.containerVolume || '';
         openModal(eio); setTimeout(() => ein.focus(), 250);
       }
       document.getElementById('editItemCancel').addEventListener('click', () => { closeModal(eio); editingItemId = null; });
-      eicf.addEventListener('click', async () => { if (!editingItemId) return; const name = ein.value.trim(); if (!name) { ein.focus(); return; } const cid = eic.value; let q = parseInt(eiq.value, 10); if (isNaN(q) || q < 0) q = 0;       const unit = eiu.value; const cv = eicv.value ? parseInt(eicv.value, 10) : undefined; const vol = eiVol.value ? parseFloat(eiVol.value) : undefined; const volUnit = eiVolUnit.value || undefined; const f = findItem(editingItemId); if (!f) return; const { item, cat } = f; const oid = cat.id; eicf.disabled = true; eicf.textContent = 'Saving…'; try { await api.updateItem(editingItemId, { name, categoryId: cid, quantity: q, unit, containerVolume: cv, volume: vol, volumeUnit: volUnit }); item.name = name; item.qty = q; item.lastConfirmedQty = q; item.unit = unit || undefined; item.containerVolume = cv; item.volume = vol; item.volumeUnit = volUnit; if (cid !== oid) { moveItem(editingItemId, oid, cid); } else { refreshItem(editingItemId); } updateOverview(); updateDirty(); closeModal(eio); editingItemId = null; toast('Item updated.'); if (settingsSubPage === 'inventoryConfig') renderInventoryConfig(); } catch (e) { toast(e.message || 'Failed to update item', true); } finally { eicf.disabled = false; eicf.textContent = 'Save Changes'; } });
+      eicf.addEventListener('click', async () => {
+        if (!editingItemId) return;
+
+        const name = ein.value.trim();
+        if (!name) { ein.focus(); return; }
+
+        const cid = eic.value;
+        const unit = eiu.value || undefined;
+
+        const volRaw = eiVol.value;
+        const vol = volRaw ? parseFloat(volRaw) : undefined;
+        const volUnit = eiVolUnit.value || undefined;
+
+        if (vol !== undefined && (isNaN(vol) || vol <= 0)) {
+          toast('Volume must be greater than 0.', true);
+          return;
+        }
+        if (vol !== undefined && !volUnit) {
+          toast('Select a volume unit.', true);
+          return;
+        }
+
+        const f = findItem(editingItemId);
+        if (!f) return;
+        const { item, cat } = f;
+        const oid = cat.id;
+
+        eicf.disabled = true; eicf.textContent = 'Saving…';
+        try {
+          await api.updateItem(editingItemId, {
+            name,
+            categoryId: cid,
+            unit,
+            volume: vol,
+            volumeUnit: volUnit
+          });
+
+          item.name = name;
+          item.unit = unit;
+          item.volume = vol;
+          item.volumeUnit = volUnit;
+
+          // Stock quantity is intentionally not changed here.
+          // Stock adjustments happen through Inventory or Stock Intake only.
+
+          if (cid !== oid) {
+            moveItem(editingItemId, oid, cid);
+          } else {
+            refreshItem(editingItemId);
+          }
+
+          updateOverview();
+          updateDirty();
+          closeModal(eio);
+          editingItemId = null;
+          toast('Item updated.');
+          if (settingsSubPage === 'inventoryConfig') renderInventoryConfig();
+        } catch (e) {
+          toast(e.message || 'Failed to update item', true);
+        } finally {
+          eicf.disabled = false;
+          eicf.textContent = 'Save Changes';
+        }
+      });
 
       function delItem(it) { openConfirm('Delete Item', 'Delete "<b>' + escapeHtml(it.name) + '</b>"?<br>This will permanently delete the item.', async () => { try { await api.deleteItem(it.id); removeItem(it.id); toast('Item deleted.'); } catch (e) { toast(e.message || 'Failed to delete item', true); } }, 'Delete'); }
 
