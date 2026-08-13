@@ -1171,6 +1171,7 @@
     .modal-card {
       width: 100%;
       max-width: 460px;
+      box-sizing: border-box;
       background: linear-gradient(170deg, var(--charcoal-2), var(--charcoal-1));
       border: 1px solid var(--line-strong);
       border-radius: var(--radius-lg) var(--radius-lg) 0 0;
@@ -1179,7 +1180,8 @@
       transform: translateY(30px);
       transition: transform 0.3s cubic-bezier(.4, 0, .2, 1);
       max-height: 88vh;
-      overflow-y: auto
+      overflow-y: auto;
+      overflow-x: hidden
     }
 
     @media(min-width:640px) {
@@ -1195,7 +1197,7 @@
 
     .modal-title {
       font-family: var(--font-display);
-      font-size: 1.2rem;
+      font-size: clamp(1.05rem, 4.2vw, 1.2rem);
       font-weight: 700;
       margin: 0 0 var(--space-3);
       color: var(--gold-bright)
@@ -1217,12 +1219,15 @@
     .field-input,
     .field-select {
       width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
       background: var(--charcoal-1);
       border: 1px solid var(--line-strong);
       border-radius: var(--radius-sm);
-      padding: 12px 14px;
+      padding: clamp(10px, 2.6vw, 12px) clamp(10px, 3vw, 14px);
       color: var(--paper);
-      font-size: 0.95rem
+      font-size: clamp(0.85rem, 2.4vw, 0.95rem)
     }
 
     .field-input:focus,
@@ -1237,24 +1242,27 @@
       -webkit-appearance: none;
       background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23d4af37' stroke-width='2'><path d='M6 9l6 6 6-6'/></svg>");
       background-repeat: no-repeat;
-      background-position: right 12px center;
-      background-size: 16px
+      background-position: right clamp(8px, 2.4vw, 12px) center;
+      background-size: 16px;
+      padding-right: clamp(28px, 7vw, 36px)
     }
 
     .modal-actions {
       display: flex;
+      flex-wrap: wrap;
       gap: var(--space-2);
       margin-top: var(--space-4)
     }
 
     .btn {
       flex: 1;
+      min-width: 0;
       min-height: var(--tap);
       border-radius: var(--radius-sm);
       border: none;
       cursor: pointer;
       font-weight: 700;
-      font-size: 0.9rem;
+      font-size: clamp(0.78rem, 2.6vw, 0.9rem);
       transition: transform 0.1s ease, opacity 0.15s ease
     }
 
@@ -2902,6 +2910,7 @@
       gap: var(--space-3);
       padding: 6px 0;
       border-top: 1px solid var(--line);
+      min-width: 0;
     }
 
     .purchase-card-item:first-child {
@@ -2911,7 +2920,11 @@
     .purchase-card-body .purchase-item-name {
       font-weight: 700;
       color: var(--paper);
-      flex-shrink: 0;
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .purchase-item-result {
@@ -2920,6 +2933,7 @@
       color: var(--gold-bright);
       text-align: right;
       white-space: nowrap;
+      flex-shrink: 0;
     }
 
     .purchase-table {
@@ -2952,6 +2966,9 @@
       border-radius: var(--radius-md);
       padding: var(--space-3);
       margin-bottom: var(--space-2);
+      box-sizing: border-box;
+      min-width: 0;
+      max-width: 100%;
     }
 
     .purchase-modal-item .field-label {
@@ -2966,18 +2983,22 @@
     .purchase-modal-item .intake-qty-input,
     .purchase-modal-item .intake-package-select {
       width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
       flex: none;
     }
 
     .purchase-modal-item .purchase-row-grid {
       display: grid;
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
       gap: var(--space-2);
+      min-width: 0;
     }
 
     @media(min-width:640px) {
       .purchase-modal-item .purchase-row-grid {
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       }
     }
 
@@ -3032,10 +3053,12 @@
 
     .purchase-summary-line {
       display: flex;
+      flex-wrap: wrap;
       justify-content: space-between;
       gap: var(--space-2);
       font-size: 0.85rem;
       padding: 4px 0;
+      min-width: 0;
     }
 
     .purchase-summary-line .purchase-summary-qty {
@@ -3090,6 +3113,21 @@
 
     input[type="date"].field-input {
       color-scheme: dark;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+      padding: clamp(10px, 2.6vw, 12px) clamp(8px, 2.4vw, 14px);
+      font-size: clamp(0.8rem, 3.4vw, 0.95rem);
+    }
+
+    input[type="date"].field-input::-webkit-datetime-edit {
+      max-width: 100%;
+      overflow: hidden;
+    }
+
+    input[type="date"].field-input::-webkit-datetime-edit-fields-wrapper {
+      max-width: 100%;
     }
   </style>
 </head>
