@@ -1643,21 +1643,50 @@
       :root {
         --sidebar-width: 232px;
         --desktop-gutter: clamp(20px, 3vw, 36px);
+        --header-height: 76px;
       }
 
       body {
         padding-left: var(--sidebar-width);
+        padding-top: var(--header-height);
         padding-bottom: 80px;
         overflow-x: hidden;
       }
 
-      .bottom-nav {
+      .app-header {
+        position: fixed;
         top: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        z-index: 50;
+        padding: 10px var(--desktop-gutter);
+      }
+
+      .app-header .header-row {
+        max-width: 1200px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      .app-header .conn-banner {
+        position: fixed;
+        top: var(--header-height);
+        left: var(--sidebar-width);
+        right: 0;
+        z-index: 45;
+        max-width: none;
+        margin: 0;
+        border-radius: 0;
+      }
+
+      .bottom-nav {
+        top: var(--header-height);
         bottom: 0;
         left: 0;
         right: auto;
         width: var(--sidebar-width);
-        height: 100vh;
+        height: calc(100vh - var(--header-height));
         flex-direction: column;
         justify-content: flex-start;
         align-items: stretch;
@@ -1667,6 +1696,7 @@
         background: var(--charcoal-1);
         overflow-y: auto;
         overflow-x: hidden;
+        z-index: 35;
       }
 
       .bottom-nav-btn {
@@ -1698,22 +1728,6 @@
         color: var(--gold-bright);
         background: rgba(212, 175, 55, 0.06);
         border-left-color: var(--gold-bright);
-      }
-
-      .app-header {
-        padding: 10px var(--desktop-gutter);
-      }
-
-      .app-header .header-row {
-        max-width: 1200px;
-        margin-left: auto;
-        margin-right: auto;
-      }
-
-      .app-header .conn-banner {
-        max-width: 1200px;
-        margin-left: auto;
-        margin-right: auto;
       }
 
       .container {

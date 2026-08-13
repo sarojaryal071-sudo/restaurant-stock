@@ -518,9 +518,11 @@ async function runMigrations() {
         restaurant_id UUID REFERENCES restaurants(id) ON DELETE CASCADE,
         user_id UUID REFERENCES users(id),
         intake_type TEXT NOT NULL DEFAULT 'purchase',
+        purchase_date DATE,
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
+    await tx(`ALTER TABLE stock_intakes ADD COLUMN IF NOT EXISTS purchase_date DATE;`);
     await tx(`CREATE INDEX IF NOT EXISTS idx_stock_intakes_restaurant ON stock_intakes(restaurant_id);`);
 
     await tx(`

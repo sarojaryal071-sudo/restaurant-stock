@@ -53,7 +53,7 @@ async function loadStock(req, res) {
     for (const cat of catRes.rows) {
       // Items in this category (active)
       const itemRes = await query(
-        `SELECT i.id, i.name, COALESCE(s.quantity, 0) AS qty
+        `SELECT i.id, i.name, i.unit, COALESCE(s.quantity, 0) AS qty
          FROM items i
          LEFT JOIN stocks s ON i.id = s.item_id AND s.restaurant_id = $1
          WHERE i.category_id = $2 AND i.is_deleted = FALSE AND i.restaurant_id = $1
@@ -64,6 +64,7 @@ async function loadStock(req, res) {
       const items = itemRes.rows.map(item => ({
         id: item.id,
         name: item.name,
+        unit: item.unit || undefined,
         qty: parseFloat(item.qty) || 0
       }));
 

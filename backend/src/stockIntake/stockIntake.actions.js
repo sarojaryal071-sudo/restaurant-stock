@@ -3,8 +3,8 @@ const service = require('./stockIntake.service');
 async function create(req, res) {
   try {
     const { restaurantId, userId } = req.auth;
-    const { items } = req.body;
-    await service.createIntake(restaurantId, userId, items);
+    const { items, purchaseDate } = req.body;
+    await service.createIntake(restaurantId, userId, items, purchaseDate || null);
     res.json({ ok: true });
   } catch (err) {
     if (err.code) return res.json({ ok: false, code: err.code, error: err.error });

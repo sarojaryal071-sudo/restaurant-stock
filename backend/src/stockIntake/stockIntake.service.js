@@ -41,7 +41,7 @@ async function resolveIntakeItem(restaurantId, itemId, packageId, quantityPurcha
   const item = itemRes.rows[0];
 
   let resolvedPackageId = null;
-  let purchaseUnit = null;
+  let purchaseUnit = item.unit || null;
   let unitsPerPackage = 1;
 
   if (packageId) {
@@ -75,7 +75,7 @@ async function resolveIntakeItem(restaurantId, itemId, packageId, quantityPurcha
   };
 }
 
-async function createIntake(restaurantId, userId, items) {
+async function createIntake(restaurantId, userId, items, purchaseDate = null) {
   validateItems(items);
 
   const intakeItems = [];
@@ -96,18 +96,14 @@ async function createIntake(restaurantId, userId, items) {
     });
   }
 
-  return repository.createIntake(restaurantId, userId, intakeItems);
+  return repository.createIntake(restaurantId, userId, intakeItems, purchaseDate);
 }
 
 async function previewIntake(restaurantId, itemId, packageId, quantityPurchased) {
-  if (!packageId) {
-    throw { code: 'VALIDATION_ERROR', error: 'packageId is required.' };
-  }
-
   const resolved = await resolveIntakeItem(
     restaurantId,
     itemId,
-    packageId,
+    packageId || null,
     quantityPurchased
   );
 

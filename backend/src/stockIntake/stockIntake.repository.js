@@ -1,12 +1,13 @@
 const { query, transaction } = require('../../database');
 const { v4: uuidv4 } = require('uuid');
 
-async function createIntake(restaurantId, userId, items) {
+async function createIntake(restaurantId, userId, items, purchaseDate = null) {
   const intakeId = uuidv4();
   await transaction(async (tx) => {
     await tx(
-      `INSERT INTO stock_intakes (id, restaurant_id, user_id) VALUES ($1, $2, $3)`,
-      [intakeId, restaurantId, userId || null]
+      `INSERT INTO stock_intakes (id, restaurant_id, user_id, purchase_date)
+       VALUES ($1, $2, $3, $4)`,
+      [intakeId, restaurantId, userId || null, purchaseDate || null]
     );
     for (const item of items) {
       await tx(
@@ -24,7 +25,7 @@ async function createIntake(restaurantId, userId, items) {
 }
 
 async function listIntakes(restaurantId, start, end) {
-  let sql =     `SELECT si.id, si.intake_type, si.created_at,
+  let sql =     `SELECT si.id, si.intake_type, si.created_at, si.purchase_date,
             sii.item_id, i.name AS item_name, sii.quantity_added,
             sii.package_id, sii.quantity_purchased, sii.units_per_package_at_time,
             ip.package_unit
@@ -46,18 +47,19 @@ async function listIntakes(restaurantId, start, end) {
         id: row.id,
         intakeType: row.intake_type,
         createdAt: row.created_at,
+        purchaseDate: row.purchase_date || null,
         items: []
       });
     }
-    map.get(row.id).        items.push({
-          itemId: row.item_id,
-          itemName: row.item_name,
-          quantityAdded: parseFloat(row.quantity_added),
-          packageId: row.package_id,
-          packageUnit: row.package_unit || null,
-          quantityPurchased: row.quantity_purchased ? parseFloat(row.quantity_purchased) : null,
-          unitsPerPackageAtTime: row.units_per_package_at_time ? parseFloat(row.units_per_package_at_time) : null
-        });
+    map.get(row.id).items.push({
+      itemId: row.item_id,
+      itemName: row.item_name,
+      quantityAdded: parseFloat(row.quantity_added),
+      packageId: row.package_id,
+      packageUnit: row.package_unit || null,
+      quantityPurchased: row.quantity_purchased ? parseFloat(row.quantity_purchased) : null,
+      unitsPerPackageAtTime: row.units_per_package_at_time ? parseFloat(row.units_per_package_at_time) : null
+    });
   }
   return Array.from(map.values());
 }
