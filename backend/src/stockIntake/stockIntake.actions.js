@@ -13,6 +13,24 @@ async function create(req, res) {
   }
 }
 
+async function preview(req, res) {
+  try {
+    const { restaurantId } = req.auth;
+    const { itemId, packageId, quantityPurchased } = req.body;
+    const calculation = await service.previewIntake(
+      restaurantId,
+      itemId,
+      packageId,
+      quantityPurchased
+    );
+    res.json({ ok: true, calculation });
+  } catch (err) {
+    if (err.code) return res.json({ ok: false, code: err.code, error: err.error });
+    console.error('stockIntake preview error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
 async function list(req, res) {
   try {
     const { restaurantId } = req.auth;
@@ -25,4 +43,4 @@ async function list(req, res) {
   }
 }
 
-module.exports = { create, list };
+module.exports = { create, preview, list };

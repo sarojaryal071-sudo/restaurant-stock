@@ -1,0 +1,4661 @@
+============================================================
+FILE: .env.example
+============================================================
+DATABASE_URL=postgresql://user:password@host:5432/database
+PORT=3000
+
+============================================================
+FILE: allocations.js
+============================================================
+const { v4: uuidv4 } = require('uuid');
+const { query, transaction } = require('./database');
+
+// -------------------------------------------------------------------
+// Helper: write log entry (reuse from inventory if available, else inline)
+// -------------------------------------------------------------------
+async function writeLog(action, details, restaurantId, userId) {
+  await query(
+    `INSERT INTO logs (id, action, details, user_id, restaurant_id, timestamp)
+     VALUES ($1, $2, $3, $4, $5, NOW())`,
+    [uuidv4(), action, details, userId || null, restaurantId || null]
+  );
+}
+
+// -------------------------------------------------------------------
+// listPendingAllocations – returns unresolved shortages grouped by
+// inventory category.
+// -------------------------------------------------------------------
+async function listPendingAllocations(req, res) {
+  const { restaurantId } = req.auth;
+  try {
+    const result = await query(
+      `SELECT pa.id, pa.inventory_category_name, pa.inventory_category_id,
+              SUM(pa.required_quantity) AS total_required,
+              pa.unit,
+              COUNT(DISTINCT pad.recipe_id) AS cocktail_count
+       FROM pending_allocations pa
+       LEFT JOIN pending_allocation_details pad ON pa.id = pad.pending_allocation_id
+       WHERE pa.restaurant_id = $1 AND pa.resolved = FALSE
+       GROUP BY pa.id, pa.inventory_category_name, pa.inventory_category_id, pa.unit
+       ORDER BY pa.created_at DESC`,
+      [restaurantId]
+    );
+    res.json({
+      ok: true,
+      allocations: result.rows.map(row => ({
+        id: row.id,
+        categoryName: row.inventory_category_name,
+        categoryId: row.inventory_category_id,
+        totalRequired: parseFloat(row.total_required),
+        unit: row.unit,
+        cocktailCount: parseInt(row.cocktail_count)
+      }))
+    });
+  } catch (err) {
+    console.error('listPendingAllocations error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+// -------------------------------------------------------------------
+// getPendingAllocationDetails – returns each cocktail that contributed
+// to a specific shortage.
+// -------------------------------------------------------------------
+async function getPendingAllocationDetails(req, res) {
+  const { restaurantId } = req.auth;
+  const allocationId = req.body.allocationId || req.query.allocationId;
+  if (!allocationId) return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Missing allocationId' });
+
+  try {
+    // Ensure the allocation belongs to this restaurant
+    const parent = await query(
+      `SELECT id FROM pending_allocations WHERE id = $1 AND restaurant_id = $2 AND resolved = FALSE`,
+      [allocationId, restaurantId]
+    );
+    if (parent.rows.length === 0) return res.json({ ok: false, code: 'NOT_FOUND', error: 'Pending allocation not found' });
+
+    const details = await query(
+      `SELECT pad.id, pad.recipe_name, pad.inventory_item_name, pad.quantity, pad.unit
+       FROM pending_allocation_details pad
+       WHERE pad.pending_allocation_id = $1
+       ORDER BY pad.recipe_name`,
+      [allocationId]
+    );
+
+    res.json({
+      ok: true,
+      details: details.rows.map(d => ({
+        id: d.id,
+        recipeName: d.recipe_name,
+        inventoryItemName: d.inventory_item_name,
+        quantity: parseFloat(d.quantity),
+        unit: d.unit
+      }))
+    });
+  } catch (err) {
+    console.error('getPendingAllocationDetails error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+// -------------------------------------------------------------------
+// resolvePendingAllocation – manager maps cocktails to replacement
+// inventory items and the backend validates stock and applies deductions.
+//
+// Body: {
+//   allocationId: "...",
+//   mappings: [
+//     { detailId: "...", newInventoryItemId: "..." },
+//     ...
+//   ]
+// }
+// -------------------------------------------------------------------
+async function resolvePendingAllocation(req, res) {
+  const { restaurantId, userId } = req.auth;
+  const { allocationId, mappings } = req.body;
+
+  if (!allocationId || !Array.isArray(mappings) || mappings.length === 0) {
+    return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'allocationId and mappings array are required' });
+  }
+
+  try {
+    await transaction(async (tx) => {
+      // 1. Verify the allocation exists and is unresolved
+      const allocRes = await tx(
+        `SELECT id FROM pending_allocations WHERE id = $1 AND restaurant_id = $2 AND resolved = FALSE`,
+        [allocationId, restaurantId]
+      );
+      if (allocRes.rows.length === 0) {
+        throw { code: 'NOT_FOUND', error: 'Pending allocation not found or already resolved' };
+      }
+
+      // 2. Verify each detail exists and collect the required deductions
+      const deductions = []; // { newInventoryItemId, quantityToDeduct }
+      for (const mapping of mappings) {
+        const { detailId, newInventoryItemId } = mapping;
+        if (!detailId || !newInventoryItemId) {
+          throw { code: 'VALIDATION_ERROR', error: 'Each mapping must have detailId and newInventoryItemId' };
+        }
+
+        // Check that the detail belongs to this allocation
+        const detail = await tx(
+          `SELECT quantity, unit FROM pending_allocation_details WHERE id = $1 AND pending_allocation_id = $2`,
+          [detailId, allocationId]
+        );
+        if (detail.rows.length === 0) {
+          throw { code: 'NOT_FOUND', error: `Detail not found: ${detailId}` };
+        }
+
+        const qty = parseFloat(detail.rows[0].quantity);
+
+        // Verify new inventory item exists and belongs to the restaurant
+        const item = await tx(
+          `SELECT id FROM items WHERE id = $1 AND restaurant_id = $2 AND is_deleted = FALSE`,
+          [newInventoryItemId, restaurantId]
+        );
+        if (item.rows.length === 0) {
+          throw { code: 'NOT_FOUND', error: `Replacement inventory item not found: ${newInventoryItemId}` };
+        }
+
+        // Check stock
+        const stock = await tx(
+          `SELECT quantity FROM stocks WHERE item_id = $1 AND restaurant_id = $2`,
+          [newInventoryItemId, restaurantId]
+        );
+        const currentStock = stock.rows.length > 0 ? parseFloat(stock.rows[0].quantity) : 0;
+        if (currentStock < qty) {
+          throw {
+            code: 'INSUFFICIENT_STOCK',
+            error: `Not enough stock for item ${newInventoryItemId}. Required: ${qty}, available: ${currentStock}`
+          };
+        }
+
+        deductions.push({ newInventoryItemId, quantityToDeduct: qty, detailId });
+      }
+
+      // 3. Apply deductions (reduce stock for the replacement items)
+      for (const ded of deductions) {
+        await tx(
+          `UPDATE stocks SET quantity = quantity - $1, updated_at = NOW() WHERE item_id = $2 AND restaurant_id = $3`,
+          [ded.quantityToDeduct, ded.newInventoryItemId, restaurantId]
+        );
+        // Log the allocation change
+        await tx(
+          `INSERT INTO allocation_logs (id, pending_allocation_id, old_inventory_item_id, new_inventory_item_id, quantity, resolved_by, resolved_at)
+           VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+          [uuidv4(), allocationId, null, ded.newInventoryItemId, ded.quantityToDeduct, userId]
+        );
+      }
+
+      // 4. Mark the allocation as resolved
+      await tx(
+        `UPDATE pending_allocations SET resolved = TRUE, resolved_at = NOW(), resolved_by = $1 WHERE id = $2`,
+        [userId, allocationId]
+      );
+    });
+
+    await writeLog('RESOLVE_ALLOCATION', `Allocation ${allocationId} resolved`, restaurantId, userId);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('resolvePendingAllocation error:', err);
+    if (err.code) {
+      return res.json({ ok: false, code: err.code, error: err.error });
+    }
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+module.exports = { listPendingAllocations, getPendingAllocationDetails, resolvePendingAllocation };
+
+============================================================
+FILE: auth.js
+============================================================
+const crypto = require('crypto');
+const { v4: uuidv4 } = require('uuid');
+const { query } = require('./database');
+const permissionsService = require('./src/permissions/permissions.service');
+
+// -------------------------------------------------------------------
+// PIN Hashing
+// -------------------------------------------------------------------
+function hashPin(pin) {
+  return crypto.createHash('sha256').update(String(pin)).digest('hex');
+}
+
+// -------------------------------------------------------------------
+// Session helpers
+// -------------------------------------------------------------------
+async function createSession(userId, restaurantId) {
+  const token = uuidv4();
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  await query(
+    `INSERT INTO sessions (id, user_id, restaurant_id, token, created_at, expires_at)
+     VALUES ($1, $2, $3, $4, NOW(), $5)`,
+    [uuidv4(), userId, restaurantId, token, expiresAt]
+  );
+  return token;
+}
+
+async function validateSession(token) {
+  const res = await query(
+    `SELECT user_id, restaurant_id, expires_at FROM sessions WHERE token = $1`,
+    [token]
+  );
+  if (res.rows.length === 0) return null;
+  const session = res.rows[0];
+  if (new Date(session.expires_at) < new Date()) return null;
+  return { userId: session.user_id, restaurantId: session.restaurant_id };
+}
+
+async function deleteSession(token) {
+  await query(`DELETE FROM sessions WHERE token = $1`, [token]);
+}
+
+
+
+// -------------------------------------------------------------------
+// Helper: get a restaurant object by ID
+// -------------------------------------------------------------------
+async function getRestaurant(restaurantId) {
+  if (!restaurantId) return null;
+  const res = await query(`SELECT * FROM restaurants WHERE id = $1`, [restaurantId]);
+  if (res.rows.length === 0) return null;
+  const r = res.rows[0];
+  return {
+    id: r.id,
+    name: r.name,
+    displayName: r.display_name || r.name,
+    logoUrl: r.logo_url || '',
+    themeColor: r.theme_color || ''
+  };
+}
+
+// -------------------------------------------------------------------
+// Login handler
+// -------------------------------------------------------------------
+async function login(req, res) {
+  const { username, pin } = req.body;
+  if (!username || !pin) return res.json({ ok: false, code: 'INVALID_PIN', error: 'Username and PIN are required.' });
+
+  const hash = hashPin(pin);
+  const userRes = await query(
+      `SELECT u.id, u.name, u.username, u.role, u.restaurant_id
+       FROM users u
+       WHERE u.username = $1 AND u.password_hash = $2 AND u.is_active = TRUE`,
+          [req.body.username, hash]
+  );
+
+  if (userRes.rows.length === 0) {
+    return res.json({ ok: false, code: 'INVALID_PIN', error: 'The PIN you entered is incorrect.' });
+  }
+
+  const user = userRes.rows[0];
+  const role = user.role || 'staff';
+  const restaurant = await getRestaurant(user.restaurant_id);
+  if (!restaurant) return res.json({ ok: false, code: 'SERVER_ERROR', error: 'Restaurant not found.' });
+
+  const token = await createSession(user.id, user.restaurant_id);
+  const permissions = await permissionsService.getEffectivePermissions(user.restaurant_id, role);
+
+  await query(
+    `INSERT INTO logs (id, action, details, user_id, restaurant_id, timestamp)
+     VALUES ($1, 'LOGIN', $2, $3, $4, NOW())`,
+    [uuidv4(), `User "${user.name}" logged in`, user.id, user.restaurant_id]
+  );
+
+  return res.json({
+    ok: true,
+    token,
+          user: { id: user.id, name: user.name, username: user.username, role },
+    permissions,
+    restaurant
+  });
+}
+
+// -------------------------------------------------------------------
+// Logout handler
+// -------------------------------------------------------------------
+async function logout(req, res) {
+  const token = req.body.token || req.query.token;
+  if (token) {
+    await deleteSession(token);
+    await query(
+      `INSERT INTO logs (id, action, details, user_id, restaurant_id, timestamp)
+       VALUES ($1, 'LOGOUT', 'User logged out', NULL, NULL, NOW())`,
+      [uuidv4()]
+    );
+  }
+  return res.json({ ok: true });
+}
+
+// -------------------------------------------------------------------
+// Middleware: requireAuth
+// -------------------------------------------------------------------
+async function requireAuth(req, res, next) {
+  const settingRes = await query(`SELECT value FROM settings WHERE key = 'requireAuth'`);
+  const requireAuthSetting = settingRes.rows.length > 0 ? settingRes.rows[0].value : 'false';
+
+  if (requireAuthSetting !== 'true') {
+    try {
+      const restRes = await query(`SELECT id FROM restaurants ORDER BY created_at LIMIT 1`);
+      const restaurantId = restRes.rows.length > 0 ? restRes.rows[0].id : null;
+      const permissions = await permissionsService.getEffectivePermissions(restaurantId, 'staff');
+      req.auth = { restaurantId, userId: null, role: 'staff', permissions };
+      return next();
+    } catch (err) {
+      req.auth = { restaurantId: null, userId: null, role: 'staff', permissions: {} };
+      return next();
+    }
+  }
+
+  const token = req.body.token || req.query.token;
+  if (!token) {
+    return res.status(401).json({ ok: false, code: 'UNAUTHORIZED', error: 'Missing authentication token.' });
+  }
+
+  const session = await validateSession(token);
+  if (!session) {
+    return res.status(401).json({ ok: false, code: 'UNAUTHORIZED', error: 'Invalid or expired token.' });
+  }
+
+  const userRes = await query(`SELECT role FROM users WHERE id = $1`, [session.userId]);
+  const role = userRes.rows.length > 0 ? (userRes.rows[0].role || 'staff') : 'staff';
+  const permissions = await permissionsService.getEffectivePermissions(session.restaurantId, role);
+
+  req.auth = {
+    restaurantId: session.restaurantId,
+    userId: session.userId,
+    role,
+    permissions
+  };
+  next();
+}
+
+module.exports = { hashPin, createSession, validateSession, deleteSession, login, logout, requireAuth, getRestaurant };
+
+============================================================
+FILE: database.js
+============================================================
+const { Pool } = require('pg');
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
+});
+
+// Test connection on startup (optional, but helpful)
+pool.on('error', (err) => {
+  console.error('Unexpected error on idle client', err);
+});
+
+/**
+ * Execute a single query with parameters.
+ * Example: await query('SELECT * FROM users WHERE id = $1', [id])
+ */
+async function query(text, params) {
+  const start = Date.now();
+  const res = await pool.query(text, params);
+  const duration = Date.now() - start;
+  console.log('Executed query', { text, duration, rows: res.rowCount });
+  return res;
+}
+
+/**
+ * Execute a callback within a database transaction.
+ * The callback receives a transaction-capable query function.
+ * If the callback throws, the transaction is rolled back.
+ */
+async function transaction(callback) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const txQuery = (text, params) => client.query(text, params);
+    const result = await callback(txQuery);
+    await client.query('COMMIT');
+    return result;
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { query, transaction, pool };
+
+============================================================
+FILE: inventory.js
+============================================================
+const { v4: uuidv4 } = require('uuid');
+const { query, transaction } = require('./database');
+
+// -------------------------------------------------------------------
+// Helper: write log entry
+// -------------------------------------------------------------------
+async function writeLog(action, details, restaurantId, userId) {
+  await query(
+    `INSERT INTO logs (id, action, details, user_id, restaurant_id, timestamp)
+     VALUES ($1, $2, $3, $4, $5, NOW())`,
+    [uuidv4(), action, details, userId || null, restaurantId || null]
+  );
+}
+
+// -------------------------------------------------------------------
+// Helper: validate reason / unit against database
+// -------------------------------------------------------------------
+async function isValidReason(reason) {
+  if (!reason) return false;
+  const res = await query(
+    `SELECT id FROM inventory_adjustment_reasons WHERE value = $1 AND enabled = TRUE`,
+    [reason]
+  );
+  return res.rows.length > 0;
+}
+
+async function isValidUnit(unit) {
+  if (!unit) return true;
+  const res = await query(
+    `SELECT id FROM inventory_units WHERE value = $1 AND enabled = TRUE`,
+    [unit]
+  );
+  return res.rows.length > 0;
+}
+
+// -------------------------------------------------------------------
+// loadStock – returns nested categories → items with quantities
+// -------------------------------------------------------------------
+async function loadStock(req, res) {
+  const { restaurantId } = req.auth;
+
+  try {
+    // Categories (active, ordered)
+    const catRes = await query(
+      `SELECT id, name FROM categories
+       WHERE restaurant_id = $1 AND is_deleted = FALSE
+       ORDER BY sort_order ASC`,
+      [restaurantId]
+    );
+
+    const categories = [];
+
+    for (const cat of catRes.rows) {
+      // Items in this category (active)
+      const itemRes = await query(
+        `SELECT i.id, i.name, COALESCE(s.quantity, 0) AS qty
+         FROM items i
+         LEFT JOIN stocks s ON i.id = s.item_id AND s.restaurant_id = $1
+         WHERE i.category_id = $2 AND i.is_deleted = FALSE AND i.restaurant_id = $1
+         ORDER BY i.name ASC`,
+        [restaurantId, cat.id]
+      );
+
+      const items = itemRes.rows.map(item => ({
+        id: item.id,
+        name: item.name,
+        qty: parseFloat(item.qty) || 0
+      }));
+
+      categories.push({
+        id: cat.id,
+        name: cat.name,
+        icon: 'default',
+        items
+      });
+    }
+
+    res.json({ ok: true, categories });
+  } catch (err) {
+    console.error('loadStock error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+// -------------------------------------------------------------------
+// saveStock – requires reason for every change, records adjustments
+// -------------------------------------------------------------------
+async function saveStock(req, res) {
+  const { restaurantId, userId } = req.auth;
+  const updates = req.body.updates || [];   // array of { itemId, quantity, reason?, note? }
+
+  try {
+    if (!Array.isArray(updates) || updates.length === 0) {
+      return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'No updates provided.' });
+    }
+
+    let changed;   // <--- declared here, before the transaction
+
+    await transaction(async (tx) => {
+      // 1. Load current stock and item names for this restaurant
+      const stockRows = await tx(
+        `SELECT item_id, quantity FROM stocks WHERE restaurant_id = $1`,
+        [restaurantId]
+      );
+      const stockMap = {};
+      for (const r of stockRows.rows) {
+        stockMap[r.item_id] = parseFloat(r.quantity) || 0;
+      }
+
+      const itemRows = await tx(
+        `SELECT id, name FROM items WHERE restaurant_id = $1 AND is_deleted = FALSE`,
+        [restaurantId]
+      );
+      const itemMap = {};
+      for (const r of itemRows.rows) { itemMap[r.id] = r.name; }
+
+      // 2. Collect only items whose quantity actually changes, validate reasons
+      changed = [];   // <--- initialized here
+      for (const upd of updates) {
+        const itemId = upd.itemId;
+        const newQty = parseFloat(upd.quantity);
+        if (!itemId || isNaN(newQty)) continue;
+
+        // Verify item exists and is not deleted
+        const itemRes = await tx(
+          `SELECT id FROM items WHERE id = $1 AND restaurant_id = $2 AND is_deleted = FALSE`,
+          [itemId, restaurantId]
+        );
+        if (itemRes.rows.length === 0) continue;
+
+        const oldQty = stockMap[itemId] || 0;
+        if (newQty === oldQty) continue;   // no change → skip
+
+        // Reason required for every change
+        const reason = (upd.reason || '').trim();
+        if (!reason) throw { code: 'VALIDATION_ERROR', error: `Reason is required for item "${itemMap[itemId] || itemId}".` };
+
+        // Determine direction from quantity change
+        const direction = newQty > oldQty ? 'increase' : 'decrease';
+
+        // Validate reason against the database – must exist, be enabled, and have the correct direction
+        const reasonCheck = await tx(
+          `SELECT id FROM inventory_adjustment_reasons WHERE value = $1 AND enabled = TRUE AND direction = $2`,
+          [reason, direction]
+        );
+        if (reasonCheck.rows.length === 0) {
+          throw { code: 'VALIDATION_ERROR', error: `Invalid reason "${reason}" for a ${direction} adjustment on item "${itemMap[itemId] || itemId}".` };
+        }
+
+        // Special handling for "other" reasons – note required
+        if (reason.startsWith('other_') && !(upd.note || '').trim()) {
+          throw { code: 'VALIDATION_ERROR', error: `A note is required when reason is "Other" for item "${itemMap[itemId] || itemId}".` };
+        }
+
+        changed.push({ itemId, oldQty, newQty, reason, note: (upd.note || '').trim() });
+      }
+
+      // 3. If nothing changed, exit early (still OK)
+      if (changed.length === 0) return;
+
+      // 4. Create adjustment header
+      const adjId = uuidv4();
+      await tx(
+        `INSERT INTO inventory_adjustments (id, restaurant_id, user_id) VALUES ($1, $2, $3)`,
+        [adjId, restaurantId, userId || null]
+      );
+
+      // 5. Update stocks and create adjustment item rows
+      for (const c of changed) {
+        const diff = c.newQty - c.oldQty;
+
+        // Upsert stock (set absolute quantity)
+        const stockRes = await tx(
+          `SELECT id FROM stocks WHERE item_id = $1 AND restaurant_id = $2`,
+          [c.itemId, restaurantId]
+        );
+        if (stockRes.rows.length > 0) {
+          await tx(
+            `UPDATE stocks SET quantity = $1, updated_at = NOW() WHERE item_id = $2 AND restaurant_id = $3`,
+            [Math.max(0, c.newQty), c.itemId, restaurantId]
+          );
+        } else {
+          await tx(
+            `INSERT INTO stocks (id, item_id, restaurant_id, quantity, updated_at)
+             VALUES ($1, $2, $3, $4, NOW())`,
+            [uuidv4(), c.itemId, restaurantId, Math.max(0, c.newQty)]
+          );
+        }
+
+        // Record adjustment item
+        await tx(
+          `INSERT INTO inventory_adjustment_items (id, adjustment_id, item_id, old_quantity, new_quantity, difference, reason, note)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [uuidv4(), adjId, c.itemId, c.oldQty, c.newQty, diff, c.reason, c.note || null]
+        );
+      }
+    });
+
+    await writeLog('BATCH_SAVE', `Adjustment recorded for ${changed.length} items`, restaurantId, userId);
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code) return res.json({ ok: false, code: err.code, error: err.error });
+    console.error('saveStock error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+// -------------------------------------------------------------------
+// addCustomItem (with unit validation)
+// -------------------------------------------------------------------
+async function addCustomItem(req, res) {
+  const { restaurantId, userId } = req.auth;
+  const { categoryId, name, quantity, unit } = req.body;
+  if (!categoryId || !name) {
+    return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Missing categoryId or name' });
+  }
+
+  const newUnit = (unit || '').trim();
+  if (newUnit && !(await isValidUnit(newUnit))) {
+    return res.json({ ok: false, code: 'VALIDATION_ERROR', error: `Invalid unit: ${newUnit}` });
+  }
+
+  try {
+    const itemId = uuidv4();
+    const qty = parseFloat(quantity) || 0;
+
+    await transaction(async (tx) => {
+      await tx(
+        `INSERT INTO items (id, name, category_id, unit, default_quantity, restaurant_id, is_default, is_deleted, container_volume, created_at)
+         VALUES ($1, $2, $3, $4, 0, $5, FALSE, FALSE, NULL, NOW())`,
+        [itemId, name, categoryId, newUnit, restaurantId]
+      );
+      await tx(
+        `INSERT INTO stocks (id, item_id, restaurant_id, quantity, updated_at)
+         VALUES ($1, $2, $3, $4, NOW())`,
+        [uuidv4(), itemId, restaurantId, qty]
+      );
+    });
+
+    await writeLog('ADD_CUSTOM_ITEM', `Item "${name}" added`, restaurantId, userId);
+    res.json({ ok: true, item: { id: itemId, name, qty, custom: true } });
+  } catch (err) {
+    console.error('addCustomItem error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+// -------------------------------------------------------------------
+// updateItem
+// -------------------------------------------------------------------
+async function updateItem(req, res) {
+  const { restaurantId, userId } = req.auth;
+  const { itemId, name, unit, defaultQuantity, categoryId, containerVolume } = req.body;
+  if (!itemId) return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Missing itemId' });
+
+  try {
+    // Fetch existing item
+    const existing = await query(
+      `SELECT * FROM items WHERE id = $1 AND restaurant_id = $2 AND is_deleted = FALSE`,
+      [itemId, restaurantId]
+    );
+    if (existing.rows.length === 0) {
+      return res.json({ ok: false, code: 'NOT_FOUND', error: 'Item not found' });
+    }
+
+    const newName = name !== undefined ? String(name).trim() : existing.rows[0].name;
+    const newUnit = unit !== undefined ? unit : existing.rows[0].unit;
+    const newDefaultQty = defaultQuantity !== undefined ? parseFloat(defaultQuantity) || 0 : parseFloat(existing.rows[0].default_quantity) || 0;
+    const newCategoryId = categoryId || existing.rows[0].category_id;
+    const newContainerVolume = containerVolume !== undefined ? parseInt(containerVolume, 10) || null : existing.rows[0].container_volume;
+
+    if (!newName) return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Item name cannot be empty' });
+
+    // Duplicate name check (within same category)
+    const dupCheck = await query(
+      `SELECT id FROM items WHERE LOWER(name) = LOWER($1) AND category_id = $2 AND restaurant_id = $3 AND id != $4 AND is_deleted = FALSE`,
+      [newName, newCategoryId, restaurantId, itemId]
+    );
+    if (dupCheck.rows.length > 0) {
+      return res.json({ ok: false, code: 'DUPLICATE_NAME', error: 'An item with that name already exists in this category' });
+    }
+
+        // Validate unit (if provided and non-empty)
+    if (newUnit && !(await isValidUnit(newUnit))) {
+      return res.json({ ok: false, code: 'VALIDATION_ERROR', error: `Invalid unit: ${newUnit}` });
+    }
+
+    await query(
+      `UPDATE items SET name = $1, category_id = $2, unit = $3, default_quantity = $4, container_volume = $5
+       WHERE id = $6 AND restaurant_id = $7`,
+      [newName, newCategoryId, newUnit, newDefaultQty, newContainerVolume, itemId, restaurantId]
+    );
+
+    await writeLog('UPDATE_ITEM', `Item "${newName}" updated`, restaurantId, userId);
+    res.json({ ok: true, item: { id: itemId, name: newName, unit: newUnit, defaultQuantity: newDefaultQty, categoryId: newCategoryId, containerVolume: newContainerVolume } });
+  } catch (err) {
+    console.error('updateItem error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+// -------------------------------------------------------------------
+// deleteItem – permanent deletion
+// -------------------------------------------------------------------
+async function deleteItem(req, res) {
+  const { restaurantId, userId } = req.auth;
+  const { itemId } = req.body;
+  if (!itemId) return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Missing itemId' });
+
+  try {
+    const item = await query(
+      `SELECT id, name FROM items WHERE id = $1 AND restaurant_id = $2`,
+      [itemId, restaurantId]
+    );
+    if (item.rows.length === 0) return res.json({ ok: false, code: 'NOT_FOUND', error: 'Item not found' });
+
+    await transaction(async (tx) => {
+      // Check if item is referenced in any recipe; if so, block deletion
+      const refCheck = await tx(
+        `SELECT id FROM recipe_ingredients WHERE inventory_item_id = $1 LIMIT 1`,
+        [itemId]
+      );
+      if (refCheck.rows.length > 0) {
+        throw { code: 'ITEM_IN_USE', error: 'Item is used in one or more recipes. Remove it from recipes first.' };
+      }
+      // Delete stocks first
+      await tx(`DELETE FROM stocks WHERE item_id = $1 AND restaurant_id = $2`, [itemId, restaurantId]);
+      // Delete the item
+      await tx(`DELETE FROM items WHERE id = $1 AND restaurant_id = $2`, [itemId, restaurantId]);
+    });
+
+    await writeLog('DELETE_ITEM', `Item "${item.rows[0].name}" permanently deleted`, restaurantId, userId);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('deleteItem error:', err);
+    if (err.code) {
+      return res.json({ ok: false, code: err.code, error: err.error });
+    }
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+// -------------------------------------------------------------------
+// restoreItem – not supported (permanent delete), stub for compatibility
+// -------------------------------------------------------------------
+async function restoreItem(req, res) {
+  return res.json({ ok: false, code: 'NOT_FOUND', error: 'Restore not available; items are permanently deleted.' });
+}
+
+// -------------------------------------------------------------------
+// addCategory
+// -------------------------------------------------------------------
+async function addCategory(req, res) {
+  const { restaurantId, userId } = req.auth;
+  const { name } = req.body;
+  if (!name || !String(name).trim()) {
+    return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Category name is required' });
+  }
+  const trimmedName = String(name).trim();
+
+  try {
+    // Duplicate check
+    const dup = await query(
+      `SELECT id FROM categories WHERE LOWER(name) = LOWER($1) AND restaurant_id = $2 AND is_deleted = FALSE`,
+      [trimmedName, restaurantId]
+    );
+    if (dup.rows.length > 0) {
+      return res.json({ ok: false, code: 'DUPLICATE_CATEGORY', error: 'A category with this name already exists' });
+    }
+
+    // Compute next sort order
+    const maxOrder = await query(
+      `SELECT COALESCE(MAX(sort_order), -1) AS max_order FROM categories WHERE restaurant_id = $1 AND is_deleted = FALSE`,
+      [restaurantId]
+    );
+    const sortOrder = parseInt(maxOrder.rows[0].max_order) + 1;
+
+    const categoryId = uuidv4();
+    await query(
+      `INSERT INTO categories (id, name, restaurant_id, sort_order, is_deleted, created_at)
+       VALUES ($1, $2, $3, $4, FALSE, NOW())`,
+      [categoryId, trimmedName, restaurantId, sortOrder]
+    );
+
+    await writeLog('ADD_CATEGORY', `Category "${trimmedName}" added`, restaurantId, userId);
+    res.json({ ok: true, category: { id: categoryId, name: trimmedName, restaurantId, sortOrder, isDeleted: false } });
+  } catch (err) {
+    console.error('addCategory error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+// -------------------------------------------------------------------
+// updateCategory
+// -------------------------------------------------------------------
+async function updateCategory(req, res) {
+  const { restaurantId, userId } = req.auth;
+  const { categoryId, name, sortOrder } = req.body;
+  if (!categoryId) return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Missing categoryId' });
+
+  try {
+    const existing = await query(
+      `SELECT * FROM categories WHERE id = $1 AND restaurant_id = $2 AND is_deleted = FALSE`,
+      [categoryId, restaurantId]
+    );
+    if (existing.rows.length === 0) {
+      return res.json({ ok: false, code: 'NOT_FOUND', error: 'Category not found' });
+    }
+
+    const newName = name !== undefined ? String(name).trim() : existing.rows[0].name;
+    const newSortOrder = sortOrder !== undefined ? parseInt(sortOrder, 10) : existing.rows[0].sort_order;
+
+    if (!newName) return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Category name cannot be empty' });
+
+    // Duplicate name check (exclude self)
+    const dup = await query(
+      `SELECT id FROM categories WHERE LOWER(name) = LOWER($1) AND restaurant_id = $2 AND id != $3 AND is_deleted = FALSE`,
+      [newName, restaurantId, categoryId]
+    );
+    if (dup.rows.length > 0) {
+      return res.json({ ok: false, code: 'DUPLICATE_CATEGORY', error: 'A category with this name already exists' });
+    }
+
+    await query(
+      `UPDATE categories SET name = $1, sort_order = $2 WHERE id = $3 AND restaurant_id = $4`,
+      [newName, newSortOrder, categoryId, restaurantId]
+    );
+
+    await writeLog('UPDATE_CATEGORY', `Category "${newName}" updated`, restaurantId, userId);
+    res.json({ ok: true, category: { id: categoryId, name: newName, restaurantId, sortOrder: newSortOrder, isDeleted: false } });
+  } catch (err) {
+    console.error('updateCategory error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+// -------------------------------------------------------------------
+// deleteCategory – permanent deletion (must be empty)
+// -------------------------------------------------------------------
+async function deleteCategory(req, res) {
+  const { restaurantId, userId } = req.auth;
+  const { categoryId } = req.body;
+  if (!categoryId) return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Missing categoryId' });
+
+  try {
+    const existing = await query(
+      `SELECT * FROM categories WHERE id = $1 AND restaurant_id = $2`,
+      [categoryId, restaurantId]
+    );
+    if (existing.rows.length === 0) return res.json({ ok: false, code: 'NOT_FOUND', error: 'Category not found' });
+
+    // Check if any items exist (including soft‑deleted)
+    const items = await query(
+      `SELECT id FROM items WHERE category_id = $1 AND restaurant_id = $2`,
+      [categoryId, restaurantId]
+    );
+    if (items.rows.length > 0) {
+      return res.json({ ok: false, code: 'CATEGORY_NOT_EMPTY', error: 'Category still contains items. Delete or move them first.' });
+    }
+
+    await query(`DELETE FROM categories WHERE id = $1 AND restaurant_id = $2`, [categoryId, restaurantId]);
+
+    await writeLog('DELETE_CATEGORY', `Category "${existing.rows[0].name}" permanently deleted`, restaurantId, userId);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('deleteCategory error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+// -------------------------------------------------------------------
+// restoreCategory – stub (permanent deletion)
+// -------------------------------------------------------------------
+async function restoreCategory(req, res) {
+  return res.json({ ok: false, code: 'NOT_FOUND', error: 'Restore not available; categories are permanently deleted.' });
+}
+
+module.exports = {
+  loadStock,
+  saveStock,
+  addCustomItem,
+  updateItem,
+  deleteItem,
+  restoreItem,
+  addCategory,
+  updateCategory,
+  deleteCategory,
+  restoreCategory,
+  writeLog
+};
+
+============================================================
+FILE: migration.js
+============================================================
+const { query, transaction } = require('./database');
+
+async function runMigrations() {
+  console.log('Running database migrations...');
+
+  await transaction(async (tx) => {
+    // --- Restaurants ---
+    await tx(`
+      CREATE TABLE IF NOT EXISTS restaurants (
+        id UUID PRIMARY KEY,
+        name TEXT NOT NULL,
+        display_name TEXT,
+        logo_url TEXT,
+        theme_color TEXT,
+        address TEXT,
+        phone TEXT,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    
+
+    // --- Users ---
+    await tx(`
+      CREATE TABLE IF NOT EXISTS users (
+        id UUID PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT,
+        role TEXT NOT NULL DEFAULT 'staff',
+        restaurant_id UUID REFERENCES restaurants(id),
+        password_hash TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_users_password_hash ON users(password_hash);`);
+
+    // --- Sessions ---
+    await tx(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        id UUID PRIMARY KEY,
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        restaurant_id UUID REFERENCES restaurants(id),
+        token TEXT UNIQUE NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        expires_at TIMESTAMPTZ NOT NULL
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token);`);
+
+    // --- Categories ---
+    await tx(`
+      CREATE TABLE IF NOT EXISTS categories (
+        id UUID PRIMARY KEY,
+        name TEXT NOT NULL,
+        restaurant_id UUID REFERENCES restaurants(id),
+        sort_order INTEGER DEFAULT 0,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_categories_restaurant ON categories(restaurant_id, sort_order);`);
+
+    // --- Items ---
+    await tx(`
+      CREATE TABLE IF NOT EXISTS items (
+        id UUID PRIMARY KEY,
+        name TEXT NOT NULL,
+        category_id UUID REFERENCES categories(id),
+        unit TEXT,
+        default_quantity DECIMAL(10,2) DEFAULT 0,
+        restaurant_id UUID REFERENCES restaurants(id),
+        is_default BOOLEAN DEFAULT TRUE,
+        is_deleted BOOLEAN DEFAULT FALSE,
+        container_volume INTEGER,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_items_category_restaurant ON items(category_id, restaurant_id);`);
+
+    // --- Stocks ---
+    await tx(`
+      CREATE TABLE IF NOT EXISTS stocks (
+        id UUID PRIMARY KEY,
+        item_id UUID REFERENCES items(id) ON DELETE CASCADE,
+        restaurant_id UUID REFERENCES restaurants(id),
+        quantity DECIMAL(10,2) DEFAULT 0,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_stocks_item_restaurant ON stocks(item_id, restaurant_id);`);
+
+    // --- Recipes ---
+    await tx(`
+      CREATE TABLE IF NOT EXISTS recipes (
+        id UUID PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        glass TEXT,
+        method TEXT,
+        garnish TEXT,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    // Add restaurant_id if missing (migration for existing databases)
+    await tx(`ALTER TABLE recipes ADD COLUMN IF NOT EXISTS restaurant_id UUID REFERENCES restaurants(id);`);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_recipes_restaurant ON recipes(restaurant_id);`);
+
+    // --- Recipe Ingredients ---
+    await tx(`
+      CREATE TABLE IF NOT EXISTS recipe_ingredients (
+        id UUID PRIMARY KEY,
+        recipe_id UUID REFERENCES recipes(id) ON DELETE CASCADE,
+        inventory_item_id UUID REFERENCES items(id),
+        ingredient_name TEXT,
+        amount DECIMAL(10,2),
+        unit TEXT
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_recipe_ingredients_recipe ON recipe_ingredients(recipe_id);`);
+
+    // --- Logs ---
+    await tx(`
+      CREATE TABLE IF NOT EXISTS logs (
+        id UUID PRIMARY KEY,
+        action TEXT,
+        details TEXT,
+        user_id UUID REFERENCES users(id),
+        restaurant_id UUID REFERENCES restaurants(id),
+        timestamp TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp);`);
+
+    // --- Settings ---
+    await tx(`
+      CREATE TABLE IF NOT EXISTS settings (
+        key TEXT PRIMARY KEY,
+        value TEXT
+      );
+    `);
+
+    // Insert default settings if missing
+    await tx(
+      `INSERT INTO settings (key, value)
+       VALUES ($1, $2)
+       ON CONFLICT (key) DO NOTHING`,
+      ['requireAuth', 'false']
+    );
+
+    // -----------------------------------------------------------------
+    // FIX: allow recipe_ingredients.inventory_item_id to be set to NULL
+    // -----------------------------------------------------------------
+    const constraintCheck = await tx(`
+      SELECT confdeltype
+      FROM pg_constraint
+      WHERE conname = 'recipe_ingredients_inventory_item_id_fkey'
+    `);
+    if (constraintCheck.rows.length > 0 && constraintCheck.rows[0].confdeltype !== 'n') {
+      await tx(`ALTER TABLE recipe_ingredients DROP CONSTRAINT recipe_ingredients_inventory_item_id_fkey`);
+      await tx(`ALTER TABLE recipe_ingredients ADD CONSTRAINT recipe_ingredients_inventory_item_id_fkey
+                FOREIGN KEY (inventory_item_id) REFERENCES items(id) ON DELETE SET NULL`);
+    }
+
+    // =================================================================
+    // NEW TABLES for POS shortage resolution
+    // =================================================================
+    await tx(`
+      CREATE TABLE IF NOT EXISTS pending_allocations (
+        id UUID PRIMARY KEY,
+        restaurant_id UUID REFERENCES restaurants(id),
+        recipe_id UUID REFERENCES recipes(id),
+        recipe_name TEXT,
+        inventory_category_id UUID REFERENCES categories(id),
+        inventory_category_name TEXT,
+        required_quantity DECIMAL(10,2),
+        unit TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        resolved BOOLEAN DEFAULT FALSE,
+        resolved_at TIMESTAMPTZ,
+        resolved_by UUID REFERENCES users(id)
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_pending_allocations_restaurant ON pending_allocations(restaurant_id, resolved);`);
+
+    await tx(`
+      CREATE TABLE IF NOT EXISTS pending_allocation_details (
+        id UUID PRIMARY KEY,
+        pending_allocation_id UUID REFERENCES pending_allocations(id) ON DELETE CASCADE,
+        recipe_id UUID REFERENCES recipes(id),
+        recipe_name TEXT,
+        inventory_item_id UUID REFERENCES items(id),
+        inventory_item_name TEXT,
+        quantity DECIMAL(10,2),
+        unit TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_pending_alloc_details_parent ON pending_allocation_details(pending_allocation_id);`);
+
+    await tx(`
+      CREATE TABLE IF NOT EXISTS allocation_logs (
+        id UUID PRIMARY KEY,
+        pending_allocation_id UUID REFERENCES pending_allocations(id) ON DELETE CASCADE,
+        old_inventory_item_id UUID REFERENCES items(id),
+        new_inventory_item_id UUID REFERENCES items(id),
+        quantity DECIMAL(10,2),
+        resolved_by UUID REFERENCES users(id),
+        resolved_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_allocation_logs_parent ON allocation_logs(pending_allocation_id);`);
+
+    // -----------------------------------------------------------------
+    // RBAC: upgrade existing admin roles to manager, ensure default is 'staff'
+    // -----------------------------------------------------------------
+    await tx(`ALTER TABLE users ALTER COLUMN role SET DEFAULT 'staff'`);
+    await tx(`UPDATE users SET role = 'manager' WHERE role = 'admin'`);
+
+    // -----------------------------------------------------------------
+    // Staff Management: is_active column
+    // -----------------------------------------------------------------
+    await tx(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE`);
+
+    // Remove old global PIN uniqueness constraint if present
+    await tx(`ALTER TABLE users DROP CONSTRAINT IF EXISTS unique_user_pin`);
+
+    // Add username column (unique, indexed)
+    await tx(`ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT`);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`);
+
+    // Add restaurant_code column (unique)
+    await tx(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS restaurant_code TEXT`);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_restaurants_code ON restaurants(restaurant_code)`);
+
+    // Generate restaurant_code for existing restaurants – ensure uniqueness
+    const restRows = await tx(`SELECT id, name FROM restaurants WHERE restaurant_code IS NULL`);
+    for (const row of restRows.rows) {
+      const base = row.name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 30) || 'restaurant';
+      let code = base;
+      let counter = 1;
+      while (true) {
+        const exists = await tx(`SELECT id FROM restaurants WHERE restaurant_code = $1 AND id <> $2`, [code, row.id]);
+        if (exists.rows.length === 0) break;
+        code = base + counter;
+        counter++;
+      }
+      await tx(`UPDATE restaurants SET restaurant_code = $1 WHERE id = $2`, [code, row.id]);
+    }
+
+    // Now all codes are unique – safe to add the constraint
+    const restCodeCon = await tx(`
+      SELECT 1 FROM pg_constraint
+      WHERE conname = 'unique_restaurant_code' AND conrelid = 'restaurants'::regclass
+    `);
+    if (restCodeCon.rows.length === 0) {
+      await tx(`ALTER TABLE restaurants ADD CONSTRAINT unique_restaurant_code UNIQUE (restaurant_code)`);
+    }
+
+    // Generate username for existing users
+    const userRows = await tx(`
+      SELECT u.id, u.name, r.restaurant_code
+      FROM users u
+      JOIN restaurants r ON u.restaurant_id = r.id
+      WHERE u.username IS NULL
+    `);
+    for (const user of userRows.rows) {
+      const base = user.name.toLowerCase().replace(/[^a-z0-9]/g, '') + '@' + user.restaurant_code;
+      let username = base;
+      let counter = 1;
+      while (true) {
+        const exists = await tx(`SELECT id FROM users WHERE username = $1 AND id <> $2`, [username, user.id]);
+        if (exists.rows.length === 0) break;
+        username = base.replace('@', counter + '@');
+        counter++;
+      }
+      await tx(`UPDATE users SET username = $1 WHERE id = $2`, [username, user.id]);
+    }
+
+    // Make username NOT NULL and add unique constraint (safe check)
+    await tx(`ALTER TABLE users ALTER COLUMN username SET NOT NULL`);
+
+    const usernameCon = await tx(`
+      SELECT 1 FROM pg_constraint
+      WHERE conname = 'unique_username' AND conrelid = 'users'::regclass
+    `);
+    if (usernameCon.rows.length === 0) {
+      await tx(`ALTER TABLE users ADD CONSTRAINT unique_username UNIQUE (username)`);
+    }
+    
+    // --- Restaurant Settings ---
+    await tx(`
+      CREATE TABLE IF NOT EXISTS restaurant_settings (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        restaurant_id UUID REFERENCES restaurants(id),
+        key TEXT NOT NULL,
+        value JSONB NOT NULL DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (restaurant_id, key)
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_restaurant_settings_restaurant ON restaurant_settings(restaurant_id);`);
+
+    // =================================================================
+    // POS Integration table (simplified schema)
+    // =================================================================
+    await tx(`
+      CREATE TABLE IF NOT EXISTS pos_integrations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        restaurant_id UUID REFERENCES restaurants(id) ON DELETE CASCADE,
+        provider TEXT DEFAULT 'None',
+        status TEXT DEFAULT 'Disconnected',
+        last_sync TIMESTAMPTZ,
+        configuration JSONB DEFAULT '{}',
+        statistics JSONB DEFAULT '{}',
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(restaurant_id)
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_pos_integrations_restaurant ON pos_integrations(restaurant_id);`);
+
+    // Migrate old columns if they still exist
+    const posCols = await tx(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = 'pos_integrations'
+        AND column_name IN ('provider_id','provider_name','connection_status','connect_status')
+    `);
+    if (posCols.rows.length > 0) {
+      await tx(`ALTER TABLE pos_integrations ADD COLUMN IF NOT EXISTS provider TEXT DEFAULT 'None'`);
+      await tx(`ALTER TABLE pos_integrations ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Disconnected'`);
+      await tx(`UPDATE pos_integrations SET provider = COALESCE(provider_name, provider_id, 'None')`);
+      await tx(`UPDATE pos_integrations SET status = COALESCE(connection_status, 'Disconnected')`);
+      await tx(`ALTER TABLE pos_integrations DROP COLUMN IF EXISTS provider_id`);
+      await tx(`ALTER TABLE pos_integrations DROP COLUMN IF EXISTS provider_name`);
+      await tx(`ALTER TABLE pos_integrations DROP COLUMN IF EXISTS connection_status`);
+      await tx(`ALTER TABLE pos_integrations DROP COLUMN IF EXISTS connect_status`);
+    }
+
+    // Seed default POS integration for every restaurant
+    const restaurantsForPos = await tx(`SELECT id FROM restaurants`);
+    for (const rest of restaurantsForPos.rows) {
+      await tx(
+        `INSERT INTO pos_integrations (restaurant_id, provider, status, statistics)
+         VALUES ($1, 'None', 'Disconnected', '{"totalSales":0,"lastSaleAt":null}')
+         ON CONFLICT (restaurant_id) DO NOTHING`,
+        [rest.id]
+      );
+    }
+
+    // =================================================================
+    // NEW PERMISSION SYSTEM
+    // =================================================================
+
+    // --- Permission Definitions (master list) ---
+    await tx(`
+      CREATE TABLE IF NOT EXISTS permission_definitions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        module TEXT NOT NULL,
+        permission TEXT NOT NULL,
+        label TEXT NOT NULL,
+        description TEXT DEFAULT '',
+        sort_order INTEGER DEFAULT 0,
+        enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(module, permission)
+      );
+    `);
+    await tx(`ALTER TABLE permission_definitions ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT TRUE`);
+
+    // Seed definitions
+    const seedDefinitions = [
+      ['inventory','view','View Inventory','Ability to view inventory items',1],
+      ['inventory','save','Save Inventory','Ability to save stock quantities',2],
+      ['inventory','add','Add Inventory Item','Ability to add new inventory items',3],
+      ['inventory','edit','Edit Inventory Item','Ability to edit existing items',4],
+      ['inventory','delete','Delete Inventory Item','Ability to delete items',5],
+      ['recipes','view','View Recipes','Ability to view recipes',6],
+      ['recipes','create','Create Recipe','Ability to create new recipes',7],
+      ['recipes','edit','Edit Recipe','Ability to edit existing recipes',8],
+      ['recipes','delete','Delete Recipe','Ability to delete recipes',9],
+      ['categories','add','Add Category','Ability to add new categories',10],
+      ['categories','edit','Edit Category','Ability to rename/reorder categories',11],
+      ['categories','delete','Delete Category','Ability to delete categories',12],
+      ['allocations','list','List Pending Allocations','Ability to view pending shortage allocations',13],
+      ['allocations','details','View Allocation Details','Ability to see per‑cocktail details',14],
+      ['allocations','resolve','Resolve Pending Allocations','Ability to resolve shortages',15],
+      ['pos','sale','Record Sale','Ability to record a sale (POS)',16],
+      ['settings','manage','Manage Settings','Ability to modify restaurant settings',17],
+      ['staff','view','View Staff','Ability to view staff members',18],
+      ['staff','create','Create Staff','Ability to create new staff accounts',19],
+      ['staff','edit','Edit Staff','Ability to edit staff details',20]
+    ];
+    for (const def of seedDefinitions) {
+      await tx(
+        `INSERT INTO permission_definitions (module, permission, label, description, sort_order)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (module, permission) DO NOTHING`,
+        def
+      );
+    }
+
+    // --- Role Permissions (per restaurant, per role) ---
+    await tx(`
+      CREATE TABLE IF NOT EXISTS role_permissions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        restaurant_id UUID REFERENCES restaurants(id) ON DELETE CASCADE,
+        role TEXT NOT NULL CHECK (role IN ('manager','staff')),
+        module TEXT NOT NULL,
+        permission TEXT NOT NULL,
+        allowed BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE(restaurant_id, role, module, permission)
+      );
+    `);
+
+    // Seed default permissions for each restaurant
+    const restaurants = await tx(`SELECT id FROM restaurants`);
+    for (const rest of restaurants.rows) {
+      const restId = rest.id;
+      // Manager → all true
+      const defs = await tx(`SELECT module, permission FROM permission_definitions`);
+      for (const d of defs.rows) {
+        await tx(
+          `INSERT INTO role_permissions (restaurant_id, role, module, permission, allowed)
+           VALUES ($1, 'manager', $2, $3, true)
+           ON CONFLICT (restaurant_id, role, module, permission) DO NOTHING`,
+          [restId, d.module, d.permission]
+        );
+      }
+      // Staff → current production defaults
+      const staffDefaults = {
+        inventory:   ['view','save'],
+        recipes:     ['view'],
+        allocations: ['list','details','resolve'],
+        pos:         ['sale']
+      };
+      for (const module of Object.keys(staffDefaults)) {
+        for (const perm of staffDefaults[module]) {
+          await tx(
+            `INSERT INTO role_permissions (restaurant_id, role, module, permission, allowed)
+             VALUES ($1, 'staff', $2, $3, true)
+             ON CONFLICT (restaurant_id, role, module, permission) DO NOTHING`,
+            [restId, module, perm]
+          );
+        }
+      }
+      // Ensure all other permissions for staff are explicitly false
+      for (const d of defs.rows) {
+        if (!staffDefaults[d.module] || !staffDefaults[d.module].includes(d.permission)) {
+          await tx(
+            `INSERT INTO role_permissions (restaurant_id, role, module, permission, allowed)
+             VALUES ($1, 'staff', $2, $3, false)
+             ON CONFLICT (restaurant_id, role, module, permission) DO NOTHING`,
+            [restId, d.module, d.permission]
+          );
+        }
+      }
+    }
+
+        // =================================================================
+    // POS Sales table (aggregate sales summaries)
+    // =================================================================
+    await tx(`
+      CREATE TABLE IF NOT EXISTS pos_sales (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        restaurant_id UUID REFERENCES restaurants(id) ON DELETE CASCADE,
+        provider TEXT,
+        product_name TEXT NOT NULL,
+        quantity NUMERIC NOT NULL DEFAULT 1,
+        sold_at TIMESTAMPTZ NOT NULL,
+        external_sale_id TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_pos_sales_restaurant ON pos_sales(restaurant_id);`);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_pos_sales_sold_at ON pos_sales(sold_at);`);
+
+        // =================================================================
+    // Inventory Adjustments (header + detail)
+    // =================================================================
+    await tx(`
+      CREATE TABLE IF NOT EXISTS inventory_adjustments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        restaurant_id UUID REFERENCES restaurants(id) ON DELETE CASCADE,
+        user_id UUID REFERENCES users(id),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_inv_adj_restaurant ON inventory_adjustments(restaurant_id);`);
+
+    await tx(`
+      CREATE TABLE IF NOT EXISTS inventory_adjustment_items (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        adjustment_id UUID REFERENCES inventory_adjustments(id) ON DELETE CASCADE,
+        item_id UUID REFERENCES items(id) ON DELETE CASCADE,
+        old_quantity DECIMAL(10,2) NOT NULL,
+        new_quantity DECIMAL(10,2) NOT NULL,
+        difference DECIMAL(10,2) NOT NULL,
+        reason TEXT NOT NULL,
+        note TEXT
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_inv_adj_items_adjustment ON inventory_adjustment_items(adjustment_id);`);
+
+    // =================================================================
+    // Stock Intakes (header + detail)
+    // =================================================================
+    await tx(`
+      CREATE TABLE IF NOT EXISTS stock_intakes (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        restaurant_id UUID REFERENCES restaurants(id) ON DELETE CASCADE,
+        user_id UUID REFERENCES users(id),
+        intake_type TEXT NOT NULL DEFAULT 'purchase',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_stock_intakes_restaurant ON stock_intakes(restaurant_id);`);
+
+    await tx(`
+      CREATE TABLE IF NOT EXISTS stock_intake_items (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        intake_id UUID REFERENCES stock_intakes(id) ON DELETE CASCADE,
+        item_id UUID REFERENCES items(id) ON DELETE CASCADE,
+        quantity_added DECIMAL(10,2) NOT NULL
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_stock_intake_items_intake ON stock_intake_items(intake_id);`);
+
+
+        // =================================================================
+    // Configuration tables – inventory units & adjustment reasons
+    // =================================================================
+    await tx(`
+      CREATE TABLE IF NOT EXISTS inventory_units (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        value TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        sort_order INTEGER DEFAULT 0,
+        enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        UNIQUE(value)
+      );
+    `);
+    await tx(`
+      INSERT INTO inventory_units (value, display_name, sort_order)
+      VALUES
+        ('ml', 'ml', 1),
+        ('cl', 'cl', 2),
+        ('L', 'L', 3),
+        ('pcs', 'pcs', 4),
+        ('slice', 'slice', 5),
+        ('wedge', 'wedge', 6),
+        ('dash', 'dash', 7),
+        ('drop', 'drop', 8),
+        ('sprig', 'sprig', 9),
+        ('leaf', 'leaf', 10),
+        ('pinch', 'pinch', 11)
+      ON CONFLICT (value) DO NOTHING;
+    `);
+
+    await tx(`
+      CREATE TABLE IF NOT EXISTS inventory_adjustment_reasons (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        value TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        sort_order INTEGER DEFAULT 0,
+        enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        UNIQUE(value)
+      );
+    `);
+    await tx(`
+      INSERT INTO inventory_adjustment_reasons (value, display_name, sort_order)
+      VALUES
+        ('Broken', 'Broken', 1),
+        ('Spillage', 'Spillage', 2),
+        ('Staff Consumption', 'Staff Consumption', 3),
+        ('Expired', 'Expired', 4),
+        ('Inventory Count Correction', 'Inventory Count Correction', 5),
+        ('Other', 'Other', 6)
+      ON CONFLICT (value) DO NOTHING;
+    `);
+
+        // =================================================================
+    // Sales Import tables (CSV import + product mappings)
+    // =================================================================
+    await tx(`
+      CREATE TABLE IF NOT EXISTS sales_imports (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        restaurant_id UUID NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+        imported_by UUID REFERENCES users(id),
+        source TEXT NOT NULL DEFAULT 'flatpay',
+        period_start TIMESTAMPTZ,
+        period_end TIMESTAMPTZ,
+        file_hash TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(restaurant_id, file_hash)
+      );
+    `);
+
+    await tx(`
+      CREATE TABLE IF NOT EXISTS sales_import_items (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        import_id UUID NOT NULL REFERENCES sales_imports(id) ON DELETE CASCADE,
+        item_id UUID NOT NULL REFERENCES items(id),
+        source_product_name TEXT NOT NULL,
+        quantity_sold DECIMAL(10,2) NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
+
+    await tx(`
+      CREATE TABLE IF NOT EXISTS sales_product_mappings (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        restaurant_id UUID NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+        source TEXT NOT NULL DEFAULT 'flatpay',
+        source_product_name TEXT NOT NULL,
+        item_id UUID NOT NULL REFERENCES items(id),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE(restaurant_id, source, source_product_name)
+      );
+    `);
+
+        // =================================================================
+    // Product Barcode Cache (restaurant-scoped)
+    // =================================================================
+    await tx(`
+      CREATE TABLE IF NOT EXISTS product_barcodes (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        restaurant_id UUID REFERENCES restaurants(id) ON DELETE CASCADE,
+        barcode TEXT NOT NULL,
+        product_name TEXT,
+        brand TEXT,
+        description TEXT,
+        category TEXT,
+        quantity_value DECIMAL,
+        quantity_unit TEXT,
+        package_quantity INTEGER,
+        package_unit TEXT,
+        inventory_item_id UUID REFERENCES items(id),
+        provider TEXT,
+        provider_product_id TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_product_barcodes_restaurant ON product_barcodes(restaurant_id, barcode);`);
+
+    // =================================================================
+    // Configuration tables – inventory units & adjustment reasons
+    // =================================================================
+    await tx(`
+      CREATE TABLE IF NOT EXISTS inventory_units (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        value TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        sort_order INTEGER DEFAULT 0,
+        enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        UNIQUE(value)
+      );
+    `);
+    await tx(`
+      INSERT INTO inventory_units (value, display_name, sort_order)
+      VALUES
+        ('ml', 'ml', 1), ('cl', 'cl', 2), ('L', 'L', 3), ('pcs', 'pcs', 4),
+        ('bottle', 'Bottle', 5), ('can', 'Can', 6), ('case', 'Case', 7),
+        ('box', 'Box', 8), ('pack', 'Pack', 9), ('slice', 'slice', 10),
+        ('wedge', 'wedge', 11), ('dash', 'dash', 12), ('drop', 'drop', 13),
+        ('sprig', 'sprig', 14), ('leaf', 'leaf', 15), ('pinch', 'pinch', 16)
+      ON CONFLICT (value) DO UPDATE SET
+        display_name = EXCLUDED.display_name, sort_order = EXCLUDED.sort_order, enabled = TRUE;
+    `);
+
+    // Add direction column to inventory_adjustment_reasons (if missing)
+    await tx(`ALTER TABLE inventory_adjustment_reasons ADD COLUMN IF NOT EXISTS direction TEXT`);
+
+    // Migrate existing reasons
+    await tx(`
+      UPDATE inventory_adjustment_reasons
+      SET direction = CASE
+        WHEN value IN ('Broken','Spillage','Staff Consumption','Expired') THEN 'decrease'
+        WHEN value IN ('Inventory Count Correction','Other') THEN 'both'
+        ELSE 'decrease'
+      END
+      WHERE direction IS NULL
+    `);
+
+    // Remove old generic reasons
+    await tx(`DELETE FROM inventory_adjustment_reasons WHERE value IN ('Broken','Spillage','Staff Consumption','Expired','Inventory Count Correction','Other')`);
+
+    // Seed directional reasons
+    await tx(`
+      INSERT INTO inventory_adjustment_reasons (value, display_name, direction, sort_order, enabled)
+      VALUES
+        ('purchase', 'Purchase', 'increase', 1, TRUE),
+        ('found_stock', 'Found Stock', 'increase', 2, TRUE),
+        ('return_to_stock', 'Return to Stock', 'increase', 3, TRUE),
+        ('inventory_count_correction_increase', 'Inventory Count Correction', 'increase', 4, TRUE),
+        ('other_increase', 'Other', 'increase', 5, TRUE),
+        ('staff_consumption', 'Staff Consumption', 'decrease', 1, TRUE),
+        ('spillage', 'Spillage', 'decrease', 2, TRUE),
+        ('broken', 'Broken', 'decrease', 3, TRUE),
+        ('expired', 'Expired', 'decrease', 4, TRUE),
+        ('inventory_count_correction_decrease', 'Inventory Count Correction', 'decrease', 5, TRUE),
+        ('other_decrease', 'Other', 'decrease', 6, TRUE)
+      ON CONFLICT (value) DO UPDATE SET
+        display_name = EXCLUDED.display_name, direction = EXCLUDED.direction,
+        sort_order = EXCLUDED.sort_order, enabled = TRUE;
+    `);
+
+    // =================================================================
+    // NEW: Item packages, volume fields, and stock intake extension
+    // =================================================================
+
+    // Volume and volume unit on items
+    await tx(`ALTER TABLE items ADD COLUMN IF NOT EXISTS volume DECIMAL(10,2)`);
+    await tx(`ALTER TABLE items ADD COLUMN IF NOT EXISTS volume_unit TEXT`);
+
+    // Item purchase packages
+    await tx(`
+      CREATE TABLE IF NOT EXISTS item_packages (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        restaurant_id UUID REFERENCES restaurants(id) ON DELETE CASCADE,
+        item_id UUID REFERENCES items(id) ON DELETE CASCADE,
+        package_unit TEXT NOT NULL,
+        units_per_package DECIMAL(10,2) NOT NULL DEFAULT 1,
+        enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        sort_order INTEGER DEFAULT 0,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (restaurant_id, item_id, package_unit)
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_item_packages_restaurant_item ON item_packages(restaurant_id, item_id);`);
+
+    // Extend stock_intake_items to preserve package info
+    await tx(`ALTER TABLE stock_intake_items ADD COLUMN IF NOT EXISTS package_id UUID REFERENCES item_packages(id)`);
+    await tx(`ALTER TABLE stock_intake_items ADD COLUMN IF NOT EXISTS quantity_purchased DECIMAL(10,2)`);
+    await tx(`ALTER TABLE stock_intake_items ADD COLUMN IF NOT EXISTS units_per_package_at_time DECIMAL(10,2)`);
+    // Migrate existing reasons: assign direction based on current value
+    await tx(`
+      UPDATE inventory_adjustment_reasons
+      SET direction = CASE
+        WHEN value IN ('Broken','Spillage','Staff Consumption','Expired') THEN 'decrease'
+        WHEN value = 'Inventory Count Correction' THEN 'both'   -- will be split later
+        WHEN value = 'Other' THEN 'both'
+        ELSE 'decrease'
+      END
+      WHERE direction IS NULL
+    `);
+
+    // Remove old generic reasons that we will replace with directional ones
+    await tx(`DELETE FROM inventory_adjustment_reasons WHERE value IN ('Broken','Spillage','Staff Consumption','Expired','Inventory Count Correction','Other')`);
+
+    // Seed directional reasons
+    await tx(`
+      INSERT INTO inventory_adjustment_reasons (value, display_name, direction, sort_order, enabled)
+      VALUES
+        -- Increase reasons
+        ('purchase', 'Purchase', 'increase', 1, TRUE),
+        ('found_stock', 'Found Stock', 'increase', 2, TRUE),
+        ('return_to_stock', 'Return to Stock', 'increase', 3, TRUE),
+        ('inventory_count_correction_increase', 'Inventory Count Correction', 'increase', 4, TRUE),
+        ('other_increase', 'Other', 'increase', 5, TRUE),
+        -- Decrease reasons
+        ('staff_consumption', 'Staff Consumption', 'decrease', 1, TRUE),
+        ('spillage', 'Spillage', 'decrease', 2, TRUE),
+        ('broken', 'Broken', 'decrease', 3, TRUE),
+        ('expired', 'Expired', 'decrease', 4, TRUE),
+        ('inventory_count_correction_decrease', 'Inventory Count Correction', 'decrease', 5, TRUE),
+        ('other_decrease', 'Other', 'decrease', 6, TRUE)
+      ON CONFLICT (value) DO UPDATE SET
+        display_name = EXCLUDED.display_name,
+        direction = EXCLUDED.direction,
+        sort_order = EXCLUDED.sort_order,
+        enabled = TRUE;
+    `);
+    
+    console.log('Migrations completed successfully.');
+  });
+}
+
+module.exports = { runMigrations };
+
+============================================================
+FILE: package.json
+============================================================
+{
+  "name": "restaurant-inventory-backend",
+  "version": "1.0.0",
+  "description": "Restaurant Inventory System Backend",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "npx nodemon server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "pg": "^8.13.0",
+    "uuid": "^14.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  }
+}
+
+============================================================
+FILE: permissions.js
+============================================================
+const { query } = require('./database');
+
+// Static fallback definitions
+const DEFAULTS = {
+  manager: {
+    inventory:   ['add', 'edit', 'delete', 'save', 'view'],
+    recipes:     ['create', 'edit', 'delete', 'view'],
+    categories:  ['add', 'edit', 'delete'],
+    allocations: ['list', 'details', 'resolve'],
+    pos:         ['sale'],
+    settings:    ['manage']
+  },
+  staff: {
+    inventory:   ['save', 'view'],
+    recipes:     ['view'],
+    allocations: ['list', 'details', 'resolve'],
+    pos:         ['sale']
+  }
+};
+
+/**
+ * Load custom permissions from restaurant_settings.
+ */
+async function loadCustomPermissions(restaurantId) {
+  try {
+    const res = await query(
+      `SELECT value FROM restaurant_settings WHERE restaurant_id = $1 AND key = 'permissions'`,
+      [restaurantId]
+    );
+    if (res.rows.length > 0 && res.rows[0].value) {
+      return res.rows[0].value;
+    }
+    return null;
+  } catch (err) {
+    console.error('Failed to load custom permissions:', err);
+    return null;
+  }
+}
+
+/**
+ * Resolve effective permissions for a single role.
+ */
+async function resolvePermissions(role, restaurantId) {
+  const custom = await loadCustomPermissions(restaurantId);
+  if (custom && custom[role]) {
+    return custom[role];
+  }
+  return DEFAULTS[role] || {};
+}
+
+/**
+ * Resolve the full permissions object for a restaurant (both roles).
+ * Used by settings endpoint to display current permissions.
+ */
+async function resolveAllPermissions(restaurantId) {
+  const custom = await loadCustomPermissions(restaurantId);
+  if (custom) {
+    return {
+      manager: custom.manager || DEFAULTS.manager,
+      staff:   custom.staff   || DEFAULTS.staff
+    };
+  }
+  // No custom saved – return static defaults
+  return { ...DEFAULTS };
+}
+
+// Also export the static defaults for backward compatibility
+module.exports = DEFAULTS;
+module.exports.resolvePermissions = resolvePermissions;
+module.exports.resolveAllPermissions = resolveAllPermissions;
+
+============================================================
+FILE: README.md
+============================================================
+
+
+============================================================
+FILE: recipes.js
+============================================================
+const { v4: uuidv4 } = require('uuid');
+const { query, transaction } = require('./database');
+const { writeLog } = require('./inventory');  // reuse log helper
+
+// -------------------------------------------------------------------
+// Helper: fetch item name by ID (used when building responses)
+// -------------------------------------------------------------------
+async function getItemName(itemId) {
+  if (!itemId) return null;
+  const res = await query(`SELECT name FROM items WHERE id = $1`, [itemId]);
+  return res.rows.length > 0 ? res.rows[0].name : null;
+}
+
+// -------------------------------------------------------------------
+// Helper: attach item names and custom names to ingredients list
+// -------------------------------------------------------------------
+async function enrichIngredients(ingredients) {
+  const enriched = [];
+  for (const ing of ingredients) {
+    const enrichedIng = {
+      id: ing.id,
+      recipeId: ing.recipe_id,
+      inventoryItemId: ing.inventory_item_id || null,
+      inventoryItemName: null,
+      customName: null,
+      amount: parseFloat(ing.amount),
+      unit: ing.unit
+    };
+    if (ing.inventory_item_id) {
+      enrichedIng.inventoryItemName = await getItemName(ing.inventory_item_id);
+    } else {
+      enrichedIng.customName = ing.ingredient_name;
+    }
+    enriched.push(enrichedIng);
+  }
+  return enriched;
+}
+
+// -------------------------------------------------------------------
+// createRecipe
+// -------------------------------------------------------------------
+async function createRecipe(req, res) {
+  const { restaurantId, userId } = req.auth;
+  const { name, description, glass, method, garnish, ingredients } = req.body;
+  if (!name || !String(name).trim()) {
+    return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Recipe name is required' });
+  }
+
+  const recipeId = uuidv4();
+  try {
+    await transaction(async (tx) => {
+      await tx(
+        `INSERT INTO recipes (id, restaurant_id, name, description, glass, method, garnish, is_active, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, NOW(), NOW())`,
+        [recipeId, restaurantId, String(name).trim(), description || '', glass || '', method || '', garnish || '']
+      );
+      if (Array.isArray(ingredients)) {
+        for (const ing of ingredients) {
+          const invItemId = ing.inventoryItemId || null;
+          const customName = ing.customName || null;
+
+          // Determine the ingredient name to store:
+          // - if inventoryItemId is provided, we can leave ingredient_name empty (or fetch item name)
+          // - if customName is provided, use it as ingredient_name
+          const ingredientName = invItemId ? (await getItemName(invItemId)) : (customName || '');
+
+          // If an inventoryItemId is provided, verify it exists
+          if (invItemId) {
+            const itemCheck = await tx(`SELECT id FROM items WHERE id = $1 AND restaurant_id = $2`, [invItemId, restaurantId]);
+            if (itemCheck.rows.length === 0) {
+              throw { code: 'NOT_FOUND', error: `Inventory item not found: ${invItemId}` };
+            }
+          }
+          await tx(
+            `INSERT INTO recipe_ingredients (id, recipe_id, inventory_item_id, ingredient_name, amount, unit)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [
+              uuidv4(),
+              recipeId,
+              invItemId,
+              ingredientName,
+              parseFloat(ing.amount) || 0,
+              ing.unit || 'ml'
+            ]
+          );
+        }
+      }
+    });
+
+    await writeLog('CREATE_RECIPE', `Recipe "${name}" created`, restaurantId, userId);
+    res.json({ ok: true, recipe: { id: recipeId, name: String(name).trim() } });
+  } catch (err) {
+    console.error('createRecipe error:', err);
+    if (err.code) {
+      return res.json({ ok: false, code: err.code, error: err.error });
+    }
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+// -------------------------------------------------------------------
+// updateRecipe
+// -------------------------------------------------------------------
+async function updateRecipe(req, res) {
+  const { restaurantId, userId } = req.auth;
+  const { recipeId, name, description, glass, method, garnish, isActive, ingredients } = req.body;
+  if (!recipeId) return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Missing recipeId' });
+
+  try {
+    const existing = await query(`SELECT id FROM recipes WHERE id = $1 AND restaurant_id = $2`, [recipeId, restaurantId]);
+    if (existing.rows.length === 0) return res.json({ ok: false, code: 'NOT_FOUND', error: 'Recipe not found' });
+
+    await transaction(async (tx) => {
+      await tx(
+        `UPDATE recipes SET
+           name = COALESCE($1, name),
+           description = COALESCE($2, description),
+           glass = COALESCE($3, glass),
+           method = COALESCE($4, method),
+           garnish = COALESCE($5, garnish),
+           is_active = COALESCE($6, is_active),
+           updated_at = NOW()
+         WHERE id = $7 AND restaurant_id = $8`,
+        [
+          name ? String(name).trim() : null,
+          description !== undefined ? description : null,
+          glass !== undefined ? glass : null,
+          method !== undefined ? method : null,
+          garnish !== undefined ? garnish : null,
+          isActive !== undefined ? !!isActive : null,
+          recipeId,
+          restaurantId
+        ]
+      );
+
+      if (Array.isArray(ingredients)) {
+        await tx(`DELETE FROM recipe_ingredients WHERE recipe_id = $1`, [recipeId]);
+        for (const ing of ingredients) {
+          const invItemId = ing.inventoryItemId || null;
+          const customName = ing.customName || null;
+          const ingredientName = invItemId ? (await getItemName(invItemId)) : (customName || '');
+
+          if (invItemId) {
+            const itemCheck = await tx(`SELECT id FROM items WHERE id = $1 AND restaurant_id = $2`, [invItemId, restaurantId]);
+            if (itemCheck.rows.length === 0) {
+              throw { code: 'NOT_FOUND', error: `Inventory item not found: ${invItemId}` };
+            }
+          }
+          await tx(
+            `INSERT INTO recipe_ingredients (id, recipe_id, inventory_item_id, ingredient_name, amount, unit)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [
+              uuidv4(),
+              recipeId,
+              invItemId,
+              ingredientName,
+              parseFloat(ing.amount) || 0,
+              ing.unit || 'ml'
+            ]
+          );
+        }
+      }
+    });
+
+    await writeLog('UPDATE_RECIPE', `Recipe "${recipeId}" updated`, restaurantId, userId);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('updateRecipe error:', err);
+    if (err.code) {
+      return res.json({ ok: false, code: err.code, error: err.error });
+    }
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+// -------------------------------------------------------------------
+// deleteRecipe
+// -------------------------------------------------------------------
+async function deleteRecipe(req, res) {
+  const { restaurantId, userId } = req.auth;
+  const { recipeId } = req.body;
+  if (!recipeId) return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Missing recipeId' });
+
+  try {
+    const existing = await query(`SELECT id FROM recipes WHERE id = $1 AND restaurant_id = $2`, [recipeId, restaurantId]);
+    if (existing.rows.length === 0) return res.json({ ok: false, code: 'NOT_FOUND', error: 'Recipe not found' });
+
+    await query(`DELETE FROM recipes WHERE id = $1 AND restaurant_id = $2`, [recipeId, restaurantId]);
+
+    await writeLog('DELETE_RECIPE', `Recipe "${recipeId}" deleted`, restaurantId, userId);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('deleteRecipe error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+// -------------------------------------------------------------------
+// getRecipe – returns full recipe with enriched ingredients
+// -------------------------------------------------------------------
+async function getRecipe(req, res) {
+  const { restaurantId } = req.auth;
+  const recipeId = req.body.recipeId || req.query.recipeId;
+  if (!recipeId) return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Missing recipeId' });
+
+  try {
+    const recipe = await query(`SELECT * FROM recipes WHERE id = $1 AND restaurant_id = $2`, [recipeId, restaurantId]);
+    if (recipe.rows.length === 0) return res.json({ ok: false, code: 'NOT_FOUND', error: 'Recipe not found' });
+
+    const ingRows = await query(
+      `SELECT id, recipe_id, inventory_item_id, ingredient_name, amount, unit
+       FROM recipe_ingredients WHERE recipe_id = $1`,
+      [recipeId]
+    );
+
+    const ingredients = await enrichIngredients(ingRows.rows);
+
+    res.json({
+      ok: true,
+      recipe: {
+        id: recipe.rows[0].id,
+        name: recipe.rows[0].name,
+        description: recipe.rows[0].description,
+        glass: recipe.rows[0].glass,
+        method: recipe.rows[0].method,
+        garnish: recipe.rows[0].garnish,
+        isActive: recipe.rows[0].is_active,
+        createdAt: recipe.rows[0].created_at,
+        updatedAt: recipe.rows[0].updated_at,
+        ingredients
+      }
+    });
+  } catch (err) {
+    console.error('getRecipe error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+// -------------------------------------------------------------------
+// listRecipes – now includes ingredients for each recipe
+// -------------------------------------------------------------------
+async function listRecipes(req, res) {
+  const { restaurantId } = req.auth;
+  try {
+    const recipeRows = await query(
+      `SELECT id, name, description, glass, method, garnish, is_active AS "isActive", created_at AS "createdAt", updated_at AS "updatedAt"
+       FROM recipes WHERE restaurant_id = $1 ORDER BY name ASC`,
+      [restaurantId]
+    );
+
+    const recipes = [];
+    for (const rec of recipeRows.rows) {
+      const ingRows = await query(
+        `SELECT id, recipe_id, inventory_item_id, ingredient_name, amount, unit
+         FROM recipe_ingredients WHERE recipe_id = $1`,
+        [rec.id]
+      );
+      const ingredients = await enrichIngredients(ingRows.rows);
+      recipes.push({
+        ...rec,
+        ingredients
+      });
+    }
+
+    res.json({ ok: true, recipes });
+  } catch (err) {
+    console.error('listRecipes error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+// -------------------------------------------------------------------
+// recordSale – fractional bottle deduction with container_volume
+// -------------------------------------------------------------------
+async function recordSale(req, res) {
+  const { restaurantId, userId } = req.auth;
+  const { recipeId, quantity } = req.body;
+  const quantitySold = parseInt(quantity, 10);
+
+  if (!recipeId || isNaN(quantitySold) || quantitySold <= 0) {
+    return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'recipeId and positive quantity are required' });
+  }
+
+  try {
+    await transaction(async (tx) => {
+      const recipe = await tx(`SELECT id, name FROM recipes WHERE id = $1 AND restaurant_id = $2`, [recipeId, restaurantId]);
+      if (recipe.rows.length === 0) {
+        throw { code: 'NOT_FOUND', error: 'Recipe not found' };
+      }
+
+      const ingredients = await tx(
+        `SELECT ri.inventory_item_id, ri.amount, i.name AS item_name, i.container_volume
+         FROM recipe_ingredients ri
+         JOIN items i ON ri.inventory_item_id = i.id
+         WHERE ri.recipe_id = $1 AND ri.inventory_item_id IS NOT NULL AND i.restaurant_id = $2`,
+        [recipeId, restaurantId]
+      );
+
+      const deductions = [];
+      for (const ing of ingredients.rows) {
+        const itemId = ing.inventory_item_id;
+        const containerVolume = ing.container_volume || 0;
+
+        const stock = await tx(
+          `SELECT quantity FROM stocks WHERE item_id = $1 AND restaurant_id = $2`,
+          [itemId, restaurantId]
+        );
+        const currentBottles = stock.rows.length > 0 ? parseFloat(stock.rows[0].quantity) : 0;
+
+        let deductBottles;
+        if (containerVolume > 0) {
+          deductBottles = (parseFloat(ing.amount) * quantitySold) / containerVolume;
+        } else {
+          deductBottles = parseFloat(ing.amount) * quantitySold;
+        }
+
+        if (currentBottles < deductBottles) {
+          throw {
+            code: 'INSUFFICIENT_STOCK',
+            error: `Not enough stock for "${ing.item_name}". Required: ${deductBottles.toFixed(2)}, have: ${currentBottles.toFixed(2)}`
+          };
+        }
+
+        deductions.push({ itemId, newBottles: currentBottles - deductBottles });
+      }
+
+      for (const ded of deductions) {
+        await tx(
+          `UPDATE stocks SET quantity = $1, updated_at = NOW() WHERE item_id = $2 AND restaurant_id = $3`,
+          [ded.newBottles, ded.itemId, restaurantId]
+        );
+      }
+
+      await tx(
+        `INSERT INTO logs (id, action, details, user_id, restaurant_id, timestamp)
+         VALUES ($1, 'RECORD_SALE', $2, $3, $4, NOW())`,
+        [uuidv4(), `Recipe "${recipe.rows[0].name}" sold x${quantitySold}`, userId, restaurantId]
+      );
+    });
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('recordSale error:', err);
+    if (err.code) {
+      return res.json({ ok: false, code: err.code, error: err.error });
+    }
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+module.exports = { createRecipe, updateRecipe, deleteRecipe, getRecipe, listRecipes, recordSale };
+
+============================================================
+FILE: server.js
+============================================================
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const { runMigrations } = require('./migration');
+const { pool } = require('./database');
+const { login, logout, requireAuth, validateSession, getRestaurant } = require('./auth');
+const requirePermission = require('./src/middleware/requirePermission');
+const inventory = require('./inventory');
+const recipes = require('./recipes');
+const allocations = require('./allocations');
+const { simulateSale } = require('./src/pos/simulator');
+const settingsController = require('./src/settings/settings.controller');
+const permissionsController = require('./src/permissions/permissions.controller');
+const permissionsService = require('./src/permissions/permissions.service');  // for health endpoint
+const posActions = require('./src/posIntegration/posIntegration.actions');
+const posSalesActions = require('./src/posSales/posSales.actions');
+const stockIntakeActions = require('./src/stockIntake/stockIntake.actions');
+const productBarcodeActions = require('./src/productBarcode/productBarcode.actions');
+const packageActions = require('./src/inventoryPackages/package.actions');
+
+const app = express();
+
+// ---------------------------------------------------------------
+// CORS
+// ---------------------------------------------------------------
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'http://127.0.0.1:5500',
+  'http://localhost:5500'
+].filter(Boolean);
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    callback(new Error('Not allowed by CORS'));
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
+
+app.use(express.json());
+
+// ---------------------------------------------------------------
+// Health endpoint – now includes permissions for session restoration
+// ---------------------------------------------------------------
+app.get('/api/health', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    const token = req.query.token;
+    if (token) {
+      const session = await validateSession(token);
+      if (session) {
+        const userRes = await pool.query(`SELECT id, name, username, role FROM users WHERE id = $1`, [session.userId]);
+        const user = userRes.rows[0] || null;
+        const restaurant = await getRestaurant(session.restaurantId);
+        // Resolve permissions for the authenticated user (uses new database-driven service)
+        const permissions = await permissionsService.getEffectivePermissions(
+          session.restaurantId,
+          user ? user.role : 'staff'
+        );
+        return res.json({
+          ok: true,
+          initialized: true,
+          user: user ? { id: user.id, name: user.name, username: user.username, role: user.role || 'staff' } : null,
+          restaurant,
+          permissions
+        });
+      } else {
+        return res.json({ ok: false, code: 'UNAUTHORIZED', error: 'Invalid or expired token.' });
+      }
+    }
+    res.json({ ok: true, initialized: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, initialized: false, error: 'Database unavailable' });
+  }
+});
+
+// ---------------------------------------------------------------
+// getConfig – returns restaurant name (global if no auth, or first restaurant)
+// ---------------------------------------------------------------
+app.get('/api/getConfig', async (req, res) => {
+  try {
+    const settingRes = await pool.query(`SELECT value FROM settings WHERE key = 'requireAuth'`);
+    const requireAuthSetting = settingRes.rows.length > 0 ? settingRes.rows[0].value : 'false';
+    if (requireAuthSetting !== 'true') {
+      const restRes = await pool.query(`SELECT display_name, name FROM restaurants ORDER BY created_at LIMIT 1`);
+      const name = restRes.rows.length > 0
+        ? (restRes.rows[0].display_name || restRes.rows[0].name || 'Stock Counter')
+        : 'Stock Counter';
+      return res.json({ ok: true, restaurantName: name });
+    }
+    res.json({ ok: true, restaurantName: 'Stock Counter' });
+  } catch (err) {
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------
+// Auth routes (no action parameter)
+// ---------------------------------------------------------------
+app.post('/api/login', login);
+
+// ---------------------------------------------------------------
+// Configuration endpoint – public (units, adjustment reasons)
+// ---------------------------------------------------------------
+app.get('/api/config', async (req, res) => {
+  try {
+    const unitsRes = await pool.query(
+      `SELECT value, display_name AS label FROM inventory_units WHERE enabled = TRUE ORDER BY sort_order ASC`
+    );
+    const reasonsRes = await pool.query(
+      `SELECT value, display_name AS label, direction
+       FROM inventory_adjustment_reasons
+       WHERE enabled = TRUE
+       ORDER BY direction, sort_order ASC`
+    );
+
+    const increaseReasons = [];
+    const decreaseReasons = [];
+    for (const row of reasonsRes.rows) {
+      if (row.direction === 'increase') increaseReasons.push({ value: row.value, label: row.label });
+      else if (row.direction === 'decrease') decreaseReasons.push({ value: row.value, label: row.label });
+    }
+
+    res.json({
+      ok: true,
+      inventory: {
+        units: unitsRes.rows,
+        adjustmentReasons: {
+          increase: increaseReasons,
+          decrease: decreaseReasons
+        }
+      }
+    });
+  } catch (err) {
+    console.error('config error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+});
+app.post('/api/logout', logout);
+
+// ---------------------------------------------------------------
+// Main API router – matches old frontend ?action=... or body.action
+// ---------------------------------------------------------------
+app.all('/api', async (req, res, next) => {
+  try {
+    const action = req.body.action || req.query.action || '';
+    switch (action) {
+      // ---------- Inventory (staff accessible) ----------
+      case 'loadStock':
+        requireAuth(req, res, () => inventory.loadStock(req, res));
+        break;
+      case 'saveStock':
+        requireAuth(req, res, () => {
+          requirePermission('inventory', 'save')(req, res, () => inventory.saveStock(req, res));
+        });
+        break;
+
+      // ---------- Inventory management (manager only) ----------
+      case 'addCustomItem':
+        requireAuth(req, res, () => {
+          requirePermission('inventory', 'add')(req, res, () => inventory.addCustomItem(req, res));
+        });
+        break;
+      case 'updateItem':
+        requireAuth(req, res, () => {
+          requirePermission('inventory', 'edit')(req, res, () => inventory.updateItem(req, res));
+        });
+        break;
+      case 'deleteItem':
+        requireAuth(req, res, () => {
+          requirePermission('inventory', 'delete')(req, res, () => inventory.deleteItem(req, res));
+        });
+        break;
+      case 'restoreItem':
+        requireAuth(req, res, () => {
+          requirePermission('inventory', 'edit')(req, res, () => inventory.restoreItem(req, res));
+        });
+        break;
+
+      // ---------- Category management (manager only) ----------
+      case 'addCategory':
+        requireAuth(req, res, () => {
+          requirePermission('categories', 'add')(req, res, () => inventory.addCategory(req, res));
+        });
+        break;
+      case 'updateCategory':
+        requireAuth(req, res, () => {
+          requirePermission('categories', 'edit')(req, res, () => inventory.updateCategory(req, res));
+        });
+        break;
+      case 'deleteCategory':
+        requireAuth(req, res, () => {
+          requirePermission('categories', 'delete')(req, res, () => inventory.deleteCategory(req, res));
+        });
+        break;
+      case 'restoreCategory':
+        requireAuth(req, res, () => {
+          requirePermission('categories', 'edit')(req, res, () => inventory.restoreCategory(req, res));
+        });
+        break;
+
+      // ---------- Recipes ----------
+      case 'listRecipes':
+        requireAuth(req, res, () => recipes.listRecipes(req, res));
+        break;
+      case 'getRecipe':
+        requireAuth(req, res, () => recipes.getRecipe(req, res));
+        break;
+      case 'createRecipe':
+        requireAuth(req, res, () => {
+          requirePermission('recipes', 'create')(req, res, () => recipes.createRecipe(req, res));
+        });
+        break;
+      case 'updateRecipe':
+        requireAuth(req, res, () => {
+          requirePermission('recipes', 'edit')(req, res, () => recipes.updateRecipe(req, res));
+        });
+        break;
+      case 'deleteRecipe':
+        requireAuth(req, res, () => {
+          requirePermission('recipes', 'delete')(req, res, () => recipes.deleteRecipe(req, res));
+        });
+        break;
+      case 'recordSale':
+        requireAuth(req, res, () => {
+          requirePermission('pos', 'sale')(req, res, () => recipes.recordSale(req, res));
+        });
+        break;
+
+      // ---------- Allocations (staff accessible) ----------
+      case 'listPendingAllocations':
+        requireAuth(req, res, () => allocations.listPendingAllocations(req, res));
+        break;
+      case 'getPendingAllocationDetails':
+        requireAuth(req, res, () => allocations.getPendingAllocationDetails(req, res));
+        break;
+      case 'resolvePendingAllocation':
+        requireAuth(req, res, () => allocations.resolvePendingAllocation(req, res));
+        break;
+
+      // ---------- Admin only (use requirePermission) ----------
+      case 'resetStock':
+      case 'initializeDatabase':
+      case 'seedDatabase':
+        requireAuth(req, res, () => {
+          requirePermission('settings', 'manage')(req, res, () => {
+            res.json({ ok: false, code: 'NOT_IMPLEMENTED', error: 'Endpoint will be added in a later phase.' });
+          });
+        });
+        break;
+
+      case 'getConfig':
+      case 'exportInventory':
+        res.json({ ok: false, code: 'NOT_IMPLEMENTED', error: 'Endpoint will be added in a later phase.' });
+        break;
+
+      default:
+        res.status(400).json({ ok: false, code: 'UNKNOWN_ACTION', error: `Unknown action: ${action}` });
+    }
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------
+// POS test endpoint
+// ---------------------------------------------------------------
+app.post('/api/pos/testSale', (req, res, next) => {
+  requireAuth(req, res, () => {
+    const { productId, productName, quantity } = req.body;
+    if (!productId || !quantity) {
+      return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'productId and quantity are required' });
+    }
+    simulateSale(productId, productName, quantity, new Date().toISOString(), req, res);
+  });
+});
+
+// ---------------------------------------------------------------
+// POS Integration – backend‑owned actions (manager only)
+// ---------------------------------------------------------------
+app.post('/api/pos/connect', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => posActions.connect(req, res));
+  });
+});
+
+app.post('/api/pos/disconnect', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => posActions.disconnect(req, res));
+  });
+});
+
+app.post('/api/pos/sync', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => posActions.sync(req, res));
+  });
+});
+
+// ---------- POS Sales Summary (manager only) ----------
+app.get('/api/pos/sales', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => posSalesActions.getSalesSummary(req, res));
+  });
+});
+
+// ---------- Sales Import (manager only) ----------
+const posSalesImportActions = require('./src/posSalesImport/posSalesImport.actions');
+
+app.post('/api/pos/sales/import/preview', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => posSalesImportActions.preview(req, res));
+  });
+});
+
+app.post('/api/pos/sales/mappings', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => posSalesImportActions.saveMapping(req, res));
+  });
+});
+
+app.post('/api/pos/sales/import/apply', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => posSalesImportActions.apply(req, res));
+  });
+});
+
+// ---------------------------------------------------------------
+// Settings routes (manager only)
+// ---------------------------------------------------------------
+app.get('/api/settings', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => settingsController.getAll(req, res));
+  });
+});
+
+app.patch('/api/settings/:section', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => settingsController.patchSection(req, res));
+  });
+});
+
+// ---------- Stock Intake (manager only) ----------
+app.get('/api/stock-intake', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => stockIntakeActions.list(req, res));
+  });
+});
+
+app.post('/api/stock-intake', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => stockIntakeActions.create(req, res));
+  });
+});
+
+// ---------- Barcode lookup (manager only) ----------
+app.post('/api/stock-intake/barcode/lookup', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => productBarcodeActions.lookup(req, res));
+  });
+});
+
+// ---------- Package Management (manager only) ----------
+app.get('/api/packages', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => packageActions.list(req, res));
+  });
+});
+
+app.post('/api/packages', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => packageActions.create(req, res));
+  });
+});
+
+app.patch('/api/packages/:id', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => packageActions.update(req, res));
+  });
+});
+
+app.delete('/api/packages/:id', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => packageActions.remove(req, res));
+  });
+});
+
+// ---------- Permission management (manager only) ----------
+app.get('/api/permissions', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => permissionsController.getPermissions(req, res));
+  });
+});
+
+app.patch('/api/permissions', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => permissionsController.patchPermissions(req, res));
+  });
+});
+
+const staffActions = require('./src/staff/staff.actions');
+
+// ---------- Staff Management (manager only) ----------
+app.get('/api/staff', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('staff', 'view')(req, res, () => staffActions.list(req, res));
+  });
+});
+
+app.post('/api/staff', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('staff', 'create')(req, res, () => staffActions.create(req, res));
+  });
+});
+
+app.patch('/api/staff/:id', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('staff', 'edit')(req, res, () => staffActions.update(req, res));
+  });
+});
+
+// ---------------------------------------------------------------
+// Error handling
+// ---------------------------------------------------------------
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message || 'Internal server error' });
+});
+
+const PORT = process.env.PORT || 3000;
+
+async function start() {
+  try {
+    await runMigrations();
+    app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  } catch (err) {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  }
+}
+
+start();
+
+============================================================
+FILE: src\inventoryPackages\package.actions.js
+============================================================
+const service = require('./package.service');
+
+async function list(req, res) {
+  try {
+    const packages = await service.listPackages(req.auth.restaurantId);
+    res.json({ ok: true, packages });
+  } catch (err) {
+    console.error('list packages error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+async function create(req, res) {
+  try {
+    const { itemId, packageUnit, unitsPerPackage, sortOrder } = req.body;
+    const pkg = await service.createPackage(req.auth.restaurantId, itemId, packageUnit, unitsPerPackage, sortOrder);
+    res.json({ ok: true, package: pkg });
+  } catch (err) {
+    if (err.code) return res.json({ ok: false, code: err.code, error: err.error });
+    console.error('create package error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+async function update(req, res) {
+  try {
+    const packageId = req.params.id;
+    const updates = req.body;
+    const updated = await service.updatePackage(req.auth.restaurantId, packageId, updates);
+    res.json({ ok: true, package: updated });
+  } catch (err) {
+    if (err.code) return res.json({ ok: false, code: err.code, error: err.error });
+    console.error('update package error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+async function remove(req, res) {
+  try {
+    const packageId = req.params.id;
+    await service.deletePackage(req.auth.restaurantId, packageId);
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code) return res.json({ ok: false, code: err.code, error: err.error });
+    console.error('delete package error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+module.exports = { list, create, update, remove };
+
+============================================================
+FILE: src\inventoryPackages\package.repository.js
+============================================================
+const { query } = require('../../database');
+
+async function listPackages(restaurantId) {
+  const res = await query(
+    `SELECT p.*, i.name AS item_name
+     FROM item_packages p
+     JOIN items i ON p.item_id = i.id
+     WHERE p.restaurant_id = $1 AND i.is_deleted = FALSE
+     ORDER BY i.name, p.sort_order`,
+    [restaurantId]
+  );
+  return res.rows;
+}
+
+async function getPackageById(packageId, restaurantId) {
+  const res = await query(
+    `SELECT * FROM item_packages WHERE id = $1 AND restaurant_id = $2`,
+    [packageId, restaurantId]
+  );
+  return res.rows[0] || null;
+}
+
+async function createPackage(restaurantId, itemId, packageUnit, unitsPerPackage, sortOrder = 0) {
+  const { v4: uuidv4 } = require('uuid');
+  const id = uuidv4();
+  await query(
+    `INSERT INTO item_packages (id, restaurant_id, item_id, package_unit, units_per_package, sort_order)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [id, restaurantId, itemId, packageUnit, unitsPerPackage, sortOrder]
+  );
+  return { id };
+}
+
+async function updatePackage(packageId, restaurantId, fields) {
+  const allowedFields = ['package_unit', 'units_per_package', 'enabled', 'sort_order'];
+  const sets = [];
+  const values = [packageId, restaurantId];
+  let idx = 3;
+  for (const field of allowedFields) {
+    if (fields[field] !== undefined) {
+      sets.push(`${field} = $${idx++}`);
+      values.push(fields[field]);
+    }
+  }
+  if (sets.length === 0) return null;
+  await query(
+    `UPDATE item_packages SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $1 AND restaurant_id = $2`,
+    values
+  );
+  return getPackageById(packageId, restaurantId);
+}
+
+async function deletePackage(packageId, restaurantId) {
+  await query(
+    `DELETE FROM item_packages WHERE id = $1 AND restaurant_id = $2`,
+    [packageId, restaurantId]
+  );
+}
+
+module.exports = { listPackages, getPackageById, createPackage, updatePackage, deletePackage };
+
+============================================================
+FILE: src\inventoryPackages\package.service.js
+============================================================
+const repository = require('./package.repository');
+
+function validatePackageInput(itemId, packageUnit, unitsPerPackage) {
+  if (!itemId) throw { code: 'VALIDATION_ERROR', error: 'itemId is required.' };
+  if (!packageUnit || !String(packageUnit).trim()) throw { code: 'VALIDATION_ERROR', error: 'Package unit is required.' };
+  if (typeof unitsPerPackage !== 'number' || unitsPerPackage <= 0) throw { code: 'VALIDATION_ERROR', error: 'units_per_package must be a positive number.' };
+}
+
+async function listPackages(restaurantId) {
+  return repository.listPackages(restaurantId);
+}
+
+async function createPackage(restaurantId, itemId, packageUnit, unitsPerPackage, sortOrder) {
+  validatePackageInput(itemId, packageUnit, unitsPerPackage);
+  const { query } = require('../../database');
+  const itemRes = await query(
+    `SELECT id FROM items WHERE id = $1 AND restaurant_id = $2 AND is_deleted = FALSE`,
+    [itemId, restaurantId]
+  );
+  if (itemRes.rows.length === 0) throw { code: 'NOT_FOUND', error: 'Item not found.' };
+  return repository.createPackage(restaurantId, itemId, packageUnit.trim(), unitsPerPackage, sortOrder || 0);
+}
+
+async function updatePackage(restaurantId, packageId, updates) {
+  const pkg = await repository.getPackageById(packageId, restaurantId);
+  if (!pkg) throw { code: 'NOT_FOUND', error: 'Package not found.' };
+  if (updates.item_id) {
+    const { query } = require('../../database');
+    const itemRes = await query(
+      `SELECT id FROM items WHERE id = $1 AND restaurant_id = $2 AND is_deleted = FALSE`,
+      [updates.item_id, restaurantId]
+    );
+    if (itemRes.rows.length === 0) throw { code: 'NOT_FOUND', error: 'Item not found.' };
+  }
+  return repository.updatePackage(packageId, restaurantId, updates);
+}
+
+async function deletePackage(restaurantId, packageId) {
+  const pkg = await repository.getPackageById(packageId, restaurantId);
+  if (!pkg) throw { code: 'NOT_FOUND', error: 'Package not found.' };
+  await repository.deletePackage(packageId, restaurantId);
+}
+
+module.exports = { listPackages, createPackage, updatePackage, deletePackage };
+
+============================================================
+FILE: src\middleware\requirePermission.js
+============================================================
+function requirePermission(module, action) {
+  return (req, res, next) => {
+    const perms = req.auth.permissions || {};
+    if (!perms[module] || perms[module][action] !== true) {
+      return res.json({
+        ok: false,
+        code: 'FORBIDDEN',
+        error: 'You do not have permission to perform this action.'
+      });
+    }
+    next();
+  };
+}
+
+module.exports = requirePermission;
+
+============================================================
+FILE: src\permissions\permissions.controller.js
+============================================================
+const service = require('./permissions.service');
+
+/**
+ * GET /api/permissions
+ */
+async function getPermissions(req, res) {
+  try {
+    const { restaurantId } = req.auth;
+    const [definitions, permissions] = await Promise.all([
+      service.getDefinitions(),
+      service.getAllRolePermissions(restaurantId)
+    ]);
+    res.json({ ok: true, definitions, permissions });
+  } catch (err) {
+    console.error('getPermissions error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+/**
+ * PATCH /api/permissions
+ * Supports both role permission updates and definition enabled toggles.
+ *
+ * For role permissions:
+ *   { role: "staff", permissions: { inventory: { view: true, ... } } }
+ *
+ * For definition toggles:
+ *   { updates: [ { definitionId: "...", enabled: false }, ... ] }
+ */
+async function patchPermissions(req, res) {
+  try {
+    const { restaurantId } = req.auth;
+    const { role, permissions, updates } = req.body;
+
+    // If 'updates' is provided, handle definition toggles
+    if (Array.isArray(updates)) {
+      await service.updateDefinitionEnabledBulk(updates);
+      // Return fresh definitions and current permissions after update
+      const [definitions, perms] = await Promise.all([
+        service.getDefinitions(),
+        service.getAllRolePermissions(restaurantId)
+      ]);
+      return res.json({ ok: true, definitions, permissions: perms });
+    }
+
+    // Otherwise, treat as role permissions update
+    if (!role || !permissions || typeof permissions !== 'object') {
+      return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'role and permissions object are required, or provide updates array' });
+    }
+    if (role !== 'staff' && role !== 'manager') {
+      return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'role must be "staff" or "manager"' });
+    }
+    const updated = await service.updateRolePermissions(restaurantId, role, permissions);
+    res.json({ ok: true, permissions: updated });
+  } catch (err) {
+    console.error('patchPermissions error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+module.exports = { getPermissions, patchPermissions };
+
+============================================================
+FILE: src\permissions\permissions.repository.js
+============================================================
+const { query, transaction } = require('../../database');
+
+/**
+ * Fetch all permission definitions (including disabled) for management UI.
+ */
+async function getAllDefinitions(includeDisabled = false) {
+  let sql = `SELECT id, module, permission, label, description, sort_order, enabled
+             FROM permission_definitions`;
+  if (!includeDisabled) {
+    sql += ` WHERE enabled = TRUE`;
+  }
+  sql += ` ORDER BY sort_order ASC`;
+  const res = await query(sql);
+  return res.rows;
+}
+
+/**
+ * Fetch all role_permission rows for a given restaurant and role.
+ */
+async function getRolePermissions(restaurantId, role) {
+  const res = await query(
+    `SELECT module, permission, allowed
+     FROM role_permissions
+     WHERE restaurant_id = $1 AND role = $2`,
+    [restaurantId, role]
+  );
+  return res.rows;
+}
+
+/**
+ * Upsert a single role_permission row.
+ */
+async function upsertRolePermission(restaurantId, role, module, permission, allowed) {
+  await query(
+    `INSERT INTO role_permissions (id, restaurant_id, role, module, permission, allowed, created_at, updated_at)
+     VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NOW(), NOW())
+     ON CONFLICT (restaurant_id, role, module, permission)
+     DO UPDATE SET allowed = $5, updated_at = NOW()`,
+    [restaurantId, role, module, permission, allowed]
+  );
+}
+
+/**
+ * Bulk update permissions for a role from a boolean map.
+ */
+async function bulkUpdatePermissions(restaurantId, role, permissionsObject) {
+  await transaction(async (tx) => {
+    for (const module of Object.keys(permissionsObject)) {
+      const perms = permissionsObject[module];
+      if (typeof perms !== 'object') continue;
+      for (const action of Object.keys(perms)) {
+        const allowed = !!perms[action];
+        // tx is a function, not an object with .query
+        await tx(
+          `INSERT INTO role_permissions (id, restaurant_id, role, module, permission, allowed, created_at, updated_at)
+           VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, NOW(), NOW())
+           ON CONFLICT (restaurant_id, role, module, permission)
+           DO UPDATE SET allowed = $5, updated_at = NOW()`,
+          [restaurantId, role, module, action, allowed]
+        );
+      }
+    }
+  });
+}
+
+/**
+ * Update the enabled flag of a permission definition.
+ */
+async function updateDefinitionEnabled(definitionId, enabled) {
+  await query(
+    `UPDATE permission_definitions SET enabled = $1, updated_at = NOW() WHERE id = $2`,
+    [enabled, definitionId]
+  );
+}
+
+module.exports = {
+  getAllDefinitions,
+  getRolePermissions,
+  upsertRolePermission,
+  bulkUpdatePermissions,
+  updateDefinitionEnabled
+};
+
+============================================================
+FILE: src\permissions\permissions.service.js
+============================================================
+const repository = require('./permissions.repository');
+
+/**
+ * Get effective permissions for a role.
+ * Only enabled definitions are considered.
+ */
+async function getEffectivePermissions(restaurantId, role) {
+  // Fetch only enabled definitions
+  const defs = await repository.getAllDefinitions(false);
+  const enabledModules = new Map();
+  for (const def of defs) {
+    if (!enabledModules.has(def.module)) {
+      enabledModules.set(def.module, new Set());
+    }
+    enabledModules.get(def.module).add(def.permission);
+  }
+
+  const rows = await repository.getRolePermissions(restaurantId, role);
+  const perms = {};
+  for (const row of rows) {
+    // Ignore rows for disabled definitions
+    if (!enabledModules.has(row.module) || !enabledModules.get(row.module).has(row.permission)) {
+      continue;
+    }
+    if (!perms[row.module]) perms[row.module] = {};
+    perms[row.module][row.permission] = row.allowed;
+  }
+
+  // Also fill in any enabled definitions that don't have a role_permission row (default false)
+  for (const def of defs) {
+    if (!perms[def.module]) perms[def.module] = {};
+    if (perms[def.module][def.permission] === undefined) {
+      perms[def.module][def.permission] = false;
+    }
+  }
+  return perms;
+}
+
+/**
+ * Get definitions (all, including disabled for management).
+ */
+async function getDefinitions() {
+  return repository.getAllDefinitions(true);
+}
+
+/**
+ * Get full permissions for both manager and staff.
+ */
+async function getAllRolePermissions(restaurantId) {
+  const [managerPerms, staffPerms] = await Promise.all([
+    getEffectivePermissions(restaurantId, 'manager'),
+    getEffectivePermissions(restaurantId, 'staff')
+  ]);
+  return { manager: managerPerms, staff: staffPerms };
+}
+
+/**
+ * Update permissions for a role.
+ */
+async function updateRolePermissions(restaurantId, role, permissionsObject) {
+  await repository.bulkUpdatePermissions(restaurantId, role, permissionsObject);
+  return getEffectivePermissions(restaurantId, role);
+}
+
+/**
+ * Update definition enabled flags in bulk.
+ */
+async function updateDefinitionEnabledBulk(updates) {
+  for (const update of updates) {
+    await repository.updateDefinitionEnabled(update.definitionId, update.enabled);
+  }
+}
+
+module.exports = {
+  getEffectivePermissions,
+  getDefinitions,
+  getAllRolePermissions,
+  updateRolePermissions,
+  updateDefinitionEnabledBulk
+};
+
+============================================================
+FILE: src\pos\flatpay.js
+============================================================
+// Placeholder Flatpay provider adapter
+
+function normalizeSale(flatpayPayload) {
+  return {
+    productId: flatpayPayload.productId || flatpayPayload.id || '',
+    productName: flatpayPayload.productName || flatpayPayload.name || '',
+    quantity: parseInt(flatpayPayload.quantity || flatpayPayload.qty, 10) || 0,
+    timestamp: flatpayPayload.timestamp || flatpayPayload.createdAt || new Date().toISOString()
+  };
+}
+
+function validatePayload(payload) {
+  return payload != null;
+}
+
+function extractProduct(payload) {
+  return payload.productId || payload.id || '';
+}
+
+function extractQuantity(payload) {
+  return parseInt(payload.quantity || payload.qty, 10) || 0;
+}
+
+module.exports = { normalizeSale, validatePayload, extractProduct, extractQuantity };
+
+============================================================
+FILE: src\pos\mapper.js
+============================================================
+const repository = require('./repository');
+
+function findRecipe(productId) {
+  const mapping = repository.findMenuItemByPosProduct(productId);
+  return mapping ? mapping.recipeId : null;
+}
+
+function findMenuItem(productId) {
+  const mapping = repository.findMenuItemByPosProduct(productId);
+  return mapping ? mapping.menuItem : null;
+}
+
+function createMapping(productId, menuItem, recipeId) {
+  repository.saveMenuMapping(productId, menuItem, recipeId);
+}
+
+function updateMapping(productId, menuItem, recipeId) {
+  return repository.updateMenuMapping(productId, menuItem, recipeId);
+}
+
+function deleteMapping(productId) {
+  return repository.deleteMenuMapping(productId);
+}
+
+module.exports = { findRecipe, findMenuItem, createMapping, updateMapping, deleteMapping };
+
+============================================================
+FILE: src\pos\provider.js
+============================================================
+const mapper = require('./mapper');
+const recipes = require('../../recipes');   // recipes.js in backend/
+
+let currentProvider = null;
+
+function registerProvider(name, providerImpl) {
+  // For future use
+}
+
+function setProvider(providerImpl) {
+  currentProvider = providerImpl;
+}
+
+async function processSale(normalizedSale, req, res) {
+  const { productId, productName, quantity, timestamp } = normalizedSale;
+  const recipeId = mapper.findRecipe(productId);
+  if (!recipeId) {
+    return res.json({ ok: false, code: 'UNMAPPED_PRODUCT', error: 'POS product has not been mapped to a menu item.' });
+  }
+
+  const originalBody = req.body;
+  req.body = { ...req.body, recipeId, quantity };
+  try {
+    await recipes.recordSale(req, res);
+  } finally {
+    req.body = originalBody;
+  }
+}
+
+module.exports = { registerProvider, setProvider, processSale };
+
+============================================================
+FILE: src\pos\repository.js
+============================================================
+// In-memory POS product mapping repository
+// Phase 1: simple in-memory store (will be replaced by DB later)
+
+const mappings = new Map(); // key: productId, value: { menuItem, recipeId }
+
+function findMenuItemByPosProduct(productId) {
+  return mappings.get(productId) || null;
+}
+
+function saveMenuMapping(productId, menuItem, recipeId) {
+  mappings.set(productId, { menuItem, recipeId });
+}
+
+function updateMenuMapping(productId, menuItem, recipeId) {
+  if (mappings.has(productId)) {
+    mappings.set(productId, { menuItem, recipeId });
+    return true;
+  }
+  return false;
+}
+
+function deleteMenuMapping(productId) {
+  return mappings.delete(productId);
+}
+
+module.exports = { findMenuItemByPosProduct, saveMenuMapping, updateMenuMapping, deleteMenuMapping };
+
+============================================================
+FILE: src\pos\simulator.js
+============================================================
+const provider = require('./provider');
+
+function simulateSale(productId, productName, quantity, timestamp, req, res) {
+  const normalizedSale = {
+    productId,
+    productName,
+    quantity: parseInt(quantity, 10),
+    timestamp: timestamp || new Date().toISOString()
+  };
+  return provider.processSale(normalizedSale, req, res);
+}
+
+module.exports = { simulateSale };
+
+============================================================
+FILE: src\pos\webhook.js
+============================================================
+const provider = require('./provider');
+const flatpay = require('./flatpay');
+
+async function handleIncomingSale(req, res) {
+  try {
+    const payload = req.body;
+    if (!flatpay.validatePayload(payload)) {
+      return res.status(400).json({ ok: false, code: 'VALIDATION_ERROR', error: 'Invalid payload' });
+    }
+    const normalized = flatpay.normalizeSale(payload);
+    await provider.processSale(normalized, req, res);
+  } catch (err) {
+    console.error('webhook error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+    }
+  }
+}
+
+module.exports = { handleIncomingSale };
+
+============================================================
+FILE: src\posAdapters\adapterFactory.js
+============================================================
+/**
+ * Adapter factory – the single entry point for POS provider access.
+ *
+ * Reads the POS_PROVIDER environment variable and dynamically loads
+ * the matching provider plugin from the `providers/` folder.
+ *
+ * If no provider is configured, or the plugin file is missing,
+ * `getAdapter()` returns null. The caller should handle this gracefully
+ * (e.g., by reporting "No POS provider configured").
+ */
+
+const path = require('path');
+
+function getAdapter() {
+  const provider = (process.env.POS_PROVIDER || '').trim().toLowerCase();
+  if (!provider) return null;
+
+  // Build the expected module path relative to this file.
+  const modulePath = path.join(__dirname, 'providers', provider);
+
+  try {
+    return require(modulePath);
+  } catch (err) {
+    // If the file doesn't exist or has an error, return null.
+    console.error(`Failed to load POS provider "${provider}":`, err.message);
+    return null;
+  }
+}
+
+module.exports = { getAdapter };
+
+============================================================
+FILE: src\posAdapters\providers\flatpay.js
+============================================================
+/**
+ * Flatpay POS provider plugin.
+ *
+ * This file implements the provider adapter interface:
+ *   - connect()
+ *   - disconnect()
+ *   - sync()
+ *   - validateConfiguration()
+ *   - getProviderName()
+ *
+ * All real API integration logic will be added here in the future.
+ * For now, methods are safe placeholders that return success.
+ */
+
+const providerName = 'Flatpay';
+
+function validateConfiguration() {
+  const requiredVars = ['FLATPAY_API_KEY', 'FLATPAY_SECRET'];
+  for (const v of requiredVars) {
+    if (!process.env[v]) {
+      throw new Error(`Missing required environment variable: ${v}`);
+    }
+  }
+  return true;
+}
+
+async function connect() {
+  // TODO: Real Flatpay authentication, webhook registration, etc.
+  validateConfiguration();
+  console.log('Flatpay provider: connect() called (placeholder)');
+  return { success: true };
+}
+
+async function disconnect() {
+  // TODO: Real Flatpay cleanup (unregister webhooks, etc.)
+  console.log('Flatpay provider: disconnect() called (placeholder)');
+  return { success: true };
+}
+
+async function sync() {
+  // TODO: Fetch real sales statistics from Flatpay
+  console.log('Flatpay provider: sync() called (placeholder)');
+  return {
+    last_sync: new Date().toISOString(),
+    statistics: {
+      totalSales: 0,
+      lastSaleAt: null
+    }
+  };
+}
+
+function getProviderName() {
+  return providerName;
+}
+
+module.exports = {
+  connect,
+  disconnect,
+  sync,
+  validateConfiguration,
+  getProviderName
+};
+
+============================================================
+FILE: src\posIntegration\posIntegration.actions.js
+============================================================
+const { getIntegration, updateIntegration } = require('./posIntegration.service');
+const { getAdapter } = require('../posAdapters/adapterFactory');
+
+/**
+ * Connect to the configured POS provider.
+ * The provider is determined by the environment (POS_PROVIDER),
+ * not by the frontend.
+ */
+async function connect(req, res) {
+  try {
+    const { restaurantId } = req.auth;
+    const adapter = getAdapter();
+
+    if (!adapter) {
+      return res.json({
+        ok: false,
+        code: 'NO_PROVIDER',
+        error: 'No POS provider has been configured on the server.'
+      });
+    }
+
+    // Validate configuration (API keys, etc.) before proceeding
+    try {
+      adapter.validateConfiguration();
+    } catch (configErr) {
+      return res.json({
+        ok: false,
+        code: 'CONFIGURATION_ERROR',
+        error: configErr.message
+      });
+    }
+
+    // Attempt connection (placeholder – will do real API work later)
+    const result = await adapter.connect();
+
+    // Update the database with the provider name from the adapter
+    const updated = await updateIntegration(restaurantId, {
+      provider: adapter.getProviderName(),
+      status: 'Connected',
+      last_sync: result.last_sync || null
+    });
+
+    res.json({ ok: true, posIntegration: updated });
+  } catch (err) {
+    console.error('pos/connect error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+/**
+ * Disconnect the current POS provider.
+ * Leaves the provider name unchanged (so it can be reconnected later).
+ */
+async function disconnect(req, res) {
+  try {
+    const { restaurantId } = req.auth;
+    const adapter = getAdapter();
+
+    if (adapter) {
+      await adapter.disconnect();
+    }
+
+    const updated = await updateIntegration(restaurantId, {
+      status: 'Disconnected'
+    });
+
+    res.json({ ok: true, posIntegration: updated });
+  } catch (err) {
+    console.error('pos/disconnect error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+/**
+ * Trigger a sync with the current POS provider.
+ * Updates last_sync and statistics in the database.
+ */
+async function sync(req, res) {
+  try {
+    const { restaurantId } = req.auth;
+    const adapter = getAdapter();
+
+    if (!adapter) {
+      return res.json({
+        ok: false,
+        code: 'NO_PROVIDER',
+        error: 'No POS provider configured. Sync not possible.'
+      });
+    }
+
+    const syncResult = await adapter.sync();
+
+    const updated = await updateIntegration(restaurantId, {
+      last_sync: syncResult.last_sync || new Date().toISOString(),
+      statistics: syncResult.statistics || {}
+    });
+
+    res.json({ ok: true, message: 'Sync completed', posIntegration: updated });
+  } catch (err) {
+    console.error('pos/sync error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+module.exports = { connect, disconnect, sync };
+
+============================================================
+FILE: src\posIntegration\posIntegration.repository.js
+============================================================
+const { query } = require('../../database');
+
+/**
+ * Get the POS integration row for a restaurant, or null.
+ */
+async function getIntegration(restaurantId) {
+  const res = await query(
+    `SELECT * FROM pos_integrations WHERE restaurant_id = $1`,
+    [restaurantId]
+  );
+  if (res.rows.length === 0) return null;
+
+  const row = res.rows[0];
+  return {
+    provider: row.provider,
+    status: row.status,
+    last_sync: row.last_sync,
+    configuration: row.configuration,
+    statistics: row.statistics
+  };
+}
+
+/**
+ * Partial update of the POS integration row.
+ * Only the provided fields are updated.
+ */
+async function updateIntegration(restaurantId, data) {
+  // Ensure a row exists (insert generic default if missing)
+  await query(
+    `INSERT INTO pos_integrations (restaurant_id, provider, status, statistics)
+     VALUES ($1, 'None', 'Disconnected', '{"totalSales":0,"lastSaleAt":null}')
+     ON CONFLICT (restaurant_id) DO NOTHING`,
+    [restaurantId]
+  );
+
+  const allowedFields = ['provider', 'status', 'last_sync', 'configuration', 'statistics'];
+  const sets = [];
+  const values = [restaurantId];
+  let paramIndex = 2;
+
+  for (const field of allowedFields) {
+    if (data[field] !== undefined) {
+      sets.push(`${field} = $${paramIndex}`);
+      const val = (field === 'configuration' || field === 'statistics')
+        ? JSON.stringify(data[field])
+        : data[field];
+      values.push(val);
+      paramIndex++;
+    }
+  }
+
+  if (sets.length > 0) {
+    await query(
+      `UPDATE pos_integrations SET ${sets.join(', ')}, updated_at = NOW() WHERE restaurant_id = $1`,
+      values
+    );
+  }
+
+  return getIntegration(restaurantId);
+}
+
+module.exports = { getIntegration, updateIntegration };
+
+============================================================
+FILE: src\posIntegration\posIntegration.service.js
+============================================================
+const repository = require('./posIntegration.repository');
+
+async function getIntegration(restaurantId) {
+  return repository.getIntegration(restaurantId);
+}
+
+async function updateIntegration(restaurantId, data) {
+  return repository.updateIntegration(restaurantId, data);
+}
+
+module.exports = { getIntegration, updateIntegration };
+
+============================================================
+FILE: src\posSales\posSales.actions.js
+============================================================
+const service = require('./posSales.service');
+
+async function getSalesSummary(req, res) {
+  try {
+    const { restaurantId } = req.auth;
+    const { period, start, end } = req.query;
+    const result = await service.getSummary(restaurantId, period, start, end);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error('pos/sales error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+module.exports = { getSalesSummary };
+
+============================================================
+FILE: src\posSales\posSales.repository.js
+============================================================
+const { query } = require('../../database');
+
+async function recordSale(restaurantId, provider, productName, quantity, soldAt, externalSaleId) {
+  await query(
+    `INSERT INTO pos_sales (restaurant_id, provider, product_name, quantity, sold_at, external_sale_id)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [restaurantId, provider, productName, quantity, soldAt, externalSaleId || null]
+  );
+}
+
+async function getSummary(restaurantId, startDate, endDate) {
+  let sql = `
+    SELECT product_name, SUM(quantity)::numeric AS total_quantity
+    FROM pos_sales
+    WHERE restaurant_id = $1
+  `;
+  const params = [restaurantId];
+  if (startDate) {
+    sql += ` AND sold_at >= $2`;
+    params.push(startDate);
+  }
+  if (endDate) {
+    sql += ` AND sold_at <= $${params.length + 1}`;
+    params.push(endDate);
+  }
+  sql += ` GROUP BY product_name ORDER BY total_quantity DESC`;
+  const res = await query(sql, params);
+  return res.rows.map(r => ({
+    product: r.product_name,
+    quantity: parseFloat(r.total_quantity)
+  }));
+}
+
+module.exports = { recordSale, getSummary };
+
+============================================================
+FILE: src\posSales\posSales.service.js
+============================================================
+const repository = require('./posSales.repository');
+
+function resolveDateRange(period, customStart, customEnd) {
+  const now = new Date();
+  let start = null, end = null;
+
+  switch (period) {
+    case 'today':
+      start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
+      break;
+    case '7d':
+      start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      end = now.toISOString();
+      break;
+    case '30d':
+      start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      end = now.toISOString();
+      break;
+    case 'month':
+      start = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999).toISOString();
+      break;
+    case 'custom':
+      if (customStart) start = new Date(customStart).toISOString();
+      if (customEnd) end = new Date(customEnd).toISOString();
+      break;
+    default:
+      // default to today
+      start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
+  }
+  return { start, end };
+}
+
+async function getSummary(restaurantId, period, customStart, customEnd) {
+  const { start, end } = resolveDateRange(period, customStart, customEnd);
+  const summary = await repository.getSummary(restaurantId, start, end);
+  return {
+    period: period || 'today',
+    start,
+    end,
+    summary
+  };
+}
+
+module.exports = { getSummary, resolveDateRange };
+
+============================================================
+FILE: src\posSalesImport\posSalesImport.actions.js
+============================================================
+const service = require('./posSalesImport.service');
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 1024 * 1024 } }).single('file');
+
+async function preview(req, res) {
+  upload(req, res, async (err) => {
+    if (err) return res.json({ ok: false, code: 'INVALID_FILE', error: err.message });
+    if (!req.file) return res.json({ ok: false, code: 'INVALID_FILE', error: 'No file uploaded.' });
+
+    try {
+      const result = await service.previewSales(req.auth.restaurantId, req.file.buffer);
+      res.json({ ok: true, ...result });
+    } catch (e) {
+      if (e.code) return res.json({ ok: false, code: e.code, error: e.error });
+      console.error('preview error:', e);
+      res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: e.message });
+    }
+  });
+}
+
+async function saveMapping(req, res) {
+  try {
+    const { sourceProductName, itemId } = req.body;
+    if (!sourceProductName || !itemId) {
+      return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'sourceProductName and itemId are required.' });
+    }
+    await service.saveProductMapping(req.auth.restaurantId, sourceProductName, itemId);
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code) return res.json({ ok: false, code: err.code, error: err.error });
+    console.error('mapping error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+async function apply(req, res) {
+  try {
+    const { restaurantId, userId } = req.auth;
+    const { fileHash, periodStart, periodEnd, items } = req.body;
+    if (!fileHash || !Array.isArray(items) || items.length === 0) {
+      return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'fileHash and items array are required.' });
+    }
+    await service.applySalesImport(restaurantId, userId, fileHash, periodStart, periodEnd, items);
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code) return res.json({ ok: false, code: err.code, error: err.error });
+    console.error('apply error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+module.exports = { preview, saveMapping, apply };
+
+============================================================
+FILE: src\posSalesImport\posSalesImport.repository.js
+============================================================
+const { query, transaction } = require('../../database');
+const crypto = require('crypto');
+const { v4: uuidv4 } = require('uuid');
+
+/**
+ * Compute SHA‑256 hash of a buffer.
+ */
+function computeFileHash(buffer) {
+  return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
+/**
+ * Save a product mapping.
+ */
+async function saveProductMapping(restaurantId, sourceProductName, itemId, source = 'flatpay') {
+  await query(
+    `INSERT INTO sales_product_mappings (restaurant_id, source, source_product_name, item_id)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (restaurant_id, source, source_product_name)
+     DO UPDATE SET item_id = $4, updated_at = NOW()`,
+    [restaurantId, source, sourceProductName, itemId]
+  );
+}
+
+/**
+ * Get all mappings for a restaurant + source.
+ */
+async function getMappings(restaurantId, source = 'flatpay') {
+  const res = await query(
+    `SELECT source_product_name, item_id FROM sales_product_mappings WHERE restaurant_id = $1 AND source = $2`,
+    [restaurantId, source]
+  );
+  const map = {};
+  for (const row of res.rows) {
+    map[row.source_product_name] = row.item_id;
+  }
+  return map;
+}
+
+/**
+ * Check if an import with the given file hash already exists for the restaurant.
+ */
+async function importExists(restaurantId, fileHash) {
+  const res = await query(
+    `SELECT id FROM sales_imports WHERE restaurant_id = $1 AND file_hash = $2`,
+    [restaurantId, fileHash]
+  );
+  return res.rows.length > 0;
+}
+
+/**
+ * Record a sales import and its items, update stocks and insert pos_sales rows.
+ * Runs inside a transaction provided by the caller.
+ */
+async function applyImport(tx, importId, restaurantId, userId, items, fileHash, periodStart, periodEnd) {
+  // Insert import header
+  await tx(
+    `INSERT INTO sales_imports (id, restaurant_id, imported_by, source, period_start, period_end, file_hash)
+     VALUES ($1, $2, $3, 'flatpay', $4, $5, $6)`,
+    [importId, restaurantId, userId, periodStart || null, periodEnd || null, fileHash]
+  );
+
+  for (const item of items) {
+    // Insert import item
+    await tx(
+      `INSERT INTO sales_import_items (id, import_id, item_id, source_product_name, quantity_sold)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [uuidv4(), importId, item.itemId, item.sourceProductName, item.quantitySold]
+    );
+
+    // Decrement stock
+    const stockRes = await tx(
+      `SELECT quantity FROM stocks WHERE item_id = $1 AND restaurant_id = $2`,
+      [item.itemId, restaurantId]
+    );
+    const current = stockRes.rows.length > 0 ? parseFloat(stockRes.rows[0].quantity) : 0;
+    const newQty = current - item.quantitySold;
+
+    // Check negative stock setting (reuse existing logic from inventory module if needed)
+    // For simplicity, we enforce non‑negative unless negativeStockAllowed is true.
+    // We'll check via the Settings table inside the transaction (optional).
+    const negSetting = await tx(
+      `SELECT value FROM settings WHERE key = 'negativeStockAllowed'`
+    );
+    const negativeAllowed = negSetting.rows.length > 0 ? negSetting.rows[0].value === 'true' : false;
+    if (!negativeAllowed && newQty < 0) {
+      throw { code: 'NEGATIVE_STOCK_NOT_ALLOWED', error: `Insufficient stock for item ${item.itemId}.` };
+    }
+
+    // Upsert stock
+    if (stockRes.rows.length > 0) {
+      await tx(
+        `UPDATE stocks SET quantity = $1, updated_at = NOW() WHERE item_id = $2 AND restaurant_id = $3`,
+        [Math.max(0, newQty), item.itemId, restaurantId]
+      );
+    } else {
+      await tx(
+        `INSERT INTO stocks (id, item_id, restaurant_id, quantity, updated_at)
+         VALUES ($1, $2, $3, $4, NOW())`,
+        [uuidv4(), item.itemId, restaurantId, Math.max(0, newQty)]
+      );
+    }
+
+    // Insert into canonical pos_sales (for existing sales summary)
+    await tx(
+      `INSERT INTO pos_sales (restaurant_id, provider, product_name, quantity, sold_at)
+       VALUES ($1, 'flatpay', $2, $3, NOW())`,
+      [restaurantId, item.sourceProductName, item.quantitySold]
+    );
+  }
+}
+
+module.exports = {
+  computeFileHash,
+  saveProductMapping,
+  getMappings,
+  importExists,
+  applyImport
+};
+
+============================================================
+FILE: src\posSalesImport\posSalesImport.service.js
+============================================================
+const repository = require('./posSalesImport.repository');
+const { v4: uuidv4 } = require('uuid');
+const { transaction } = require('../../database');
+
+/**
+ * Parse CSV buffer into an array of { productName, quantity }.
+ * Expects columns: Product, Quantity (case-insensitive header).
+ */
+function parseCSV(buffer) {
+  const text = buffer.toString('utf-8').trim();
+  if (!text) throw { code: 'INVALID_CSV', error: 'CSV file is empty.' };
+  const lines = text.split(/\r?\n/);
+  const header = lines[0].split(',').map(h => h.trim().toLowerCase());
+  const productIdx = header.indexOf('product');
+  const qtyIdx = header.indexOf('quantity');
+  if (productIdx === -1 || qtyIdx === -1) {
+    throw { code: 'INVALID_CSV_FORMAT', error: 'CSV must have "Product" and "Quantity" columns.' };
+  }
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(',');
+    if (cols.length < Math.max(productIdx, qtyIdx) + 1) continue;
+    const product = cols[productIdx].trim();
+    const qty = parseFloat(cols[qtyIdx].trim());
+    if (!product || isNaN(qty) || qty < 0) continue;
+    rows.push({ productName: product, quantity: qty });
+  }
+  if (rows.length === 0) throw { code: 'INVALID_CSV', error: 'No valid sales rows found.' };
+  // Aggregate duplicates
+  const aggregated = {};
+  for (const row of rows) {
+    if (!aggregated[row.productName]) aggregated[row.productName] = 0;
+    aggregated[row.productName] += row.quantity;
+  }
+  return Object.entries(aggregated).map(([productName, quantity]) => ({ productName, quantity }));
+}
+
+/**
+ * Build preview items by matching product names against saved mappings.
+ */
+async function previewSales(restaurantId, buffer) {
+  const parsed = parseCSV(buffer);
+  const fileHash = repository.computeFileHash(buffer);
+  const mappings = await repository.getMappings(restaurantId);
+  const items = [];
+  let periodStart = null, periodEnd = null; // could be extracted from CSV if present
+
+  for (const sale of parsed) {
+    const itemId = mappings[sale.productName] || null;
+    const item = itemId ? await getItemDetails(restaurantId, itemId) : null;
+    items.push({
+      sourceProductName: sale.productName,
+      itemId: item ? item.id : null,
+      itemName: item ? item.name : null,
+      quantitySold: sale.quantity,
+      matched: !!itemId
+    });
+  }
+
+  return { fileHash, periodStart, periodEnd, items };
+}
+
+async function getItemDetails(restaurantId, itemId) {
+  const { query } = require('../../database');
+  const res = await query(
+    `SELECT id, name FROM items WHERE id = $1 AND restaurant_id = $2 AND is_deleted = FALSE`,
+    [itemId, restaurantId]
+  );
+  return res.rows[0] || null;
+}
+
+/**
+ * Apply a sales import (atomic).
+ */
+async function applySalesImport(restaurantId, userId, fileHash, periodStart, periodEnd, items) {
+  // Re-verify that each item's itemId is valid and belongs to restaurant
+  for (const it of items) {
+    const item = await getItemDetails(restaurantId, it.itemId);
+    if (!item) throw { code: 'ITEM_NOT_FOUND', error: `Item not found: ${it.itemId}` };
+  }
+
+  const importId = uuidv4();
+  await transaction(async (tx) => {
+    // Duplicate check inside transaction
+    const dup = await tx(
+      `SELECT id FROM sales_imports WHERE restaurant_id = $1 AND file_hash = $2`,
+      [restaurantId, fileHash]
+    );
+    if (dup.rows.length > 0) throw { code: 'SALES_IMPORT_ALREADY_EXISTS', error: 'This sales report has already been imported.' };
+
+    await repository.applyImport(tx, importId, restaurantId, userId, items, fileHash, periodStart, periodEnd);
+  });
+}
+
+module.exports = {
+  previewSales,
+  applySalesImport,
+  saveProductMapping: repository.saveProductMapping
+};
+
+============================================================
+FILE: src\productBarcode\productBarcode.actions.js
+============================================================
+const service = require('./productBarcode.service');
+
+async function lookup(req, res) {
+  try {
+    const { barcode } = req.body;
+    if (!barcode) return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Barcode is required.' });
+
+    const result = await service.lookupBarcode(req.auth.restaurantId, barcode);
+    res.json(result);
+  } catch (err) {
+    if (err.code) return res.json({ ok: false, code: err.code, error: err.error });
+    console.error('barcode lookup error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+module.exports = { lookup };
+
+============================================================
+FILE: src\productBarcode\productBarcode.repository.js
+============================================================
+const { query } = require('../../database');
+
+async function findCachedProduct(restaurantId, barcode) {
+  const res = await query(
+    `SELECT * FROM product_barcodes WHERE restaurant_id = $1 AND barcode = $2`,
+    [restaurantId, barcode]
+  );
+  return res.rows[0] || null;
+}
+
+async function saveCachedProduct(restaurantId, barcode, product) {
+  const { v4: uuidv4 } = require('uuid');
+  await query(
+    `INSERT INTO product_barcodes (id, restaurant_id, barcode, product_name, brand, description, category,
+      quantity_value, quantity_unit, package_quantity, package_unit, inventory_item_id, provider, provider_product_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+    [
+      uuidv4(),
+      restaurantId,
+      barcode,
+      product.name || null,
+      product.brand || null,
+      product.description || null,
+      product.category || null,
+      product.quantityValue || null,
+      product.quantityUnit || null,
+      product.packageQuantity || null,
+      product.packageUnit || null,
+      null, // inventory_item_id (not set here)
+      product.provider || 'open_food_facts',
+      product.providerProductId || null
+    ]
+  );
+}
+
+async function findInventoryItemByName(restaurantId, name) {
+  if (!name) return null;
+  const res = await query(
+    `SELECT id, name FROM items WHERE restaurant_id = $1 AND LOWER(name) = LOWER($2) AND is_deleted = FALSE LIMIT 1`,
+    [restaurantId, name]
+  );
+  return res.rows[0] || null;
+}
+
+module.exports = { findCachedProduct, saveCachedProduct, findInventoryItemByName };
+
+============================================================
+FILE: src\productBarcode\productBarcode.service.js
+============================================================
+const repository = require('./productBarcode.repository');
+
+/**
+ * Validate barcode input – digits only, trim, length 8‑14 (EAN/UPC/GTIN)
+ */
+function validateBarcode(barcode) {
+  if (typeof barcode !== 'string') throw { code: 'VALIDATION_ERROR', error: 'Barcode must be a string.' };
+  const trimmed = barcode.trim();
+  if (!/^\d{8,14}$/.test(trimmed)) throw { code: 'VALIDATION_ERROR', error: 'Invalid barcode format. Must be 8‑14 digits.' };
+  return trimmed;
+}
+
+/**
+ * Fetch product info from Open Food Facts (OFF).
+ * Returns a normalized product object or null if not found.
+ */
+async function fetchFromOpenFoodFacts(barcode) {
+  const url = `https://world.openfoodfacts.org/api/v0/product/${barcode}.json`;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (data.status !== 1 || !data.product) return null;
+
+    const p = data.product;
+    const quantity = p.product_quantity ? parseFloat(p.product_quantity) : null; // g or ml
+    const unit = p.product_quantity_unit || null; // e.g. 'g', 'ml'
+    let quantityValue = null, quantityUnit = null;
+    if (unit === 'ml') {
+      quantityValue = quantity / 1000; // convert to L
+      quantityUnit = 'L';
+    } else if (unit === 'cl') {
+      quantityValue = quantity / 100;
+      quantityUnit = 'L';
+    } else if (unit === 'g') {
+      quantityValue = quantity / 1000; // convert to kg? keep as g for now, or use kg?
+      // We'll keep g as is, and set unit 'g'
+      quantityValue = quantity;
+      quantityUnit = 'g';
+    } else {
+      quantityValue = quantity;
+      quantityUnit = unit;
+    }
+
+    return {
+      name: p.product_name || p.generic_name || null,
+      brand: p.brands || null,
+      description: p.generic_name || null,
+      category: p.categories || null,
+      quantityValue: quantityValue,
+      quantityUnit: quantityUnit,
+      packageQuantity: null,   // OFF doesn't reliably provide carton qty
+      packageUnit: null,
+      provider: 'open_food_facts',
+      providerProductId: p.code || barcode
+    };
+  } catch (err) {
+    console.error('OFF fetch error:', err);
+    return null;
+  }
+}
+
+/**
+ * Lookup a barcode: cache first, then external, then match to inventory.
+ */
+async function lookupBarcode(restaurantId, barcode) {
+  const cleanBarcode = validateBarcode(barcode);
+
+  // 1. Check local cache
+  let cached = await repository.findCachedProduct(restaurantId, cleanBarcode);
+  let product = cached;
+
+  if (!cached) {
+    // 2. External lookup
+    const externalProduct = await fetchFromOpenFoodFacts(cleanBarcode);
+    if (externalProduct) {
+      // 3. Save to cache
+      await repository.saveCachedProduct(restaurantId, cleanBarcode, externalProduct);
+      product = externalProduct;
+    } else {
+      // Not found externally
+      return {
+        barcode: cleanBarcode,
+        found: false,
+        product: null,
+        inventoryMatch: null,
+        source: null
+      };
+    }
+  }
+
+  // 4. Try to match an existing inventory item
+  const matchedItem = await repository.findInventoryItemByName(restaurantId, product.name);
+
+  return {
+    ok: true,
+    barcode: cleanBarcode,
+    found: true,
+    product: {
+      name: product.product_name || product.name,
+      brand: product.brand,
+      description: product.description,
+      category: product.category,
+      quantityValue: product.quantity_value || product.quantityValue,
+      quantityUnit: product.quantity_unit || product.quantityUnit,
+      packageQuantity: product.package_quantity || product.packageQuantity,
+      packageUnit: product.package_unit || product.packageUnit
+    },
+    inventoryMatch: matchedItem ? {
+      matched: true,
+      itemId: matchedItem.id,
+      itemName: matchedItem.name
+    } : {
+      matched: false,
+      itemId: null,
+      itemName: null
+    },
+    source: product.provider || 'cache'
+  };
+}
+
+module.exports = { lookupBarcode };
+
+============================================================
+FILE: src\settings\settings.controller.js
+============================================================
+const service = require('./settings.service');
+const { validateSettings } = require('./settings.validators');
+
+/**
+ * GET /api/settings – return all settings for the authenticated restaurant.
+ */
+async function getAll(req, res) {
+  const { restaurantId } = req.auth;
+  try {
+    const settings = await service.getAllSettings(restaurantId);
+    res.json({ ok: true, settings });
+  } catch (err) {
+    console.error('settings.getAll error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+/**
+ * PATCH /api/settings/:section – update a single settings section.
+ * The section name is extracted from the URL.
+ */
+async function patchSection(req, res) {
+  const { restaurantId } = req.auth;
+  const section = req.params.section;
+  const data = req.body;
+
+  // Validate
+  const errors = validateSettings(section, data);
+  if (errors.length > 0) {
+    return res.json({ ok: false, code: 'VALIDATION_ERROR', error: errors.join(' ') });
+  }
+
+  try {
+    const updated = await service.updateSection(restaurantId, section, data);
+    res.json({ ok: true, section, settings: updated });
+  } catch (err) {
+    console.error(`settings.patchSection (${section}) error:`, err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+module.exports = { getAll, patchSection };
+
+============================================================
+FILE: src\settings\settings.defaults.js
+============================================================
+// Default values for the remaining Settings sections.
+// Only inventoryBehaviour and posIntegration are currently managed.
+const DEFAULTS = {
+  inventoryBehaviour: {
+    negativeStockAllowed: false,
+    showNegativeWarning: true
+  },
+  posIntegration: {
+    provider: 'None',
+    status: 'Disconnected',
+    last_sync: null,
+    configuration: {},
+    statistics: {
+      totalSales: 0,
+      lastSaleAt: null
+    }
+  }
+};
+
+module.exports = DEFAULTS;
+
+============================================================
+FILE: src\settings\settings.repository.js
+============================================================
+const { query, transaction } = require('../../database');
+
+/**
+ * Load ALL settings for a restaurant as an object { key: value }.
+ */
+async function loadSettings(restaurantId) {
+  const res = await query(
+    `SELECT key, value FROM restaurant_settings WHERE restaurant_id = $1`,
+    [restaurantId]
+  );
+  const settings = {};
+  for (const row of res.rows) {
+    settings[row.key] = row.value;   // value is already JSON from PostgreSQL
+  }
+  return settings;
+}
+
+/**
+ * Load a single settings section by key.
+ */
+async function loadSection(restaurantId, key) {
+  const res = await query(
+    `SELECT value FROM restaurant_settings WHERE restaurant_id = $1 AND key = $2`,
+    [restaurantId, key]
+  );
+  return res.rows.length > 0 ? res.rows[0].value : null;
+}
+
+/**
+ * Upsert a settings section.
+ */
+async function saveSection(restaurantId, key, value) {
+  await query(
+    `INSERT INTO restaurant_settings (id, restaurant_id, key, value, created_at, updated_at)
+     VALUES (gen_random_uuid(), $1, $2, $3, NOW(), NOW())
+     ON CONFLICT (restaurant_id, key) DO UPDATE SET value = $3, updated_at = NOW()`,
+    [restaurantId, key, JSON.stringify(value)]
+  );
+}
+
+/**
+ * Delete a settings section.
+ */
+async function deleteSection(restaurantId, key) {
+  await query(
+    `DELETE FROM restaurant_settings WHERE restaurant_id = $1 AND key = $2`,
+    [restaurantId, key]
+  );
+}
+
+module.exports = { loadSettings, loadSection, saveSection, deleteSection };
+
+============================================================
+FILE: src\settings\settings.service.js
+============================================================
+const repository = require('./settings.repository');
+const DEFAULTS = require('./settings.defaults');
+const posIntegrationService = require('../posIntegration/posIntegration.service');
+
+/**
+ * Get all settings for a restaurant, merging with defaults.
+ */
+async function getAllSettings(restaurantId) {
+  const stored = await repository.loadSettings(restaurantId);
+  const merged = {};
+
+  // Inventory Behaviour from stored or defaults
+  merged.inventoryBehaviour = stored.inventoryBehaviour !== undefined
+    ? stored.inventoryBehaviour
+    : DEFAULTS.inventoryBehaviour;
+
+  // POS Integration – always comes from the posIntegration service
+  const posIntegration = await posIntegrationService.getIntegration(restaurantId);
+  merged.posIntegration = posIntegration || DEFAULTS.posIntegration;  // fallback defaults if no row
+
+  return merged;
+}
+/**
+ * Get a single settings section by key.
+ */
+async function getSection(restaurantId, key) {
+  const stored = await repository.loadSection(restaurantId, key);
+  if (stored !== null) return stored;
+  return DEFAULTS[key] || null;
+}
+
+/**
+ * Update (replace) a settings section.
+ */
+async function updateSection(restaurantId, key, data) {
+  if (key === 'posIntegration') {
+    return posIntegrationService.updateIntegration(restaurantId, data);
+  }
+  await repository.saveSection(restaurantId, key, data);
+  return data;
+}
+// Convenience getters / updaters for the remaining sections
+async function getInventoryBehaviour(restaurantId) { return getSection(restaurantId, 'inventoryBehaviour'); }
+async function getPOSIntegrationSettings(restaurantId) { return getSection(restaurantId, 'posIntegration'); }
+
+async function updateInventoryBehaviour(restaurantId, data) { return updateSection(restaurantId, 'inventoryBehaviour', data); }
+async function updatePOSIntegration(restaurantId, data) { return updateSection(restaurantId, 'posIntegration', data); }
+
+module.exports = {
+  getAllSettings,
+  getSection,
+  updateSection,
+  getInventoryBehaviour,
+  getPOSIntegrationSettings,
+  updateInventoryBehaviour,
+  updatePOSIntegration
+};
+
+============================================================
+FILE: src\settings\settings.validators.js
+============================================================
+/**
+ * Validate that the provided settings object conforms to the expected shape.
+ * Returns an array of error messages, empty if valid.
+ */
+function validateSettings(section, data) {
+  const errors = [];
+  if (!data || typeof data !== 'object') {
+    errors.push('Settings payload must be a JSON object.');
+    return errors;
+  }
+
+  if (section === 'inventoryBehaviour') {
+    if (typeof data.negativeStockAllowed !== 'boolean') {
+      errors.push('inventoryBehaviour.negativeStockAllowed must be a boolean.');
+    }
+    if (typeof data.showNegativeWarning !== 'boolean') {
+      errors.push('inventoryBehaviour.showNegativeWarning must be a boolean.');
+    }
+  }
+
+  if (section === 'posIntegration') {
+    // Accept any valid JSON object for POS integration settings.
+    // The frontend will manage the exact structure.
+  }
+
+  return errors;
+}
+
+module.exports = { validateSettings };
+
+============================================================
+FILE: src\staff\staff.actions.js
+============================================================
+const service = require('./staff.service');
+const { query } = require('../../database');
+
+async function list(req, res) {
+  try {
+    const staff = await service.listStaff(req.auth.restaurantId);
+    res.json({ ok: true, staff });
+  } catch (err) {
+    console.error('staff list error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+async function create(req, res) {
+  try {
+    const { name, pin } = req.body;
+    const user = await service.createStaff(req.auth.restaurantId, name, pin);
+    res.json({ ok: true, user });
+  } catch (err) {
+    if (err.code) return res.json({ ok: false, code: err.code, error: err.error });
+    console.error('staff create error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+async function update(req, res) {
+  try {
+    const userId = req.params.id;
+    const updates = req.body;
+    const user = await service.updateStaff(req.auth.restaurantId, userId, updates, req.auth.userId);
+    res.json({ ok: true, user });
+  } catch (err) {
+    if (err.code) return res.json({ ok: false, code: err.code, error: err.error });
+    console.error('staff update error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+module.exports = { list, create, update };
+
+============================================================
+FILE: src\staff\staff.repository.js
+============================================================
+const { query } = require('../../database');
+
+async function listStaff(restaurantId) {
+  const res = await query(
+    `SELECT id, name, username, role, is_active, created_at
+     FROM users
+     WHERE restaurant_id = $1 AND role = 'staff'
+     ORDER BY name ASC`,
+    [restaurantId]
+  );
+  return res.rows;
+}
+
+async function getStaffById(userId, restaurantId) {
+  const res = await query(
+    `SELECT * FROM users WHERE id = $1 AND restaurant_id = $2 AND role = 'staff'`,
+    [userId, restaurantId]
+  );
+  return res.rows[0] || null;
+}
+
+async function createStaff(restaurantId, name, passwordHash, username) {
+  const { v4: uuidv4 } = require('uuid');
+  const id = uuidv4();
+  await query(
+    `INSERT INTO users (id, name, username, role, restaurant_id, password_hash, is_active, created_at)
+     VALUES ($1, $2, $3, 'staff', $4, $5, TRUE, NOW())`,
+    [id, name, username, restaurantId, passwordHash]
+  );
+  return { id, name, username, role: 'staff', is_active: true, created_at: new Date().toISOString() };
+}
+
+async function updateStaff(userId, restaurantId, fields) {
+  const sets = [];
+  const values = [userId, restaurantId];
+  let idx = 3;
+  if (fields.name !== undefined) {
+    sets.push(`name = $${idx++}`);
+    values.push(fields.name);
+  }
+  if (fields.password_hash !== undefined) {
+    sets.push(`password_hash = $${idx++}`);
+    values.push(fields.password_hash);
+  }
+  if (fields.is_active !== undefined) {
+    sets.push(`is_active = $${idx++}`);
+    values.push(fields.is_active);
+  }
+  if (sets.length === 0) return getStaffById(userId, restaurantId);
+
+  await query(
+    `UPDATE users SET ${sets.join(', ')} WHERE id = $1 AND restaurant_id = $2`,
+    values
+  );
+  return getStaffById(userId, restaurantId);
+}
+
+module.exports = { listStaff, getStaffById, createStaff, updateStaff };
+
+============================================================
+FILE: src\staff\staff.service.js
+============================================================
+const crypto = require('crypto');
+const { query } = require('../../database');
+const repository = require('./staff.repository');
+
+function hashPin(pin) {
+  return crypto.createHash('sha256').update(pin).digest('hex');
+}
+
+function validateName(name) {
+  if (!name || !String(name).trim()) throw { code: 'VALIDATION_ERROR', error: 'Name is required.' };
+  return String(name).trim();
+}
+
+function validatePin(pin) {
+  if (!pin || !/^\d{4,6}$/.test(String(pin))) throw { code: 'VALIDATION_ERROR', error: 'PIN must be 4–6 digits.' };
+  return String(pin);
+}
+
+/**
+ * Generate a unique username from the staff name and restaurant.
+ * Format: sanitizedName@restaurantCode (e.g., johnsmith@forno).
+ * Uniqueness is scoped to the given restaurant only.
+ */
+async function generateUsername(name, restaurantId) {
+  const baseName = name.toLowerCase().replace(/[^a-z0-9]/g, '') || 'user';
+
+  // Get the restaurant code
+  const codeRes = await query(`SELECT restaurant_code FROM restaurants WHERE id = $1`, [restaurantId]);
+  const code = codeRes.rows[0]?.restaurant_code || 'unknown';
+  const base = baseName + '@' + code;
+
+  let username = base;
+  let counter = 1;
+  while (true) {
+    // Check uniqueness only within the same restaurant
+    const res = await query(
+      `SELECT id FROM users WHERE username = $1 AND restaurant_id = $2 LIMIT 1`,
+      [username, restaurantId]
+    );
+    if (res.rows.length === 0) break;
+    username = baseName + (counter++) + '@' + code;
+  }
+  return username;
+}
+
+async function listStaff(restaurantId) {
+  return repository.listStaff(restaurantId);
+}
+
+async function createStaff(restaurantId, name, pin) {
+  const cleanedName = validateName(name);
+  const cleanedPin = validatePin(pin);
+  const hash = hashPin(cleanedPin);
+  const username = await generateUsername(cleanedName, restaurantId);
+  return repository.createStaff(restaurantId, cleanedName, hash, username);
+}
+
+async function updateStaff(restaurantId, userId, updates, currentUserId) {
+  const staff = await repository.getStaffById(userId, restaurantId);
+  if (!staff) throw { code: 'NOT_FOUND', error: 'Staff member not found.' };
+
+  if (userId === currentUserId) {
+    throw { code: 'FORBIDDEN', error: 'You cannot edit your own account.' };
+  }
+
+  const fields = {};
+
+  if (updates.name !== undefined) {
+    fields.name = validateName(updates.name);
+  }
+
+  if (updates.pin !== undefined) {
+    const cleanedPin = validatePin(updates.pin);
+    fields.password_hash = hashPin(cleanedPin);
+  }
+
+  if (updates.is_active !== undefined) {
+    if (typeof updates.is_active !== 'boolean') throw { code: 'VALIDATION_ERROR', error: 'is_active must be a boolean.' };
+    fields.is_active = updates.is_active;
+  }
+
+  return repository.updateStaff(userId, restaurantId, fields);
+}
+
+module.exports = { listStaff, createStaff, updateStaff };
+
+============================================================
+FILE: src\stockIntake\stockIntake.actions.js
+============================================================
+const service = require('./stockIntake.service');
+
+async function create(req, res) {
+  try {
+    const { restaurantId, userId } = req.auth;
+    const { items } = req.body;
+    await service.createIntake(restaurantId, userId, items);
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code) return res.json({ ok: false, code: err.code, error: err.error });
+    console.error('stockIntake create error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+async function list(req, res) {
+  try {
+    const { restaurantId } = req.auth;
+    const { start, end } = req.query;
+    const intakes = await service.listIntakes(restaurantId, start, end);
+    res.json({ ok: true, intakes });
+  } catch (err) {
+    console.error('stockIntake list error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+module.exports = { create, list };
+
+============================================================
+FILE: src\stockIntake\stockIntake.repository.js
+============================================================
+const { query, transaction } = require('../../database');
+const { v4: uuidv4 } = require('uuid');
+
+async function createIntake(restaurantId, userId, items) {
+  const intakeId = uuidv4();
+  await transaction(async (tx) => {
+    await tx(
+      `INSERT INTO stock_intakes (id, restaurant_id, user_id) VALUES ($1, $2, $3)`,
+      [intakeId, restaurantId, userId || null]
+    );
+    for (const item of items) {
+      await tx(
+        `INSERT INTO stock_intake_items (id, intake_id, item_id, quantity_added, package_id, quantity_purchased, units_per_package_at_time)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [uuidv4(), intakeId, item.itemId, item.quantityAdded, item.packageId || null, item.quantityPurchased, item.unitsPerPackageAtTime]
+      );
+      await tx(
+        `UPDATE stocks SET quantity = quantity + $1, updated_at = NOW() WHERE item_id = $2 AND restaurant_id = $3`,
+        [item.quantityAdded, item.itemId, restaurantId]
+      );
+    }
+  });
+  return intakeId;
+}
+
+async function listIntakes(restaurantId, start, end) {
+  let sql =     `SELECT si.id, si.intake_type, si.created_at,
+            sii.item_id, i.name AS item_name, sii.quantity_added,
+            sii.package_id, sii.quantity_purchased, sii.units_per_package_at_time,
+            ip.package_unit
+     FROM stock_intakes si
+     JOIN stock_intake_items sii ON si.id = sii.intake_id
+     JOIN items i ON sii.item_id = i.id
+     LEFT JOIN item_packages ip ON sii.package_id = ip.id
+     WHERE si.restaurant_id = $1`;
+  const params = [restaurantId];
+  if (start) { sql += ` AND si.created_at >= $${params.push(start)}`; }
+  if (end)   { sql += ` AND si.created_at <= $${params.push(end)}`; }
+  sql += ` ORDER BY si.created_at DESC`;
+  const res = await query(sql, params);
+  // Group by intake
+  const map = new Map();
+  for (const row of res.rows) {
+    if (!map.has(row.id)) {
+      map.set(row.id, {
+        id: row.id,
+        intakeType: row.intake_type,
+        createdAt: row.created_at,
+        items: []
+      });
+    }
+    map.get(row.id).        items.push({
+          itemId: row.item_id,
+          itemName: row.item_name,
+          quantityAdded: parseFloat(row.quantity_added),
+          packageId: row.package_id,
+          packageUnit: row.package_unit || null,
+          quantityPurchased: row.quantity_purchased ? parseFloat(row.quantity_purchased) : null,
+          unitsPerPackageAtTime: row.units_per_package_at_time ? parseFloat(row.units_per_package_at_time) : null
+        });
+  }
+  return Array.from(map.values());
+}
+
+module.exports = { createIntake, listIntakes };
+
+============================================================
+FILE: src\stockIntake\stockIntake.service.js
+============================================================
+const repository = require('./stockIntake.repository');
+
+function validateItems(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw { code: 'VALIDATION_ERROR', error: 'At least one item is required.' };
+  }
+  for (const it of items) {
+    if (!it.itemId)  throw { code: 'VALIDATION_ERROR', error: 'Each item must have an itemId.' };
+    const qty = parseFloat(it.quantity);
+    if (isNaN(qty) || qty <= 0) throw { code: 'VALIDATION_ERROR', error: 'Quantity must be a positive number.' };
+  }
+}
+
+async function createIntake(restaurantId, userId, items) {
+  validateItems(items);
+  const intakeItems = [];
+
+  for (const it of items) {
+    const itemId = it.itemId;
+    const qtyPurchased = parseFloat(it.quantityPurchased || it.quantity || 1);
+    if (isNaN(qtyPurchased) || qtyPurchased <= 0) {
+      throw { code: 'VALIDATION_ERROR', error: 'Each item must have a positive quantity.' };
+    }
+
+    let quantityAdded = qtyPurchased;
+    let packageId = null, unitsPerPackage = 1;
+
+    if (it.packageId) {
+      const { query } = require('../../database');
+      const pkgRes = await query(
+        `SELECT * FROM item_packages WHERE id = $1 AND restaurant_id = $2 AND item_id = $3 AND enabled = TRUE`,
+        [it.packageId, restaurantId, itemId]
+      );
+      if (pkgRes.rows.length === 0) {
+        throw { code: 'NOT_FOUND', error: 'Package not found or not applicable for item.' };
+      }
+      const pkg = pkgRes.rows[0];
+      unitsPerPackage = parseFloat(pkg.units_per_package);
+      quantityAdded = qtyPurchased * unitsPerPackage;
+      packageId = pkg.id;
+    }
+
+    intakeItems.push({
+      itemId,
+      quantityAdded,
+      packageId,
+      quantityPurchased: qtyPurchased,
+      unitsPerPackageAtTime: unitsPerPackage
+    });
+  }
+
+  const intakeId = await repository.createIntake(restaurantId, userId, intakeItems);
+  return intakeId;
+}
+
+async function listIntakes(restaurantId, start, end) {
+  return repository.listIntakes(restaurantId, start, end);
+}
+
+module.exports = { createIntake, listIntakes };
+

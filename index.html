@@ -3957,6 +3957,7 @@ const titles = {
           return apiCall('GET', q);
         },
         createStockIntake: (items) => apiCall('POST', '/stock-intake', { items }),
+        previewStockIntake: (itemId, packageId, quantityPurchased) => apiCall('POST', '/stock-intake/preview', { itemId, packageId, quantityPurchased }),
         // Item Packages
         getPackages: () => apiCall('GET', '/packages'),
         createPackage: (itemId, packageUnit, unitsPerPackage, sortOrder) => apiCall('POST', '/packages', { itemId, packageUnit, unitsPerPackage, sortOrder }),
@@ -4550,7 +4551,12 @@ function validateAdjustReasonForm() {
         return html;
       }
 
-      function updateIntakeRowPreview(row) {
+      function scheduleIntakeRowPreview(row) {
+        if (row._previewTimer) clearTimeout(row._previewTimer);
+        row._previewTimer = setTimeout(() => { updateIntakeRowPreview(row); }, 350);
+      }
+
+      async function updateIntakeRowPreview(row) {
         const itemSel = row.querySelector('.intake-item-select');
         const pkgSel = row.querySelector('.intake-package-select');
         const qtyInput = row.querySelector('.intake-qty-input');
@@ -4558,15 +4564,38 @@ function validateAdjustReasonForm() {
         const f = findItem(itemSel.value);
         const stockUnit = f ? (f.item.unit || 'units') : 'units';
         const qty = parseFloat(qtyInput.value) || 0;
+
+        row.dataset.previewQuantityAdded = '';
+        row.dataset.previewStockUnit = '';
+        row.dataset.previewPurchaseUnit = '';
+
+        if (!f || qty <= 0) { preview.textContent = ''; return; }
+
         if (pkgSel && pkgSel.style.display !== 'none' && pkgSel.value) {
+          // Package selected — backend is authoritative for the conversion, never computed here.
           const opt = pkgSel.options[pkgSel.selectedIndex];
-          const perPackage = parseFloat(opt.dataset.unitsPer) || 0;
-          const total = qty * perPackage;
-          preview.textContent = qty > 0 ? `${qty} ${opt.textContent}${qty === 1 ? '' : 's'} × ${perPackage} ${stockUnit} = ${total} ${stockUnit} added to stock` : '';
-        } else if (f) {
-          preview.textContent = qty > 0 ? `${qty} ${stockUnit} added to stock` : '';
+          const packageLabel = opt ? opt.textContent : '';
+          const requestId = (row._previewRequestId = (row._previewRequestId || 0) + 1);
+          preview.textContent = 'Calculating…';
+          try {
+            const data = await api.previewStockIntake(itemSel.value, pkgSel.value, qty);
+            if (row._previewRequestId !== requestId) return; // a newer request superseded this one
+            const calc = data && data.calculation ? data.calculation : null;
+            if (!calc) { preview.textContent = ''; return; }
+            row.dataset.previewQuantityAdded = calc.quantityAdded;
+            row.dataset.previewStockUnit = calc.stockUnit || stockUnit;
+            row.dataset.previewPurchaseUnit = calc.purchaseUnit || packageLabel;
+            preview.textContent = `${calc.quantityPurchased} ${calc.purchaseUnit}${calc.quantityPurchased === 1 ? '' : 's'} → ${calc.quantityAdded} ${calc.stockUnit} expected (not yet added — press Save Intake to confirm)`;
+          } catch (e) {
+            if (row._previewRequestId !== requestId) return;
+            preview.textContent = 'Could not calculate this purchase. Try again.';
+          }
         } else {
-          preview.textContent = '';
+          // No package selected — quantity is already in stock units, no conversion needed.
+          preview.textContent = `${qty} ${stockUnit} expected (not yet added — press Save Intake to confirm)`;
+          row.dataset.previewQuantityAdded = qty;
+          row.dataset.previewStockUnit = stockUnit;
+          row.dataset.previewPurchaseUnit = '';
         }
       }
 
@@ -4592,10 +4621,10 @@ function validateAdjustReasonForm() {
           const pkgHtml = buildPackageOptionsHtml(itemSel.value);
           if (pkgHtml) { pkgSel.innerHTML = pkgHtml; pkgSel.style.display = 'block'; }
           else { pkgSel.innerHTML = ''; pkgSel.style.display = 'none'; }
-          updateIntakeRowPreview(row);
+          scheduleIntakeRowPreview(row);
         });
-        pkgSel.addEventListener('change', () => updateIntakeRowPreview(row));
-        qtyInput.addEventListener('input', () => updateIntakeRowPreview(row));
+        pkgSel.addEventListener('change', () => scheduleIntakeRowPreview(row));
+        qtyInput.addEventListener('input', () => scheduleIntakeRowPreview(row));
         wrap.appendChild(row);
       }
 
@@ -4604,18 +4633,17 @@ function validateAdjustReasonForm() {
         const lines = [];
         rows.forEach(row => {
           const itemSel = row.querySelector('.intake-item-select');
-          const pkgSel = row.querySelector('.intake-package-select');
           const qtyInput = row.querySelector('.intake-qty-input');
           const f = findItem(itemSel.value);
           const qty = parseFloat(qtyInput.value) || 0;
           if (!f || qty <= 0) return;
-          const stockUnit = f.item.unit || 'units';
-          if (pkgSel.style.display !== 'none' && pkgSel.value) {
-            const opt = pkgSel.options[pkgSel.selectedIndex];
-            const perPackage = parseFloat(opt.dataset.unitsPer) || 0;
-            lines.push(`${escapeHtml(f.item.name)}\n${qty} ${escapeHtml(opt.textContent)}${qty === 1 ? '' : 's'}\n${qty * perPackage} ${escapeHtml(stockUnit)}`);
+          const purchaseUnit = row.dataset.previewPurchaseUnit || '';
+          const quantityAdded = row.dataset.previewQuantityAdded || qty;
+          const stockUnit = row.dataset.previewStockUnit || f.item.unit || 'units';
+          if (purchaseUnit) {
+            lines.push(`${escapeHtml(f.item.name)}\n${qty} ${escapeHtml(purchaseUnit)}${qty === 1 ? '' : 's'}\n${escapeHtml(String(quantityAdded))} ${escapeHtml(stockUnit)}`);
           } else {
-            lines.push(`${escapeHtml(f.item.name)}\n${qty} ${escapeHtml(stockUnit)}\n${qty} ${escapeHtml(stockUnit)}`);
+            lines.push(`${escapeHtml(f.item.name)}\n${qty} ${escapeHtml(stockUnit)}\n${escapeHtml(String(quantityAdded))} ${escapeHtml(stockUnit)}`);
           }
         });
         return lines;
@@ -4624,23 +4652,30 @@ function validateAdjustReasonForm() {
       function confirmStockIntakeSave() {
         const rows = document.querySelectorAll('#stockIntakeRows .adjust-reason-row');
         let hasValidRow = false;
+        let hasPendingPreview = false;
         const seen = new Set();
         let hasDuplicate = false;
         rows.forEach(row => {
           const itemId = row.querySelector('.intake-item-select').value;
           const pkgSel = row.querySelector('.intake-package-select');
           const qty = parseFloat(row.querySelector('.intake-qty-input').value);
-          if (itemId && qty > 0) hasValidRow = true;
+          if (itemId && qty > 0) {
+            hasValidRow = true;
+            if (pkgSel.style.display !== 'none' && pkgSel.value && !row.dataset.previewQuantityAdded) {
+              hasPendingPreview = true;
+            }
+          }
           const key = itemId + '::' + (pkgSel.style.display !== 'none' ? pkgSel.value : '');
           if (itemId && seen.has(key)) hasDuplicate = true;
           seen.add(key);
         });
         if (!hasValidRow) { toast('Add at least one item with a quantity.', true); return; }
+        if (hasPendingPreview) { toast('Still calculating one or more rows — please wait a moment and try again.', true); return; }
         if (hasDuplicate) { toast('The same item/purchase unit is selected more than once — you can still save, but consider combining the quantities.', true); }
         const lines = buildIntakeSummary();
         const bodyHtml = '<div style="text-align:left;">' + lines.map(l => {
           const parts = l.split('\n');
-          return `<div style="border-top:1px solid var(--line);padding:8px 0;"><b style="color:var(--paper);">${parts[0]}</b><br><span style="color:var(--paper-dim);font-size:0.85rem;">${parts[1]}</span><br><span style="color:var(--gold-bright);font-size:0.85rem;">${parts[2]} added</span></div>`;
+          return `<div style="border-top:1px solid var(--line);padding:8px 0;"><b style="color:var(--paper);">${parts[0]}</b><br><span style="color:var(--paper-dim);font-size:0.85rem;">${parts[1]}</span><br><span style="color:var(--gold-bright);font-size:0.85rem;">Expected: +${parts[2]} (not yet added to inventory)</span></div>`;
         }).join('') + '</div>';
         openConfirm('Purchase Summary', bodyHtml, () => performStockIntakeSave(), 'Save Intake');
       }
@@ -4686,7 +4721,7 @@ function validateAdjustReasonForm() {
         container.innerHTML = `
           <div class="settings-detail-header">
             <div class="settings-detail-title">Stock Intake</div>
-            <div class="settings-detail-desc">Record incoming stock purchases. Select a purchase unit (e.g. Case) where available — the total added to stock is calculated automatically.</div>
+            <div class="settings-detail-desc">Record incoming stock purchases. Select a purchase unit (e.g. Case) where available — the backend calculates the expected stock addition below. Nothing is added to inventory until you press Save Intake.</div>
           </div>
           <div id="stockIntakeRows"></div>
           <button class="add-ingredient-btn" id="addIntakeRowBtn">+ Add Item</button>

@@ -353,6 +353,12 @@ app.get('/api/stock-intake', (req, res, next) => {
   });
 });
 
+app.post('/api/stock-intake/preview', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => stockIntakeActions.preview(req, res));
+  });
+});
+
 app.post('/api/stock-intake', (req, res, next) => {
   requireAuth(req, res, () => {
     requirePermission('settings', 'manage')(req, res, () => stockIntakeActions.create(req, res));
