@@ -39,7 +39,7 @@ function renderRecipeCard(r) {
   bi.className = 'cat-body-inner';
   let dh = '';
   if (r.glass) dh += `<div class="recipe-detail"><strong>Glass</strong><br>${escapeHtml(r.glass)}</div>`;
-  if (r.method) dh += `<div class="recipe-detail"><strong>Method</strong><br>${escapeHtml(r.method)}</div>`;
+  if (r.method) dh += `<div class="recipe-detail"><strong>Method</strong><br>${escapeHtml(r.method).replace(/\n/g, '<br>')}</div>`;
   if (r.garnish) dh += `<div class="recipe-detail"><strong>Garnish</strong><br>${escapeHtml(r.garnish)}</div>`;
   if (r.ingredients && r.ingredients.length > 0) {
     dh += '<div class="recipe-detail"><strong>Ingredients</strong>';

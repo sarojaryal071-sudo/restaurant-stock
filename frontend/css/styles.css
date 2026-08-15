@@ -1214,6 +1214,13 @@ button {
   font-size: clamp(0.85rem, 2.4vw, 0.95rem);
 }
 
+textarea.field-input {
+  resize: vertical;
+  min-height: 120px;
+  line-height: 1.5;
+  font-family: inherit;
+}
+
 .field-input:focus,
 .field-select:focus {
   outline: none;
