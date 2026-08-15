@@ -3121,15 +3121,35 @@
       box-sizing: border-box;
       padding: clamp(10px, 2.6vw, 12px) clamp(8px, 2.4vw, 14px);
       font-size: clamp(0.8rem, 3.4vw, 0.95rem);
+      display: flex;
+      align-items: center;
     }
 
     input[type="date"].field-input::-webkit-datetime-edit {
+      flex: 1 1 auto;
+      min-width: 0;
       max-width: 100%;
       overflow: hidden;
+      padding: 0;
     }
 
     input[type="date"].field-input::-webkit-datetime-edit-fields-wrapper {
       max-width: 100%;
+    }
+
+    input[type="date"].field-input::-webkit-date-and-time-value {
+      text-align: left;
+      margin: 0;
+    }
+
+    input[type="date"].field-input::-webkit-calendar-picker-indicator {
+      flex: 0 0 auto;
+      width: 18px;
+      height: 18px;
+      padding: 0;
+      margin-left: clamp(6px, 2vw, 10px);
+      background-size: 16px 16px;
+      opacity: 0.85;
     }
   </style>
 </head>
