@@ -132,6 +132,8 @@ const api = {
   },
   createStockIntake: (items, purchaseDate) => apiCall('POST', '/stock-intake', purchaseDate ? { items, purchaseDate } : { items }),
   previewStockIntake: (itemId, packageId, quantityPurchased) => apiCall('POST', '/stock-intake/preview', { itemId, packageId, quantityPurchased }),
+  updateStockIntake: (id, items, purchaseDate) => apiCall('PATCH', `/stock-intake/${id}`, purchaseDate ? { items, purchaseDate } : { items }),
+  cancelStockIntake: (id) => apiCall('POST', `/stock-intake/${id}/cancel`, {}),
   getPackages: () => apiCall('GET', '/packages'),
   createPackage: (itemId, packageUnit, unitsPerPackage, sortOrder) => apiCall('POST', '/packages', { itemId, packageUnit, unitsPerPackage, sortOrder }),
   updatePackage: (id, data) => apiCall('PATCH', `/packages/${id}`, data),

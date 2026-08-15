@@ -1,5 +1,7 @@
 'use strict';
 
+let editingPurchaseId = null;
+
 function buildItemOptionsHtml(selectedId) {
   let html = '<option value="">-- Select item --</option>';
   state.categories.forEach(c => {
@@ -166,6 +168,7 @@ function addPurchaseRow() {
   qtyInput.addEventListener('input', () => schedulePurchaseRowPreview(row));
   list.appendChild(row);
   updatePurchaseFormValidity();
+  return row;
 }
 
 function clearPurchaseModal() {
@@ -174,8 +177,17 @@ function clearPurchaseModal() {
   document.getElementById('purchaseSaveBtn').disabled = true;
 }
 
+function setPurchaseModalMode(editing) {
+  const title = document.getElementById('purchaseModalTitle');
+  const saveBtn = document.getElementById('purchaseSaveBtn');
+  if (title) title.textContent = editing ? 'Edit Purchase' : 'Add Purchase';
+  if (saveBtn) saveBtn.textContent = editing ? 'Save Changes' : 'Save Purchase';
+}
+
 function openAddPurchaseModal() {
+  editingPurchaseId = null;
   clearPurchaseModal();
+  setPurchaseModalMode(false);
   const dateInput = document.getElementById('purchaseDateInput');
   if (dateInput) {
     const now = new Date();
@@ -185,6 +197,44 @@ function openAddPurchaseModal() {
     dateInput.value = `${yyyy}-${mm}-${dd}`;
   }
   addPurchaseRow();
+  openModal(document.getElementById('purchaseModalOverlay'));
+}
+
+function populatePurchaseRow(row, item) {
+  const itemSel = row.querySelector('.purchase-item-select');
+  const pkgSel = row.querySelector('.purchase-package-select');
+  const qtyInput = row.querySelector('.purchase-qty-input');
+
+  itemSel.value = item.itemId || '';
+  pkgSel.innerHTML = buildPurchaseUnitOptionsHtml(itemSel.value, item.packageId || '__stock__');
+  qtyInput.value = item.quantityPurchased !== undefined && item.quantityPurchased !== null
+    ? item.quantityPurchased
+    : 0;
+
+  schedulePurchaseRowPreview(row);
+}
+
+function openEditPurchaseModal(intake) {
+  editingPurchaseId = intake.id;
+  clearPurchaseModal();
+  setPurchaseModalMode(true);
+
+  const dateInput = document.getElementById('purchaseDateInput');
+  if (dateInput) {
+    const d = intake.purchaseDate || (intake.createdAt ? intake.createdAt.slice(0, 10) : '');
+    dateInput.value = d;
+  }
+
+  const items = intake.items || [];
+  if (!items.length) {
+    addPurchaseRow();
+  } else {
+    items.forEach(item => {
+      const row = addPurchaseRow();
+      populatePurchaseRow(row, item);
+    });
+  }
+
   openModal(document.getElementById('purchaseModalOverlay'));
 }
 
@@ -260,11 +310,24 @@ function renderPurchaseRegister(intakes) {
             <span class="purchase-item-result">${resultLine}</span>
           </div>`;
         }).join('');
+        const statusBadge = intake.status === 'cancelled'
+          ? '<span class="badge-inactive">Cancelled</span>'
+          : '<span class="badge-active">Active</span>';
+
+        const actionButtons = intake.status !== 'cancelled'
+          ? `<div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px;">
+              <button class="btn btn-ghost btn-small purchase-edit-btn" data-intake-id="${intake.id}">Edit</button>
+              <button class="btn btn-danger btn-small purchase-cancel-btn" data-intake-id="${intake.id}">Cancel</button>
+            </div>`
+          : '';
+
         html += `<div class="purchase-card" data-intake-id="${intake.id}">
           <div class="purchase-card-header">
             <span class="purchase-card-time">${escapeHtml(enteredTime ? 'Entered ' + enteredTime : '')}</span>
+            ${statusBadge}
             <span class="purchase-card-id">${intake.id ? '#' + intake.id.slice(0, 8) : ''}</span>
           </div>
+          ${actionButtons}
           <div class="purchase-card-body">${itemRows || '<div class="purchase-card-item"><span class="purchase-item-name">No items</span></div>'}</div>
         </div>`;
       });
@@ -279,6 +342,22 @@ function renderPurchaseRegister(intakes) {
     card.addEventListener('click', () => {
       const intake = sorted.find(i => i.id === card.dataset.intakeId);
       if (intake) openPurchaseDetails(intake);
+    });
+  });
+
+  container.querySelectorAll('.purchase-edit-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const intake = sorted.find(i => i.id === btn.dataset.intakeId);
+      if (intake) openEditPurchaseModal(intake);
+    });
+  });
+
+  container.querySelectorAll('.purchase-cancel-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const intake = sorted.find(i => i.id === btn.dataset.intakeId);
+      if (intake) confirmCancelPurchase(intake);
     });
   });
 }
@@ -311,8 +390,50 @@ function openPurchaseDetails(intake) {
     </div>`;
   });
   html += `<div style="margin-top:var(--space-3);padding-top:var(--space-2);border-top:1px solid var(--line);font-size:0.8rem;color:var(--paper-faint);">Total items: ${items.length}</div>`;
+  if (intake.status !== 'cancelled') {
+    html += `<div style="display:flex;gap:6px;margin-top:var(--space-3);">
+      <button class="btn btn-ghost btn-small" id="purchaseDetailsEditBtn">Edit</button>
+      <button class="btn btn-danger btn-small" id="purchaseDetailsCancelBtn">Cancel Purchase</button>
+    </div>`;
+  }
+
   content.innerHTML = html;
+
+  const detailsEditBtn = document.getElementById('purchaseDetailsEditBtn');
+  if (detailsEditBtn) {
+    detailsEditBtn.addEventListener('click', () => {
+      closeModal(document.getElementById('purchaseDetailsModalOverlay'));
+      openEditPurchaseModal(intake);
+    });
+  }
+
+  const detailsCancelBtn = document.getElementById('purchaseDetailsCancelBtn');
+  if (detailsCancelBtn) {
+    detailsCancelBtn.addEventListener('click', () => {
+      closeModal(document.getElementById('purchaseDetailsModalOverlay'));
+      confirmCancelPurchase(intake);
+    });
+  }
+
   openModal(document.getElementById('purchaseDetailsModalOverlay'));
+}
+
+function confirmCancelPurchase(intake) {
+  openConfirm(
+    'Cancel Purchase',
+    'Cancel this purchase? The stock previously received will be reversed.',
+    async () => {
+      try {
+        await api.cancelStockIntake(intake.id);
+        toast('Purchase cancelled. Stock corrected.');
+        await loadPurchaseRegister();
+        await loadInventory();
+      } catch (e) {
+        toast(e.message || 'Failed to cancel purchase.', true);
+      }
+    },
+    'Cancel Purchase'
+  );
 }
 
 async function showStockIntakePage() {
@@ -344,17 +465,24 @@ document.getElementById('purchaseSaveBtn').addEventListener('click', async () =>
   btn.disabled = true;
   btn.textContent = 'Saving…';
   try {
-    await api.createStockIntake(items, purchaseDate);
-    toast('Purchase recorded. Inventory updated.');
+    if (editingPurchaseId) {
+      await api.updateStockIntake(editingPurchaseId, items, purchaseDate);
+      toast('Purchase updated. Inventory corrected.');
+    } else {
+      await api.createStockIntake(items, purchaseDate);
+      toast('Purchase recorded. Inventory updated.');
+    }
+
     closeModal(document.getElementById('purchaseModalOverlay'));
     clearPurchaseModal();
+    editingPurchaseId = null;
     await loadPurchaseRegister();
     await loadInventory();
   } catch (e) {
     toast(e.message || 'Failed to save purchase.', true);
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Save Purchase';
+    btn.textContent = editingPurchaseId ? 'Save Changes' : 'Save Purchase';
   }
 });
 
