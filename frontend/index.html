@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/stock-logo.png">
+  <link rel="apple-touch-icon" href="assets/stock-logo.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Stock Counter</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+
+  <div id="loadingScreen">
+    <div class="loading-logo"><img src="assets/stock-logo.png" alt="" onerror="this.style.display='none'"></div>
+    <div class="loading-spinner"></div>
+    <div class="loading-text" id="loadingText">Connecting…</div>
+  </div>
+
+  <div id="statusScreen" class="hidden">
+    <div class="status-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 9v4M12 17h.01" />
+        <circle cx="12" cy="12" r="9" />
+      </svg></div>
+    <div class="status-title" id="statusTitle">Can't reach the server</div>
+    <div class="status-msg" id="statusMsg">Check your internet connection and that the backend is running.</div>
+    <div class="status-actions"><button class="btn btn-gold" id="statusRetryBtn"
+        style="flex:none;padding:0 22px">Retry</button></div>
+  </div>
+
+  <div id="authScreen" class="hidden">
+    <div class="auth-logo" id="authLogoWrap"><img id="authLogoImg" src="assets/stock-logo.png" alt="Logo"></div>
+    <div class="auth-restaurant-name" id="authRestaurantName">Stock Counter</div>
+    <div class="auth-subtitle">Enter your username and PIN to continue</div>
+    <div class="auth-form">
+      <input type="text" class="auth-input" id="usernameInput" placeholder="Username" autocomplete="off"
+        autocapitalize="off" autocorrect="off" spellcheck="false">
+      <input type="password" inputmode="numeric" class="auth-input" id="pinInput" placeholder="PIN" maxlength="6"
+        autocomplete="off">
+      <div class="auth-error" id="authError"></div>
+      <button class="auth-btn" id="loginBtn">Login</button>
+    </div>
+    <div class="auth-loading-state hidden" id="authLoadingState">
+      <div class="auth-loading-title">Signing you in…</div>
+      <div class="auth-loading-sub" id="authLoadingDots">Preparing your workspace</div>
+      <div class="auth-loading-hint">This usually takes just a few seconds.</div>
+    </div>
+  </div>
+
+  <div id="contextMenu"></div>
+
+  <div id="app" class="hidden">
+
+    <header class="app-header">
+      <div class="header-row">
+        <img id="headerLogo" class="brand-logo-img" src="assets/stock-logo.png" alt="Restaurant logo">
+        <div class="brand-block">
+          <div class="brand-name is-loading" id="brandName">Loading…</div>
+          <div class="brand-sub" id="brandSub">Stock Counter</div>
+        </div>
+        <button class="export-btn" id="exportBtn" title="Print / Save as PDF"><svg viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg></button>
+        <button class="logout-btn" id="logoutBtn" title="Logout"><svg viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg></button>
+        <div class="datetime-block">
+          <div class="dt-time" id="clockTime">--:--</div>
+          <div class="dt-date" id="clockDate">-- --- ----</div>
+        </div>
+      </div>
+      <div class="conn-banner hidden" id="connBanner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 9v4M12 17h.01" />
+          <circle cx="12" cy="12" r="9" />
+        </svg>
+        <span id="connBannerText">Connection lost — changes may not be saved.</span>
+        <button id="connBannerRetry">Retry</button>
+      </div>
+    </header>
+
+    <div id="pageInventory">
+      <div class="container">
+        <div class="search-wrap">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M21 21l-4.3-4.3" />
+          </svg>
+          <input type="text" class="search-input" id="searchInput" placeholder="Search stock items…" autocomplete="off">
+        </div>
+        <div class="overview">
+          <div class="overview-card">
+            <div class="overview-num gold" id="statTotalItems">0</div>
+            <div class="overview-label">Items</div>
+          </div>
+          <div class="overview-card">
+            <div class="overview-num green" id="statInStock">0</div>
+            <div class="overview-label">In Stock</div>
+          </div>
+          <div class="overview-card">
+            <div class="overview-num red" id="statOutStock">0</div>
+            <div class="overview-label">Out</div>
+          </div>
+        </div>
+        <div class="empty-hero" id="inventoryEmptyHero">
+          <div class="empty-hero-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+              <path
+                d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+              <line x1="12" y1="22.08" x2="12" y2="12" />
+            </svg></div>
+          <div class="empty-hero-title">No inventory yet</div>
+          <div class="empty-hero-desc">Start by adding your first inventory item. You can add drinks, ingredients, or
+            any stock you need to track.</div>
+        </div>
+        <div class="categories" id="categoriesRoot"></div>
+        <div class="empty-state" id="emptyState"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.5">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M21 21l-4.3-4.3" />
+          </svg>
+          <div>No items match your search.</div>
+        </div>
+        <div class="reset-wrap"><button class="btn-reset" id="resetBtn"><svg viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2">
+              <path d="M3 12a9 9 0 1 0 3-6.7" />
+              <path d="M3 4v5h5" />
+            </svg>Reset All Quantities</button></div>
+      </div>
+    </div>
+
+    <div id="pageRecipes" class="hidden">
+      <div class="container">
+        <div class="search-wrap">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M21 21l-4.3-4.3" />
+          </svg>
+          <input type="text" class="search-input" id="recipeSearchInput" placeholder="Search recipes…"
+            autocomplete="off">
+        </div>
+        <div class="empty-hero" id="recipesEmptyHero">
+          <div class="empty-hero-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+              <path d="M8 3h8l1 6a4 4 0 0 1-8 0L8 3z" />
+              <path d="M12 13v5" />
+              <path d="M8 21h8" />
+            </svg></div>
+          <div class="empty-hero-title">No recipes yet</div>
+          <div class="empty-hero-desc">Create your first cocktail or drink recipe to begin tracking sales and inventory
+            deductions.</div>
+        </div>
+        <div class="categories" id="recipesRoot"></div>
+        <div class="empty-state" id="recipeEmptyState"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.5">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M21 21l-4.3-4.3" />
+          </svg>
+          <div>No recipes match your search.</div>
+        </div>
+        <!-- Pending Allocations Section -->
+        <div id="pendingAllocationsContainer" class="hidden">
+          <div class="pending-allocations-title">
+            <span>⚠ Pending Allocations</span>
+            <span class="pending-badge hidden" id="pendingBadge">0</span>
+          </div>
+          <div class="pending-alloc-list" id="pendingAllocationsList"></div>
+          <div class="empty-state" id="pendingEmptyState"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="1.5">
+              <circle cx="11" cy="11" r="7" />
+              <path d="M21 21l-4.3-4.3" />
+            </svg>
+            <div>No pending allocations.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="pageStockIntake" class="hidden">
+      <div class="container" id="stockIntakeContainer"></div>
+    </div>
+
+    <div id="pageSettings" class="hidden">
+      <div class="container" id="settingsContainer"></div>
+    </div>
+
+    <nav class="bottom-nav">
+      <button class="bottom-nav-btn active" id="navInventory"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2">
+          <path
+            d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+          <line x1="12" y1="22.08" x2="12" y2="12" />
+        </svg><span>Inventory</span></button>
+      <button class="bottom-nav-btn" id="navRecipes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2">
+          <path d="M8 3h8l1 6a4 4 0 0 1-8 0L8 3z" />
+          <path d="M12 13v5" />
+          <path d="M8 21h8" />
+          <line x1="18" y1="8" x2="22" y2="8" />
+          <line x1="2" y1="8" x2="6" y2="8" />
+        </svg><span>Recipes</span></button>
+      <button class="bottom-nav-btn hidden" id="navStockIntake"><svg viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2">
+          <path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4" />
+          <path d="M4 6v12c0 1.1.9 2 2 2h14v-4" />
+          <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
+        </svg><span>Intake</span></button>
+      <button class="bottom-nav-btn hidden" id="navSettings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2">
+          <circle cx="12" cy="12" r="3" />
+          <path
+            d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+        </svg><span>Settings</span></button>
+    </nav>
+    <button class="fab fab-save hidden" id="saveBtn"><svg class="fab-save-icon" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2.5">
+        <path d="M20 6L9 17l-5-5" />
+      </svg><span class="fab-spinner"></span><span id="saveBtnLabel">Save Changes</span></button>
+    <button class="fab" id="fabAction"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M12 5v14M5 12h14" />
+      </svg><span id="fabActionLabel">Actions</span></button>
+  </div>
+
+  <div class="modal-overlay" id="actionSheetOverlay">
+    <div class="action-sheet">
+      <div class="action-sheet-title">Actions</div>
+      <button class="action-sheet-item" id="actionAddItem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2">
+          <path d="M12 5v14M5 12h14" />
+        </svg>Add Custom Item</button>
+      <button class="action-sheet-item" id="actionAddCategory"><svg viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+          <line x1="12" y1="11" x2="12" y2="17" />
+          <line x1="9" y1="14" x2="15" y2="14" />
+        </svg>Add Category</button>
+      <button class="action-sheet-cancel" id="actionSheetCancel">Cancel</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="editItemOverlay">
+    <div class="modal-card">
+      <div class="modal-title">Edit Item</div>
+      <label class="field-label" for="editItemName">Item Name</label><input class="field-input" id="editItemName"
+        type="text" maxlength="60">
+      <label class="field-label" for="editItemCategory">Category</label><select class="field-select"
+        id="editItemCategory"></select>
+      <label class="field-label" for="editItemUnit">Unit</label><select class="field-select" id="editItemUnit"></select>
+      <label class="field-label" for="editItemVolume">Volume (optional)</label><input class="field-input" id="editItemVolume"
+        type="number" min="0" step="0.01" placeholder="e.g. 0.3">
+      <label class="field-label" for="editItemVolumeUnit">Volume Unit</label><select class="field-select" id="editItemVolumeUnit"></select>
+      <label class="field-label">Packages</label>
+      <div id="editItemPackagesList" class="package-readonly-list"></div>
+      <div style="margin-top:var(--space-3);">
+        <button class="btn btn-ghost btn-small" id="editItemPackagesBtn" type="button">Manage Packages</button>
+      </div>
+      <div class="modal-actions"><button class="btn btn-ghost" id="editItemCancel">Cancel</button><button
+          class="btn btn-gold" id="editItemConfirm">Save Changes</button></div>    </div>
+  </div>
+
+  <div class="modal-overlay" id="confirmOverlay">
+    <div class="modal-card">
+      <div class="modal-title" id="confirmTitle">Confirm</div>
+      <p class="confirm-body" id="confirmBody">Are you sure?</p>
+      <div class="modal-actions"><button class="btn btn-ghost" id="confirmCancel">Cancel</button><button
+          class="btn btn-danger" id="confirmOk">Delete</button></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="categoryDialogOverlay">
+    <div class="modal-card">
+      <div class="modal-title" id="categoryDialogTitle">Add Category</div>
+      <label class="field-label" for="categoryDialogName">Category Name</label><input class="field-input"
+        id="categoryDialogName" type="text" maxlength="60" placeholder="e.g. Dry Storage">
+      <div class="modal-actions"><button class="btn btn-ghost" id="categoryDialogCancel">Cancel</button><button
+          class="btn btn-gold" id="categoryDialogConfirm">Save</button></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="addModalOverlay">
+    <div class="modal-card">
+      <div class="modal-title">Add Custom Item</div>
+      <label class="field-label" for="newItemCategory">Category</label><select class="field-select"
+        id="newItemCategory"></select>
+      <label class="field-label" for="newItemName">Item Name</label><input class="field-input" id="newItemName"
+        type="text" placeholder="e.g. Negroni Mix" maxlength="60">
+      <label class="field-label" for="newItemQty">Initial Quantity</label><input class="field-input" id="newItemQty"
+        type="number" min="0" value="0" inputmode="numeric">
+      <label class="field-label" for="newItemUnit">Stock Unit</label><select class="field-select" id="newItemUnit"></select>
+      <label class="field-label" for="newItemVolume">Volume (optional)</label><input class="field-input" id="newItemVolume"
+        type="number" min="0" step="0.01" placeholder="e.g. 0.3">
+      <label class="field-label" for="newItemVolumeUnit">Volume Unit</label><select class="field-select" id="newItemVolumeUnit"></select>
+      <div class="modal-actions"><button class="btn btn-ghost" id="addModalCancel">Cancel</button><button
+          class="btn btn-gold" id="addModalConfirm">Add Item</button></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="resetModalOverlay">
+    <div class="modal-card">
+      <div class="modal-title">Reset All Quantities?</div>
+      <p style="color:var(--paper-dim);font-size:0.9rem;margin:0">Every item's count will be set to zero. This only
+        changes your working copy — press <b style="color:var(--paper)">Save Changes</b> afterward to apply it.</p>
+      <div class="modal-actions"><button class="btn btn-ghost" id="resetCancel">Cancel</button><button
+          class="btn btn-danger" id="resetConfirm">Reset All</button></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="recipeModalOverlay">
+    <div class="modal-card" style="max-width:500px">
+      <div class="modal-title" id="recipeModalTitle">Add Recipe</div>
+      <label class="field-label" for="recipeName">Recipe Name</label><input class="field-input" id="recipeName"
+        type="text" maxlength="80" placeholder="e.g. Margarita">
+      <label class="field-label" for="recipeGlass">Glass</label><input class="field-input" id="recipeGlass" type="text"
+        maxlength="60" placeholder="e.g. Cocktail Glass">
+      <label class="field-label" for="recipeMethod">Method</label><input class="field-input" id="recipeMethod"
+        type="text" maxlength="60" placeholder="e.g. Shake">
+      <label class="field-label" for="recipeGarnish">Garnish</label><input class="field-input" id="recipeGarnish"
+        type="text" maxlength="60" placeholder="e.g. Salt Rim">
+      <label class="field-label">Ingredients</label>
+      <div id="recipeIngredientsList"></div>
+      <button class="add-ingredient-btn" id="addIngredientBtn">+ Add Ingredient</button>
+      <div class="modal-actions" style="margin-top:var(--space-4)"><button class="btn btn-ghost"
+          id="recipeModalCancel">Cancel</button><button class="btn btn-gold" id="recipeModalConfirm">Save
+          Recipe</button></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="resolveAllocationModal">
+    <div class="modal-card">
+      <div class="modal-title">Resolve Pending Allocation</div>
+      <div id="resolveModalContent"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="resolveCancel">Cancel</button>
+        <button class="btn btn-gold" id="resolveConfirm" disabled>Resolve</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Staff Management Modals -->
+  <div class="modal-overlay" id="staffAddModalOverlay">
+    <div class="modal-card">
+      <div class="modal-title">Add Staff</div>
+      <label class="field-label" for="staffAddName">Name</label><input class="field-input" id="staffAddName" type="text"
+        maxlength="100">
+      <label class="field-label" for="staffAddPin">PIN</label><input class="field-input" id="staffAddPin"
+        type="password" maxlength="6" inputmode="numeric" pattern="[0-9]*">
+      <div class="modal-actions"><button class="btn btn-ghost" id="staffAddCancel">Cancel</button><button
+          class="btn btn-gold" id="staffAddConfirm">Create</button></div>
+    </div>
+  </div>
+  <div class="modal-overlay" id="staffEditModalOverlay">
+    <div class="modal-card">
+      <div class="modal-title">Edit Staff</div>
+      <label class="field-label" for="staffEditName">Name</label><input class="field-input" id="staffEditName"
+        type="text" maxlength="100">
+      <label class="field-label" for="staffEditPin">New PIN (leave blank to keep)</label><input class="field-input"
+        id="staffEditPin" type="password" maxlength="6" inputmode="numeric" pattern="[0-9]*">
+      <div class="modal-toggle-row">
+        <span class="field-label" style="margin:0;">Active</span>
+        <div class="toggle-3d">
+          <input type="checkbox" id="staffEditActive">
+          <label for="staffEditActive">
+            <span class="thumb"></span>
+          </label>
+          <div class="lights">
+            <span class="light-off"></span>
+            <span class="light-on"></span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions"><button class="btn btn-ghost" id="staffEditCancel">Cancel</button><button
+          class="btn btn-gold" id="staffEditConfirm">Save</button></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="adjustReasonModalOverlay">
+    <div class="modal-card" style="max-width:520px">
+      <div class="modal-title">Reason for Changes</div>
+      <div id="adjustReasonList"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="adjustReasonCancel">Cancel</button>
+        <button class="btn btn-gold" id="adjustReasonConfirm" disabled>Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="packageManagerModalOverlay">
+    <div class="modal-card" style="max-width:480px">
+      <div class="modal-title" id="packageManagerTitle">Packages</div>
+      <div id="packageManagerList"></div>
+      <div style="display:flex;gap:6px;margin-top:var(--space-3);flex-wrap:wrap;">
+        <input type="text" id="packageUnitInput" class="field-input" placeholder="Purchase unit (e.g. Case)" style="flex:1;min-width:120px;">
+        <input type="number" id="packageUnitsPerInput" class="field-input" placeholder="Contains (e.g. 24)" min="0" step="0.01" style="width:110px;">
+        <button class="btn btn-gold btn-small" id="packageAddBtn">Add Package</button>
+      </div>
+      <div class="modal-actions"><button class="btn btn-ghost" id="packageManagerCloseBtn">Close</button></div>
+    </div>
+  </div>
+
+  <!-- Purchase Register Modals -->
+  <div class="modal-overlay" id="purchaseModalOverlay">
+    <div class="modal-card" style="max-width:600px">
+      <div class="modal-title">Add Purchase</div>
+      <p class="settings-detail-desc" style="margin-bottom:var(--space-3);font-size:clamp(0.78rem, 2.6vw, 0.82rem);line-height:1.5;">Record newly received stock. The backend calculates the final stock result.</p>
+      <label class="field-label" for="purchaseDateInput">Purchase Date</label>
+      <div class="purchase-date-field">
+        <input type="date" class="field-input" id="purchaseDateInput">
+      </div>
+      <div class="purchase-items-label">Items</div>
+      <div id="purchaseItemsList"></div>
+      <button class="add-ingredient-btn" id="addPurchaseItemBtn">+ Add Another Item</button>
+      <div class="purchase-summary" id="purchaseSummary"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="purchaseCancelBtn">Cancel</button>
+        <button class="btn btn-gold" id="purchaseSaveBtn" disabled>Save Purchase</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="purchaseDetailsModalOverlay">
+    <div class="modal-card">
+      <div class="modal-title">Purchase Details</div>
+      <div id="purchaseDetailsContent"></div>
+      <div class="modal-actions"><button class="btn btn-ghost" id="purchaseDetailsCloseBtn">Close</button></div>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toastStack"></div>
+
+  <script src="js/utils.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/modals.js"></script>
+  <script src="js/navigation.js"></script>
+  <script src="js/inventory.js"></script>
+  <script src="js/inventory-config.js"></script>
+  <script src="js/packages.js"></script>
+  <script src="js/stock-intake.js"></script>
+  <script src="js/recipes.js"></script>
+  <script src="js/sales-import.js"></script>
+  <script src="js/settings.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/app.js"></script>
+</body>
+
+</html>

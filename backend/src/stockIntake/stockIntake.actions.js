@@ -31,6 +31,33 @@ async function preview(req, res) {
   }
 }
 
+async function update(req, res) {
+  try {
+    const { restaurantId, userId } = req.auth;
+    const intakeId = req.params.id;
+    const { purchaseDate, items } = req.body;
+    const result = await service.updateIntake(restaurantId, userId, intakeId, purchaseDate || null, items);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    if (err.code) return res.json({ ok: false, code: err.code, error: err.error });
+    console.error('stockIntake update error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+async function cancel(req, res) {
+  try {
+    const { restaurantId, userId } = req.auth;
+    const intakeId = req.params.id;
+    const result = await service.cancelIntake(restaurantId, userId, intakeId);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    if (err.code) return res.json({ ok: false, code: err.code, error: err.error });
+    console.error('stockIntake cancel error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
 async function list(req, res) {
   try {
     const { restaurantId } = req.auth;
@@ -43,4 +70,4 @@ async function list(req, res) {
   }
 }
 
-module.exports = { create, preview, list };
+module.exports = { create, preview, update, cancel, list };

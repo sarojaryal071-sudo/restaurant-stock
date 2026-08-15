@@ -26,6 +26,7 @@ async function createIntake(restaurantId, userId, items, purchaseDate = null) {
 
 async function listIntakes(restaurantId, start, end) {
   let sql =     `SELECT si.id, si.intake_type, si.created_at, si.purchase_date,
+            si.status, si.cancelled_at,
             sii.item_id, i.name AS item_name, sii.quantity_added,
             sii.package_id, sii.quantity_purchased, sii.units_per_package_at_time,
             ip.package_unit
@@ -48,6 +49,8 @@ async function listIntakes(restaurantId, start, end) {
         intakeType: row.intake_type,
         createdAt: row.created_at,
         purchaseDate: row.purchase_date || null,
+        status: row.status || 'active',
+        cancelledAt: row.cancelled_at || null,
         items: []
       });
     }

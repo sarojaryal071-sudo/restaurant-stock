@@ -519,10 +519,16 @@ async function runMigrations() {
         user_id UUID REFERENCES users(id),
         intake_type TEXT NOT NULL DEFAULT 'purchase',
         purchase_date DATE,
+        status TEXT NOT NULL DEFAULT 'active',
+        cancelled_at TIMESTAMPTZ,
+        cancelled_by UUID REFERENCES users(id),
         created_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
     await tx(`ALTER TABLE stock_intakes ADD COLUMN IF NOT EXISTS purchase_date DATE;`);
+    await tx(`ALTER TABLE stock_intakes ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';`);
+    await tx(`ALTER TABLE stock_intakes ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;`);
+    await tx(`ALTER TABLE stock_intakes ADD COLUMN IF NOT EXISTS cancelled_by UUID REFERENCES users(id);`);
     await tx(`CREATE INDEX IF NOT EXISTS idx_stock_intakes_restaurant ON stock_intakes(restaurant_id);`);
 
     await tx(`

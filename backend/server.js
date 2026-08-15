@@ -365,6 +365,18 @@ app.post('/api/stock-intake', (req, res, next) => {
   });
 });
 
+app.patch('/api/stock-intake/:id', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => stockIntakeActions.update(req, res));
+  });
+});
+
+app.post('/api/stock-intake/:id/cancel', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => stockIntakeActions.cancel(req, res));
+  });
+});
+
 // ---------- Barcode lookup (manager only) ----------
 app.post('/api/stock-intake/barcode/lookup', (req, res, next) => {
   requireAuth(req, res, () => {
