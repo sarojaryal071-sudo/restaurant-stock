@@ -246,6 +246,7 @@ async function loadPurchaseRegister() {
     await loadPackagesIfNeeded();
     const data = await api.getStockIntake();
     const intakes = (data && Array.isArray(data.intakes)) ? data.intakes : [];
+    cachedStockIntakeData = intakes;
     renderPurchaseRegister(intakes);
   } catch (e) {
     container.innerHTML = `<div class="empty-state show"><div>Could not load purchase history. ${escapeHtml(e.message)}</div></div>`;
@@ -436,8 +437,12 @@ function confirmCancelPurchase(intake) {
   );
 }
 
-async function showStockIntakePage() {
-  await loadPurchaseRegister();
+function showStockIntakePage() {
+  if (cachedStockIntakeData) {
+    renderPurchaseRegister(cachedStockIntakeData);
+  } else {
+    loadPurchaseRegister();
+  }
 }
 
 document.getElementById('addPurchaseItemBtn').addEventListener('click', () => { addPurchaseRow(); });
