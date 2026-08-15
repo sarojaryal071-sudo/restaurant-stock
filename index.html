@@ -3113,29 +3113,23 @@
       color: var(--danger);
     }
 
+    .purchase-date-field {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      box-sizing: border-box;
+      overflow: hidden;
+    }
+
     input[type="date"].field-input {
       color-scheme: dark;
+      display: block;
       width: 100%;
       max-width: 100%;
       min-width: 0;
       box-sizing: border-box;
       padding: clamp(10px, 2.6vw, 12px) clamp(8px, 2.4vw, 14px);
       font-size: clamp(0.8rem, 3.4vw, 0.95rem);
-    }
-
-    input[type="date"].field-input::-webkit-datetime-edit {
-      max-width: calc(100% - 26px);
-      overflow: hidden;
-      padding: 0;
-    }
-
-    input[type="date"].field-input::-webkit-datetime-edit-fields-wrapper {
-      max-width: 100%;
-    }
-
-    input[type="date"].field-input::-webkit-date-and-time-value {
-      text-align: left;
-      margin: 0;
     }
 
     input[type="date"].field-input::-webkit-calendar-picker-indicator {
@@ -3549,7 +3543,9 @@
       <div class="modal-title">Add Purchase</div>
       <p class="settings-detail-desc" style="margin-bottom:var(--space-3);font-size:clamp(0.78rem, 2.6vw, 0.82rem);line-height:1.5;">Record newly received stock. The backend calculates the final stock result.</p>
       <label class="field-label" for="purchaseDateInput">Purchase Date</label>
-      <input type="date" class="field-input" id="purchaseDateInput">
+      <div class="purchase-date-field">
+        <input type="date" class="field-input" id="purchaseDateInput">
+      </div>
       <div class="purchase-items-label">Items</div>
       <div id="purchaseItemsList"></div>
       <button class="add-ingredient-btn" id="addPurchaseItemBtn">+ Add Another Item</button>
@@ -5679,7 +5675,7 @@ const titles = {
           tasks.push(api.getSettings(), api.getPermissions(), api.listStaff(), api.getPosSales('today'));
         }
 
-        const results = await Promise.all(tasks);
+        const [results] = await Promise.all([Promise.all(tasks), loadPurchaseRegister()]);
         const stockRes = results[0], recipesRes = results[1], configRes = results[2];
         let settingsRes = null, permissionsRes = null, staffRes = null, posSalesRes = null;
         if (canManageSettings) {
