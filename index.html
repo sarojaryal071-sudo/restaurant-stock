@@ -1205,11 +1205,11 @@
 
     .field-label {
       display: block;
-      font-size: 0.72rem;
+      font-size: clamp(0.64rem, 2vw, 0.72rem);
       text-transform: uppercase;
       letter-spacing: 0.08em;
       color: var(--paper-dim);
-      margin: var(--space-3) 0 6px
+      margin: var(--space-3) 0 clamp(4px, 1.2vw, 6px)
     }
 
     .field-label:first-of-type {
@@ -1361,14 +1361,15 @@
 
     .add-ingredient-btn {
       width: 100%;
-      min-height: 40px;
+      min-height: clamp(38px, 9vw, 40px);
+      box-sizing: border-box;
       background: transparent;
       border: 1px dashed var(--line-strong);
       border-radius: var(--radius-sm);
       color: var(--paper-dim);
-      font-size: 0.82rem;
+      font-size: clamp(0.76rem, 2.4vw, 0.82rem);
       cursor: pointer;
-      margin-top: 8px;
+      margin-top: clamp(6px, 1.6vw, 8px);
       transition: background 0.12s ease
     }
 
@@ -3025,7 +3026,7 @@
     }
 
     .purchase-preview-label {
-      font-size: 0.62rem;
+      font-size: clamp(0.56rem, 1.8vw, 0.62rem);
       text-transform: uppercase;
       letter-spacing: 0.08em;
       color: var(--paper-faint);
@@ -3033,10 +3034,11 @@
     }
 
     .purchase-preview-value {
-      font-size: 0.86rem;
+      font-size: clamp(0.76rem, 2.6vw, 0.86rem);
       font-weight: 700;
       color: var(--gold-bright);
       font-family: var(--font-mono);
+      word-break: break-word;
     }
 
     .purchase-preview.is-error .purchase-preview-value {
@@ -3067,7 +3069,7 @@
     }
 
     .purchase-items-label {
-      font-size: 0.72rem;
+      font-size: clamp(0.64rem, 2vw, 0.72rem);
       text-transform: uppercase;
       letter-spacing: 0.08em;
       color: var(--paper-dim);
@@ -3089,14 +3091,14 @@
     .purchase-row-remove {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: clamp(4px, 1.4vw, 6px);
       background: none;
       border: none;
       cursor: pointer;
       color: var(--paper-faint);
-      font-size: 0.76rem;
+      font-size: clamp(0.7rem, 2.2vw, 0.76rem);
       font-weight: 600;
-      padding: 6px 8px;
+      padding: clamp(5px, 1.6vw, 6px) clamp(6px, 2vw, 8px);
       border-radius: var(--radius-sm);
       transition: background 0.12s ease, color 0.12s ease;
     }
@@ -3530,7 +3532,7 @@
   <div class="modal-overlay" id="purchaseModalOverlay">
     <div class="modal-card" style="max-width:600px">
       <div class="modal-title">Add Purchase</div>
-      <p class="settings-detail-desc" style="margin-bottom:var(--space-3);">Record newly received stock. The backend calculates the final stock result.</p>
+      <p class="settings-detail-desc" style="margin-bottom:var(--space-3);font-size:clamp(0.78rem, 2.6vw, 0.82rem);line-height:1.5;">Record newly received stock. The backend calculates the final stock result.</p>
       <label class="field-label" for="purchaseDateInput">Purchase Date</label>
       <input type="date" class="field-input" id="purchaseDateInput">
       <div class="purchase-items-label">Items</div>
