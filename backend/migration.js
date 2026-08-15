@@ -751,6 +751,16 @@ async function runMigrations() {
     await tx(`ALTER TABLE stock_intake_items ADD COLUMN IF NOT EXISTS package_id UUID REFERENCES item_packages(id)`);
     await tx(`ALTER TABLE stock_intake_items ADD COLUMN IF NOT EXISTS quantity_purchased DECIMAL(10,2)`);
     await tx(`ALTER TABLE stock_intake_items ADD COLUMN IF NOT EXISTS units_per_package_at_time DECIMAL(10,2)`);
+
+    // Backfill legacy direct stock-unit purchase lines where only quantity_added was stored.
+    // These rows predate the quantity_purchased and units_per_package_at_time columns.
+    await tx(`
+      UPDATE stock_intake_items
+      SET quantity_purchased = quantity_added,
+          units_per_package_at_time = 1
+      WHERE quantity_purchased IS NULL
+        AND package_id IS NULL
+    `);
     // Migrate existing reasons: assign direction based on current value
     await tx(`
       UPDATE inventory_adjustment_reasons
