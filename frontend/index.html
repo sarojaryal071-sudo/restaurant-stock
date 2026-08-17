@@ -192,34 +192,48 @@
       <div class="container" id="settingsContainer"></div>
     </div>
 
-    <nav class="bottom-nav">
-      <button class="bottom-nav-btn active" id="navInventory"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    <nav class="bottom-nav sidebar" id="sidebar">
+      <div class="sidebar-top">
+        <div class="brand-row" id="brandToggle">
+          <div class="brand-icon">S</div>
+          <div class="brand-text">
+            <p class="brand-name">Stock Counter</p>
+            <p class="brand-sub">Inventory</p>
+          </div>
+        </div>
+        <div class="expand-btn" id="expandBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </div>
+      </div>
+      <button class="bottom-nav-btn nav-item active" id="navInventory"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
           stroke-width="2">
           <path
             d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
           <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
           <line x1="12" y1="22.08" x2="12" y2="12" />
-        </svg><span>Inventory</span></button>
-      <button class="bottom-nav-btn" id="navRecipes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        </svg><span class="label">Inventory</span></button>
+      <button class="bottom-nav-btn nav-item" id="navRecipes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
           stroke-width="2">
           <path d="M8 3h8l1 6a4 4 0 0 1-8 0L8 3z" />
           <path d="M12 13v5" />
           <path d="M8 21h8" />
           <line x1="18" y1="8" x2="22" y2="8" />
           <line x1="2" y1="8" x2="6" y2="8" />
-        </svg><span>Recipes</span></button>
-      <button class="bottom-nav-btn hidden" id="navStockIntake"><svg viewBox="0 0 24 24" fill="none"
+        </svg><span class="label">Recipes</span></button>
+      <button class="bottom-nav-btn nav-item hidden" id="navStockIntake"><svg viewBox="0 0 24 24" fill="none"
           stroke="currentColor" stroke-width="2">
           <path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4" />
           <path d="M4 6v12c0 1.1.9 2 2 2h14v-4" />
           <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
-        </svg><span>Intake</span></button>
-      <button class="bottom-nav-btn hidden" id="navSettings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        </svg><span class="label">Intake</span></button>
+      <button class="bottom-nav-btn nav-item hidden" id="navSettings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
           stroke-width="2">
           <circle cx="12" cy="12" r="3" />
           <path
             d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-        </svg><span>Settings</span></button>
+        </svg><span class="label">Settings</span></button>
     </nav>
     <button class="fab fab-save hidden" id="saveBtn"><svg class="fab-save-icon" viewBox="0 0 24 24" fill="none"
         stroke="currentColor" stroke-width="2.5">
