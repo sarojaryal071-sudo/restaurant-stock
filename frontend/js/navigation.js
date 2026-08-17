@@ -131,18 +131,5 @@ window.navSI = navSI;
 window.fab = fab;
 window.fabLbl = fabLbl;
 window.svBtn = svBtn;
-const sidebarEl = document.getElementById('sidebar');
-const expandBtnEl = document.getElementById('expandBtn');
-const brandToggleEl = document.getElementById('brandToggle');
-
-function toggleSidebar() {
-  if (!sidebarEl) return;
-  sidebarEl.classList.toggle('collapsed');
-  document.body.classList.toggle('sidebar-collapsed', sidebarEl.classList.contains('collapsed'));
-}
-
-if (expandBtnEl) expandBtnEl.addEventListener('click', toggleSidebar);
-if (brandToggleEl) brandToggleEl.addEventListener('click', toggleSidebar);
-
 window.switchPage = switchPage;
 window.applyUIPermissions = applyUIPermissions;
