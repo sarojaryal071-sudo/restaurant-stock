@@ -3114,30 +3114,10 @@ textarea.field-input {
   color: var(--danger);
 }
 
-.purchase-date-field {
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-  overflow: hidden;
-}
-
 input[type="date"].field-input {
   color-scheme: dark;
-  display: block;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  box-sizing: border-box;
-  padding: clamp(10px, 2.6vw, 12px) clamp(8px, 2.4vw, 14px);
-  font-size: clamp(0.8rem, 3.4vw, 0.95rem);
 }
 
 input[type="date"].field-input::-webkit-calendar-picker-indicator {
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  margin: 0;
-  background-size: 16px 16px;
   opacity: 0.85;
 }
