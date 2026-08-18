@@ -195,27 +195,88 @@ button {
   position: fixed;
   inset: 0;
   z-index: 190;
-  background: var(--charcoal-0);
+  background:
+    radial-gradient(ellipse 900px 500px at 15% -10%, rgba(224, 89, 42, 0.08), transparent 60%),
+    radial-gradient(ellipse 700px 600px at 100% 0%, rgba(212, 175, 55, 0.05), transparent 55%),
+    var(--charcoal-0);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: var(--space-4);
-  gap: var(--space-4);
   text-align: center;
 }
 
-.auth-logo {
-  width: clamp(70px, 18vw, 100px);
-  height: clamp(70px, 18vw, 100px);
+.auth-login-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.auth-glass-circle {
+  position: relative;
+  width: clamp(320px, 80vw, 520px);
+  height: clamp(320px, 80vw, 520px);
   border-radius: 50%;
-  background: var(--charcoal-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(160deg, var(--charcoal-2), var(--charcoal-1));
+  box-shadow:
+    10px 10px 22px rgba(0, 0, 0, 0.35),
+    -10px -10px 22px rgba(255, 255, 255, 0.02),
+    inset 0 0 20px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+
+.auth-glass-circle::before {
+  content: "";
+  position: absolute;
+  inset: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(212, 175, 90, 0.14);
+  box-shadow:
+    inset 3px 3px 9px rgba(0, 0, 0, 0.28),
+    inset -3px -3px 9px rgba(255, 255, 255, 0.02);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.auth-accent-ring {
+  position: absolute;
+  width: 78%;
+  height: 78%;
+  border-radius: 50%;
+  border: 1px solid rgba(212, 175, 90, 0.14);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.auth-form {
+  position: relative;
+  z-index: 3;
+  width: clamp(220px, 70%, 290px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.auth-logo {
+  width: clamp(60px, 18vw, 80px);
+  height: clamp(60px, 18vw, 80px);
+  border-radius: 50%;
+  background: var(--charcoal-3);
   border: 1px solid var(--line-strong);
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   flex-shrink: 0;
+  box-shadow:
+    4px 4px 10px rgba(0, 0, 0, 0.4),
+    -4px -4px 10px rgba(255, 255, 255, 0.02);
 }
 
 .auth-logo img {
@@ -227,70 +288,135 @@ button {
 
 .auth-restaurant-name {
   font-family: var(--font-display);
-  font-size: clamp(1.3rem, 5vw, 1.8rem);
+  font-size: clamp(1.1rem, 5vw, 1.4rem);
   font-weight: 700;
   color: var(--paper);
   line-height: 1.2;
+  margin-top: 4px;
 }
 
 .auth-subtitle {
-  font-size: 0.85rem;
+  font-size: 0.78rem;
   color: var(--paper-dim);
   text-transform: uppercase;
   letter-spacing: 0.08em;
+  margin-bottom: 4px;
 }
 
-.auth-form {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
+.auth-input-group {
+  position: relative;
   width: 100%;
-  max-width: 320px;
+}
+
+.auth-input-group svg {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  color: var(--paper-faint);
+  z-index: 2;
+  pointer-events: none;
+  transition: color 0.25s ease;
 }
 
 .auth-input {
   width: 100%;
+  height: 46px;
+  padding: 0 18px 0 44px;
   background: var(--charcoal-1);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--radius-md);
-  padding: 14px 16px;
+  border: none;
+  outline: none;
+  border-radius: 12px;
   color: var(--paper);
-  font-size: 1.1rem;
-  text-align: center;
-  letter-spacing: 0.2em;
+  font-size: 0.95rem;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  box-shadow:
+    inset 4px 4px 8px rgba(0, 0, 0, 0.35),
+    inset -4px -4px 8px rgba(255, 255, 255, 0.02);
+  transition: box-shadow 0.35s cubic-bezier(.22, 1, .36, 1), transform 0.35s cubic-bezier(.22, 1, .36, 1);
 }
 
 .auth-input::placeholder {
   color: var(--paper-faint);
+  font-weight: 400;
 }
 
 .auth-input:focus {
-  outline: none;
-  border-color: var(--gold-deep);
-  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.12);
+  transform: translateY(-2px);
+  box-shadow:
+    inset 3px 3px 6px rgba(0, 0, 0, 0.45),
+    inset -3px -3px 6px rgba(212, 175, 55, 0.08);
+}
+
+.auth-input:focus + svg,
+.auth-input-group:focus-within svg {
+  color: var(--gold-bright);
 }
 
 .auth-error {
   font-size: 0.8rem;
   color: var(--qty-zero);
   min-height: 1.2em;
+  text-align: center;
 }
 
 .auth-btn {
+  position: relative;
   width: 100%;
-  min-height: var(--tap);
-  border-radius: var(--radius-sm);
+  min-height: 44px;
+  display: block;
+  margin: auto;
+  overflow: hidden;
   border: none;
+  outline: none;
+  border-radius: 12px;
   cursor: pointer;
   font-weight: 700;
-  font-size: 1rem;
-  transition: transform 0.1s ease, opacity 0.15s ease;
-  background: linear-gradient(135deg, var(--gold-bright), var(--gold-deep));
+  font-size: 0.95rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--paper);
+  background: var(--charcoal-3);
+  box-shadow:
+    4px 4px 10px rgba(0, 0, 0, 0.4),
+    -4px -4px 10px rgba(255, 255, 255, 0.02);
+  transition: color 0.3s ease, background 0.3s ease, box-shadow 0.3s ease, transform 0.25s ease;
+}
+
+.auth-btn::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -60%;
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(115deg, transparent, rgba(255, 255, 255, 0.07), transparent);
+  transform: skewX(-20deg);
+  transition: left 0.6s ease;
+}
+
+.auth-btn:hover::before {
+  left: 130%;
+}
+
+.auth-btn:hover {
+  transform: translateY(-2px);
   color: #1c1305;
+  background: linear-gradient(135deg, var(--gold-bright), var(--gold-deep));
+  box-shadow:
+    0 10px 22px rgba(212, 175, 55, 0.25),
+    -5px -5px 15px rgba(0, 0, 0, 0.3),
+    inset 0 1px 1px rgba(255, 255, 255, 0.15);
 }
 
 .auth-btn:active {
-  transform: scale(0.96);
+  transform: translateY(0) scale(0.97);
+  box-shadow:
+    inset 5px 5px 10px rgba(0, 0, 0, 0.45),
+    inset -5px -5px 10px rgba(212, 175, 55, 0.08);
 }
 
 .auth-btn:disabled {
@@ -305,7 +431,6 @@ button {
   align-items: center;
   gap: 8px;
   width: 100%;
-  max-width: 320px;
 }
 
 .auth-loading-title {
@@ -338,6 +463,42 @@ button {
   font-size: 0.75rem;
   color: var(--paper-faint);
   margin-top: 4px;
+}
+
+@media (max-width: 480px) {
+  .auth-glass-circle {
+    width: min(330px, 90vw);
+    height: min(330px, 90vw);
+  }
+
+  .auth-form {
+    width: clamp(185px, 60vw, 220px);
+  }
+
+  .auth-restaurant-name {
+    font-size: 1.1rem;
+  }
+
+  .auth-subtitle {
+    font-size: 0.7rem;
+  }
+
+  .auth-input {
+    height: 42px;
+    font-size: 0.85rem;
+    padding-left: 40px;
+  }
+
+  .auth-input-group svg {
+    left: 13px;
+    width: 16px;
+    height: 16px;
+  }
+
+  .auth-btn {
+    min-height: 42px;
+    font-size: 0.85rem;
+  }
 }
 
 .app-header {
