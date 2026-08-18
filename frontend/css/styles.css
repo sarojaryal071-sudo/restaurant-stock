@@ -203,7 +203,7 @@ button {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: var(--space-4);
+  padding: clamp(12px, 4vw, var(--space-4));
   text-align: center;
 }
 
@@ -215,9 +215,18 @@ button {
 }
 
 .auth-glass-circle {
+  --auth-circle-size: clamp(300px, 82vw, 520px);
+  --auth-form-width: clamp(200px, 68%, 290px);
+  --auth-logo-size: clamp(54px, 16vw, 80px);
+  --auth-input-height: clamp(40px, 12vw, 46px);
+  --auth-input-padding-left: clamp(38px, 11vw, 44px);
+  --auth-icon-size: clamp(15px, 4vw, 18px);
+  --auth-icon-left: clamp(12px, 4vw, 16px);
+  --auth-btn-height: clamp(40px, 11vw, 44px);
+
   position: relative;
-  width: clamp(320px, 80vw, 520px);
-  height: clamp(320px, 80vw, 520px);
+  width: var(--auth-circle-size);
+  height: var(--auth-circle-size);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -233,7 +242,7 @@ button {
 .auth-glass-circle::before {
   content: "";
   position: absolute;
-  inset: 12px;
+  inset: clamp(8px, 3vw, 12px);
   border-radius: 50%;
   border: 1px solid rgba(212, 175, 90, 0.14);
   box-shadow:
@@ -243,21 +252,19 @@ button {
   z-index: 2;
 }
 
-/* Removed inner accent ring */
-
 .auth-form {
   position: relative;
   z-index: 3;
-  width: clamp(220px, 70%, 290px);
+  width: var(--auth-form-width);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--space-3);
+  gap: clamp(8px, 2.8vw, var(--space-3));
 }
 
 .auth-logo {
-  width: clamp(60px, 18vw, 80px);
-  height: clamp(60px, 18vw, 80px);
+  width: var(--auth-logo-size);
+  height: var(--auth-logo-size);
   border-radius: 50%;
   background: var(--charcoal-3);
   border: 1px solid var(--line-strong);
@@ -280,19 +287,19 @@ button {
 
 .auth-restaurant-name {
   font-family: var(--font-display);
-  font-size: clamp(1.1rem, 5vw, 1.4rem);
+  font-size: clamp(0.95rem, 4.4vw, 1.4rem);
   font-weight: 700;
   color: var(--paper);
   line-height: 1.2;
-  margin-top: 4px;
+  margin-top: clamp(2px, 1vw, 4px);
 }
 
 .auth-subtitle {
-  font-size: 0.78rem;
+  font-size: clamp(0.66rem, 2.5vw, 0.78rem);
   color: var(--paper-dim);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  margin-bottom: 4px;
+  margin-bottom: clamp(2px, 1vw, 4px);
 }
 
 .auth-input-group {
@@ -302,11 +309,11 @@ button {
 
 .auth-input-group svg {
   position: absolute;
-  left: 16px;
+  left: var(--auth-icon-left);
   top: 50%;
   transform: translateY(-50%);
-  width: 18px;
-  height: 18px;
+  width: var(--auth-icon-size);
+  height: var(--auth-icon-size);
   color: var(--paper-faint);
   z-index: 2;
   pointer-events: none;
@@ -315,14 +322,14 @@ button {
 
 .auth-input {
   width: 100%;
-  height: 46px;
-  padding: 0 18px 0 44px;
+  height: var(--auth-input-height);
+  padding: 0 clamp(12px, 3vw, 18px) 0 var(--auth-input-padding-left);
   background: var(--charcoal-1);
   border: none;
   outline: none;
   border-radius: 12px;
   color: var(--paper);
-  font-size: 0.95rem;
+  font-size: clamp(0.82rem, 3vw, 0.95rem);
   font-weight: 500;
   letter-spacing: 0.2px;
   box-shadow:
@@ -349,7 +356,7 @@ button {
 }
 
 .auth-error {
-  font-size: 0.8rem;
+  font-size: clamp(0.7rem, 2.6vw, 0.8rem);
   color: var(--qty-zero);
   min-height: 1.2em;
   text-align: center;
@@ -358,7 +365,7 @@ button {
 .auth-btn {
   position: relative;
   width: 100%;
-  min-height: 44px;
+  min-height: var(--auth-btn-height);
   display: block;
   margin: auto;
   overflow: hidden;
@@ -367,7 +374,7 @@ button {
   border-radius: 12px;
   cursor: pointer;
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: clamp(0.8rem, 3.4vw, 0.95rem);
   letter-spacing: 1px;
   text-transform: uppercase;
   color: var(--paper);
@@ -421,13 +428,13 @@ button {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: clamp(6px, 2vw, 8px);
   width: 100%;
 }
 
 .auth-loading-title {
   font-family: var(--font-display);
-  font-size: 1.05rem;
+  font-size: clamp(0.95rem, 3.8vw, 1.05rem);
   font-weight: 700;
   color: var(--gold-bright);
   animation: authLoadingPulse 1.6s ease-in-out infinite;
@@ -445,52 +452,16 @@ button {
 
 .auth-loading-sub {
   font-family: var(--font-mono);
-  font-size: 0.85rem;
+  font-size: clamp(0.76rem, 2.8vw, 0.85rem);
   color: var(--paper-dim);
-  min-width: 230px;
+  min-width: 0;
   text-align: center;
 }
 
 .auth-loading-hint {
-  font-size: 0.75rem;
+  font-size: clamp(0.66rem, 2.4vw, 0.75rem);
   color: var(--paper-faint);
-  margin-top: 4px;
-}
-
-@media (max-width: 480px) {
-  .auth-glass-circle {
-    width: min(330px, 90vw);
-    height: min(330px, 90vw);
-  }
-
-  .auth-form {
-    width: clamp(185px, 60vw, 220px);
-  }
-
-  .auth-restaurant-name {
-    font-size: 1.1rem;
-  }
-
-  .auth-subtitle {
-    font-size: 0.7rem;
-  }
-
-  .auth-input {
-    height: 42px;
-    font-size: 0.85rem;
-    padding-left: 40px;
-  }
-
-  .auth-input-group svg {
-    left: 13px;
-    width: 16px;
-    height: 16px;
-  }
-
-  .auth-btn {
-    min-height: 42px;
-    font-size: 0.85rem;
-  }
+  margin-top: clamp(2px, 1vw, 4px);
 }
 
 .app-header {
