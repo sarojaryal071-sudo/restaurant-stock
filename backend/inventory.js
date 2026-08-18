@@ -53,7 +53,7 @@ async function loadStock(req, res) {
     for (const cat of catRes.rows) {
       // Items in this category (active)
       const itemRes = await query(
-        `SELECT i.id, i.name, i.unit, COALESCE(s.quantity, 0) AS qty
+        `SELECT i.id, i.name, i.unit, i.volume, i.volume_unit, COALESCE(s.quantity, 0) AS qty
          FROM items i
          LEFT JOIN stocks s ON i.id = s.item_id AND s.restaurant_id = $1
          WHERE i.category_id = $2 AND i.is_deleted = FALSE AND i.restaurant_id = $1
@@ -65,6 +65,8 @@ async function loadStock(req, res) {
         id: item.id,
         name: item.name,
         unit: item.unit || undefined,
+        volume: item.volume !== null && item.volume !== undefined ? parseFloat(item.volume) : undefined,
+        volumeUnit: item.volume_unit || undefined,
         qty: parseFloat(item.qty) || 0
       }));
 
@@ -211,7 +213,7 @@ async function saveStock(req, res) {
 // -------------------------------------------------------------------
 async function addCustomItem(req, res) {
   const { restaurantId, userId } = req.auth;
-  const { categoryId, name, quantity, unit } = req.body;
+  const { categoryId, name, quantity, unit, volume, volumeUnit } = req.body;
   if (!categoryId || !name) {
     return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Missing categoryId or name' });
   }
@@ -221,15 +223,26 @@ async function addCustomItem(req, res) {
     return res.json({ ok: false, code: 'VALIDATION_ERROR', error: `Invalid unit: ${newUnit}` });
   }
 
+  const parsedVolume = volume !== undefined && volume !== null && volume !== '' ? parseFloat(volume) : null;
+  const newVolumeUnit = (volumeUnit || '').trim() || null;
+
+  if (parsedVolume !== null && (isNaN(parsedVolume) || parsedVolume <= 0)) {
+    return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Volume must be a positive number.' });
+  }
+
+  if (parsedVolume !== null && !['ml', 'cl', 'L'].includes(newVolumeUnit)) {
+    return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Volume unit must be ml, cl, or L.' });
+  }
+
   try {
     const itemId = uuidv4();
     const qty = parseFloat(quantity) || 0;
 
     await transaction(async (tx) => {
       await tx(
-        `INSERT INTO items (id, name, category_id, unit, default_quantity, restaurant_id, is_default, is_deleted, container_volume, created_at)
-         VALUES ($1, $2, $3, $4, 0, $5, FALSE, FALSE, NULL, NOW())`,
-        [itemId, name, categoryId, newUnit, restaurantId]
+        `INSERT INTO items (id, name, category_id, unit, default_quantity, restaurant_id, is_default, is_deleted, container_volume, volume, volume_unit, created_at)
+         VALUES ($1, $2, $3, $4, 0, $5, FALSE, FALSE, NULL, $6, $7, NOW())`,
+        [itemId, name, categoryId, newUnit, restaurantId, parsedVolume, newVolumeUnit]
       );
       await tx(
         `INSERT INTO stocks (id, item_id, restaurant_id, quantity, updated_at)
@@ -251,7 +264,7 @@ async function addCustomItem(req, res) {
 // -------------------------------------------------------------------
 async function updateItem(req, res) {
   const { restaurantId, userId } = req.auth;
-  const { itemId, name, unit, defaultQuantity, categoryId, containerVolume } = req.body;
+  const { itemId, name, unit, defaultQuantity, categoryId, containerVolume, volume, volumeUnit } = req.body;
   if (!itemId) return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Missing itemId' });
 
   try {
@@ -270,6 +283,23 @@ async function updateItem(req, res) {
     const newCategoryId = categoryId || existing.rows[0].category_id;
     const newContainerVolume = containerVolume !== undefined ? parseInt(containerVolume, 10) || null : existing.rows[0].container_volume;
 
+    let newVolume;
+    let newVolumeUnit;
+
+    if (volume !== undefined && volume !== null && volume !== '') {
+      newVolume = parseFloat(volume);
+      if (isNaN(newVolume) || newVolume <= 0) {
+        return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Volume must be a positive number.' });
+      }
+      newVolumeUnit = (volumeUnit || '').trim() || null;
+      if (!['ml', 'cl', 'L'].includes(newVolumeUnit)) {
+        return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Volume unit must be ml, cl, or L.' });
+      }
+    } else {
+      newVolume = null;
+      newVolumeUnit = null;
+    }
+
     if (!newName) return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Item name cannot be empty' });
 
     // Duplicate name check (within same category)
@@ -287,13 +317,13 @@ async function updateItem(req, res) {
     }
 
     await query(
-      `UPDATE items SET name = $1, category_id = $2, unit = $3, default_quantity = $4, container_volume = $5
-       WHERE id = $6 AND restaurant_id = $7`,
-      [newName, newCategoryId, newUnit, newDefaultQty, newContainerVolume, itemId, restaurantId]
+      `UPDATE items SET name = $1, category_id = $2, unit = $3, default_quantity = $4, container_volume = $5, volume = $6, volume_unit = $7
+       WHERE id = $8 AND restaurant_id = $9`,
+      [newName, newCategoryId, newUnit, newDefaultQty, newContainerVolume, newVolume, newVolumeUnit, itemId, restaurantId]
     );
 
     await writeLog('UPDATE_ITEM', `Item "${newName}" updated`, restaurantId, userId);
-    res.json({ ok: true, item: { id: itemId, name: newName, unit: newUnit, defaultQuantity: newDefaultQty, categoryId: newCategoryId, containerVolume: newContainerVolume } });
+    res.json({ ok: true, item: { id: itemId, name: newName, unit: newUnit, defaultQuantity: newDefaultQty, categoryId: newCategoryId, containerVolume: newContainerVolume, volume: newVolume, volumeUnit: newVolumeUnit } });
   } catch (err) {
     console.error('updateItem error:', err);
     res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
