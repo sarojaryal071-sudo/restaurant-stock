@@ -74,7 +74,7 @@ function renderSalesPreview() {
   }
 
   let html = `<table class="staff-table" style="margin-top:var(--space-2);">
-    <thead><tr><th>POS Product</th><th>Resolved To</th><th>Qty Sold</th><th>Status</th></tr></thead><tbody>`;
+    <thead><tr><th>POS Product</th><th>Resolved To</th><th>Qty Sold</th><th>Unit</th><th>Status</th></tr></thead><tbody>`;
 
   salesItems.forEach((item, idx) => {
     const badge = getSalesPreviewBadge(item);
@@ -88,10 +88,15 @@ function renderSalesPreview() {
       resolvedTo = `<select class="field-select" id="mapSelect_${idx}" style="width:auto;min-width:160px;display:inline-block;padding:8px 10px;font-size:0.82rem;"><option value="">-- Select --</option></select>`;
     }
 
+    const unitLabel = item.matched && item.type === 'inventory'
+      ? escapeHtml(item.unit || '—')
+      : '—';
+
     html += `<tr>
       <td>${escapeHtml(item.sourceProductName)}</td>
       <td>${resolvedTo}</td>
       <td>${item.quantitySold}</td>
+      <td>${unitLabel}</td>
       <td>${badge}</td>
     </tr>`;
   });
@@ -150,8 +155,11 @@ function renderSalesPreview() {
           salesPeriodStart,
           salesPeriodEnd,
           salesItems.map(it => ({
-            productName: it.sourceProductName,
-            quantity: it.quantitySold
+            itemId: it.itemId || undefined,
+            recipeId: it.recipeId || undefined,
+            sourceProductName: it.sourceProductName,
+            quantitySold: it.quantitySold,
+            unit: it.type === 'inventory' ? (it.unit || null) : null
           }))
         );
 
