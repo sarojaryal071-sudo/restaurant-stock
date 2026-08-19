@@ -193,23 +193,29 @@ async function loadSalesSummary(period) {
   summaryDiv.innerHTML = '<div class="loading-spinner" style="margin:1rem auto;"></div>';
   try {
     const data = await api.getSalesSummary(period);
-    const summary = data.summary || [];
+    const summary = (data && data.summary && Array.isArray(data.summary)) ? data.summary : [];
+
     let html = `<div style="display:flex;gap:var(--space-2);margin-bottom:var(--space-3);flex-wrap:wrap;">
       <button class="btn btn-ghost btn-small period-btn" data-period="today">Today</button>
       <button class="btn btn-ghost btn-small period-btn" data-period="7days">Last 7 days</button>
       <button class="btn btn-ghost btn-small period-btn" data-period="30days">Last 30 days</button>
       <button class="btn btn-ghost btn-small period-btn" data-period="month">This Month</button>
     </div>`;
+
     if (!summary.length) {
       html += '<p style="font-size:0.82rem;color:var(--paper-faint);">No sales recorded for this period.</p>';
     } else {
       html += `<table class="staff-table"><thead><tr><th>Item</th><th>Quantity Sold</th></tr></thead><tbody>`;
       summary.forEach(s => {
-        html += `<tr><td>${escapeHtml(s.product || s.itemName || 'Unknown')}</td><td>${s.quantity ?? s.totalSold ?? 0}</td></tr>`;
+        const productName = s.product || s.itemName || 'Unknown';
+        const quantity = s.quantity ?? s.totalSold ?? 0;
+        html += `<tr><td>${escapeHtml(productName)}</td><td>${quantity}</td></tr>`;
       });
       html += '</tbody></table>';
     }
+
     summaryDiv.innerHTML = html;
+
     summaryDiv.querySelectorAll('.period-btn').forEach(btn => {
       if (btn.dataset.period === period) btn.classList.add('btn-gold');
       btn.addEventListener('click', () => loadSalesSummary(btn.dataset.period));
