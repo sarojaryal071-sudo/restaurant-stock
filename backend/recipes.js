@@ -59,12 +59,8 @@ async function createRecipe(req, res) {
           const invItemId = ing.inventoryItemId || null;
           const customName = ing.customName || null;
 
-          // Determine the ingredient name to store:
-          // - if inventoryItemId is provided, we can leave ingredient_name empty (or fetch item name)
-          // - if customName is provided, use it as ingredient_name
           const ingredientName = invItemId ? (await getItemName(invItemId)) : (customName || '');
 
-          // If an inventoryItemId is provided, verify it exists
           if (invItemId) {
             const itemCheck = await tx(`SELECT id FROM items WHERE id = $1 AND restaurant_id = $2`, [invItemId, restaurantId]);
             if (itemCheck.rows.length === 0) {
@@ -270,72 +266,88 @@ async function listRecipes(req, res) {
 }
 
 // -------------------------------------------------------------------
-// recordSale – fractional bottle deduction with container_volume
+// applyRecipeSaleTx
+//
+// Reusable transaction-aware recipe sale logic.
+// This is the ONLY authoritative recipe ingredient deduction path.
+// It expects to run INSIDE an existing database transaction.
+// -------------------------------------------------------------------
+async function applyRecipeSaleTx(tx, restaurantId, userId, recipeId, quantity, logAction = 'RECIPE_SALE', logDetails = null) {
+  const quantitySold = parseInt(quantity, 10);
+
+  if (!recipeId || isNaN(quantitySold) || quantitySold <= 0) {
+    throw { code: 'VALIDATION_ERROR', error: 'recipeId and positive quantity are required' };
+  }
+
+  const recipe = await tx(
+    `SELECT id, name FROM recipes WHERE id = $1 AND restaurant_id = $2`,
+    [recipeId, restaurantId]
+  );
+  if (recipe.rows.length === 0) {
+    throw { code: 'NOT_FOUND', error: 'Recipe not found' };
+  }
+
+  const ingredients = await tx(
+    `SELECT ri.inventory_item_id, ri.amount, i.name AS item_name, i.container_volume
+     FROM recipe_ingredients ri
+     JOIN items i ON ri.inventory_item_id = i.id
+     WHERE ri.recipe_id = $1 AND ri.inventory_item_id IS NOT NULL AND i.restaurant_id = $2`,
+    [recipeId, restaurantId]
+  );
+
+  const deductions = [];
+  for (const ing of ingredients.rows) {
+    const itemId = ing.inventory_item_id;
+    const containerVolume = ing.container_volume || 0;
+
+    const stock = await tx(
+      `SELECT quantity FROM stocks WHERE item_id = $1 AND restaurant_id = $2`,
+      [itemId, restaurantId]
+    );
+    const currentBottles = stock.rows.length > 0 ? parseFloat(stock.rows[0].quantity) : 0;
+
+    let deductBottles;
+    if (containerVolume > 0) {
+      deductBottles = (parseFloat(ing.amount) * quantitySold) / containerVolume;
+    } else {
+      deductBottles = parseFloat(ing.amount) * quantitySold;
+    }
+
+    if (currentBottles < deductBottles) {
+      throw {
+        code: 'INSUFFICIENT_STOCK',
+        error: `Not enough stock for "${ing.item_name}". Required: ${deductBottles.toFixed(2)}, have: ${currentBottles.toFixed(2)}`
+      };
+    }
+
+    deductions.push({ itemId, newBottles: currentBottles - deductBottles });
+  }
+
+  for (const ded of deductions) {
+    await tx(
+      `UPDATE stocks SET quantity = $1, updated_at = NOW() WHERE item_id = $2 AND restaurant_id = $3`,
+      [ded.newBottles, ded.itemId, restaurantId]
+    );
+  }
+
+  const details = logDetails || `Recipe "${recipe.rows[0].name}" sold x${quantitySold}`;
+  await tx(
+    `INSERT INTO logs (id, action, details, user_id, restaurant_id, timestamp)
+     VALUES ($1, $2, $3, $4, $5, NOW())`,
+    [uuidv4(), logAction, details, userId, restaurantId]
+  );
+}
+
+// -------------------------------------------------------------------
+// recordSale – existing API action, now delegates to reusable function
 // -------------------------------------------------------------------
 async function recordSale(req, res) {
   const { restaurantId, userId } = req.auth;
   const { recipeId, quantity } = req.body;
-  const quantitySold = parseInt(quantity, 10);
-
-  if (!recipeId || isNaN(quantitySold) || quantitySold <= 0) {
-    return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'recipeId and positive quantity are required' });
-  }
 
   try {
     await transaction(async (tx) => {
-      const recipe = await tx(`SELECT id, name FROM recipes WHERE id = $1 AND restaurant_id = $2`, [recipeId, restaurantId]);
-      if (recipe.rows.length === 0) {
-        throw { code: 'NOT_FOUND', error: 'Recipe not found' };
-      }
-
-      const ingredients = await tx(
-        `SELECT ri.inventory_item_id, ri.amount, i.name AS item_name, i.container_volume
-         FROM recipe_ingredients ri
-         JOIN items i ON ri.inventory_item_id = i.id
-         WHERE ri.recipe_id = $1 AND ri.inventory_item_id IS NOT NULL AND i.restaurant_id = $2`,
-        [recipeId, restaurantId]
-      );
-
-      const deductions = [];
-      for (const ing of ingredients.rows) {
-        const itemId = ing.inventory_item_id;
-        const containerVolume = ing.container_volume || 0;
-
-        const stock = await tx(
-          `SELECT quantity FROM stocks WHERE item_id = $1 AND restaurant_id = $2`,
-          [itemId, restaurantId]
-        );
-        const currentBottles = stock.rows.length > 0 ? parseFloat(stock.rows[0].quantity) : 0;
-
-        let deductBottles;
-        if (containerVolume > 0) {
-          deductBottles = (parseFloat(ing.amount) * quantitySold) / containerVolume;
-        } else {
-          deductBottles = parseFloat(ing.amount) * quantitySold;
-        }
-
-        if (currentBottles < deductBottles) {
-          throw {
-            code: 'INSUFFICIENT_STOCK',
-            error: `Not enough stock for "${ing.item_name}". Required: ${deductBottles.toFixed(2)}, have: ${currentBottles.toFixed(2)}`
-          };
-        }
-
-        deductions.push({ itemId, newBottles: currentBottles - deductBottles });
-      }
-
-      for (const ded of deductions) {
-        await tx(
-          `UPDATE stocks SET quantity = $1, updated_at = NOW() WHERE item_id = $2 AND restaurant_id = $3`,
-          [ded.newBottles, ded.itemId, restaurantId]
-        );
-      }
-
-      await tx(
-        `INSERT INTO logs (id, action, details, user_id, restaurant_id, timestamp)
-         VALUES ($1, 'RECORD_SALE', $2, $3, $4, NOW())`,
-        [uuidv4(), `Recipe "${recipe.rows[0].name}" sold x${quantitySold}`, userId, restaurantId]
-      );
+      await applyRecipeSaleTx(tx, restaurantId, userId, recipeId, quantity);
     });
 
     res.json({ ok: true });
@@ -348,4 +360,12 @@ async function recordSale(req, res) {
   }
 }
 
-module.exports = { createRecipe, updateRecipe, deleteRecipe, getRecipe, listRecipes, recordSale };
+module.exports = {
+  createRecipe,
+  updateRecipe,
+  deleteRecipe,
+  getRecipe,
+  listRecipes,
+  recordSale,
+  applyRecipeSaleTx
+};

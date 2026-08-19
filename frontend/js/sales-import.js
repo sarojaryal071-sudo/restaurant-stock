@@ -47,6 +47,24 @@ async function handleSalesFileSelect(e) {
   }
 }
 
+function getSalesPreviewBadge(item) {
+  if (item.type === 'inventory' && item.matched) {
+    return '<span class="badge-active">📦 Inventory · ✓ Found</span>';
+  }
+  if (item.type === 'recipe' && item.matched) {
+    return '<span class="badge-active">🥃 Recipe · ✓ Found</span>';
+  }
+  if (item.type === 'unresolved') {
+    return '<span class="badge-inactive">⚠ Unresolved · Needs mapping</span>';
+  }
+  if (item.type === 'ambiguous') {
+    return '<span class="badge-inactive">⚠ Ambiguous · Needs review</span>';
+  }
+  return item.matched
+    ? '<span class="badge-active">✓ Matched</span>'
+    : '<span class="badge-inactive">Needs mapping</span>';
+}
+
 function renderSalesPreview() {
   const previewDiv = document.getElementById('salesImportPreview');
   if (!previewDiv) return;
@@ -54,17 +72,30 @@ function renderSalesPreview() {
     previewDiv.innerHTML = '<p style="font-size:0.82rem;color:var(--paper-faint);">No items to preview.</p>';
     return;
   }
-  let html = `<table class="staff-table" style="margin-top:var(--space-2);"><thead><tr><th>POS Product</th><th>Inventory Item</th><th>Qty Sold</th><th>Status</th></tr></thead><tbody>`;
+
+  let html = `<table class="staff-table" style="margin-top:var(--space-2);">
+    <thead><tr><th>POS Product</th><th>Resolved To</th><th>Qty Sold</th><th>Status</th></tr></thead><tbody>`;
+
   salesItems.forEach((item, idx) => {
-    const status = item.matched ? '<span class="badge-active">Matched</span>' : '<span class="badge-inactive">Needs mapping</span>';
-    const itemName = item.itemName || '—';
+    const badge = getSalesPreviewBadge(item);
+    let resolvedTo = '—';
+
+    if (item.matched && item.type === 'inventory') {
+      resolvedTo = escapeHtml(item.itemName || '—');
+    } else if (item.matched && item.type === 'recipe') {
+      resolvedTo = escapeHtml(item.recipeName || '—');
+    } else if (!item.matched) {
+      resolvedTo = `<select class="field-select" id="mapSelect_${idx}" style="width:auto;min-width:160px;display:inline-block;padding:8px 10px;font-size:0.82rem;"><option value="">-- Select --</option></select>`;
+    }
+
     html += `<tr>
       <td>${escapeHtml(item.sourceProductName)}</td>
-      <td>${item.matched ? escapeHtml(itemName) : `<select class="field-select" id="mapSelect_${idx}" style="width:auto;min-width:160px;display:inline-block;padding:8px 10px;font-size:0.82rem;"><option value="">-- Select --</option></select>`}</td>
+      <td>${resolvedTo}</td>
       <td>${item.quantitySold}</td>
-      <td>${status}</td>
+      <td>${badge}</td>
     </tr>`;
   });
+
   html += '</tbody></table>';
   html += `<button id="applySalesBtn" class="btn btn-gold btn-small" style="margin-top:var(--space-2);" ${salesItems.some(it => !it.matched) ? 'disabled' : ''}>Apply Sales</button>`;
   previewDiv.innerHTML = html;
@@ -73,6 +104,7 @@ function renderSalesPreview() {
     if (!item.matched) {
       const select = document.getElementById(`mapSelect_${idx}`);
       if (!select) return;
+
       state.categories.forEach(cat => {
         cat.items.forEach(it => {
           const option = document.createElement('option');
@@ -81,13 +113,18 @@ function renderSalesPreview() {
           select.appendChild(option);
         });
       });
+
       select.addEventListener('change', async (e) => {
         const itemId = e.target.value;
         if (!itemId) return;
+
         try {
           await api.saveSalesMapping(item.sourceProductName, itemId);
           item.itemId = itemId;
           item.itemName = e.target.selectedOptions[0].textContent;
+          item.recipeId = null;
+          item.recipeName = null;
+          item.type = 'inventory';
           item.matched = true;
           renderSalesPreview();
           toast('Mapping saved.');
@@ -103,15 +140,23 @@ function renderSalesPreview() {
     applyBtn.addEventListener('click', async () => {
       const allMatched = salesItems.every(it => it.matched);
       if (!allMatched) return;
+
       applyBtn.disabled = true;
       applyBtn.textContent = 'Applying…';
+
       try {
-        await api.applySalesImport(salesFileHash, salesPeriodStart, salesPeriodEnd, salesItems.map(it => ({
-          itemId: it.itemId,
-          sourceProductName: it.sourceProductName,
-          quantitySold: it.quantitySold
-        })));
+        await api.applySalesImport(
+          salesFileHash,
+          salesPeriodStart,
+          salesPeriodEnd,
+          salesItems.map(it => ({
+            productName: it.sourceProductName,
+            quantity: it.quantitySold
+          }))
+        );
+
         toast('Sales imported successfully. Inventory has been updated.');
+
         salesFileHash = null;
         salesPeriodStart = null;
         salesPeriodEnd = null;
