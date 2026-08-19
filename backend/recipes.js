@@ -384,7 +384,8 @@ async function applyRecipeSaleTx(tx, restaurantId, userId, recipeId, quantity, l
 
     deductions.push({
       itemId,
-      newStock: currentStock - deductStockUnits
+      newStock: currentStock - deductStockUnits,
+      deduction: deductStockUnits
     });
   }
 
@@ -402,6 +403,8 @@ async function applyRecipeSaleTx(tx, restaurantId, userId, recipeId, quantity, l
      VALUES ($1, $2, $3, $4, $5, NOW())`,
     [uuidv4(), logAction, details, userId, restaurantId]
   );
+
+  return deductions;
 }
 
 // -------------------------------------------------------------------

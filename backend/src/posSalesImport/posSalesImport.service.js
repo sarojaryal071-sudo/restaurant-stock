@@ -286,8 +286,15 @@ async function applySalesImport(restaurantId, userId, fileHash, periodStart, per
   });
 }
 
+async function cancelSalesImport(restaurantId, userId, importId) {
+  await transaction(async (tx) => {
+    await repository.cancelImport(tx, importId, restaurantId, userId);
+  });
+}
+
 module.exports = {
   previewSales,
   applySalesImport,
+  cancelSalesImport,
   saveProductMapping: repository.saveProductMapping
 };

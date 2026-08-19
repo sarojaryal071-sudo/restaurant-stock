@@ -75,8 +75,7 @@ async function applyImport(tx, importId, restaurantId, userId, items, fileHash, 
     const productName = item.sourceProductName || 'Unknown';
 
     if (item.type === 'recipe') {
-      // Reuse the authoritative recipe deduction engine.
-      await applyRecipeSaleTx(
+      const deductions = await applyRecipeSaleTx(
         tx,
         restaurantId,
         userId,
@@ -86,10 +85,18 @@ async function applyImport(tx, importId, restaurantId, userId, items, fileHash, 
         `Recipe "${productName}" imported from CSV and sold x${item.quantitySold}`
       );
 
+      for (const ded of deductions) {
+        await tx(
+          `INSERT INTO sales_import_effects (id, import_id, item_id, stock_reduction)
+           VALUES (gen_random_uuid(), $1, $2, $3)`,
+          [importId, ded.itemId, ded.deduction]
+        );
+      }
+
       await tx(
-        `INSERT INTO pos_sales (restaurant_id, provider, product_name, quantity, sold_at, unit)
-         VALUES ($1, 'flatpay', $2, $3, NOW(), $4)`,
-        [restaurantId, productName, item.quantitySold, null]
+        `INSERT INTO pos_sales (restaurant_id, provider, product_name, quantity, sold_at, unit, sales_import_id)
+         VALUES ($1, 'flatpay', $2, $3, NOW(), $4, $5)`,
+        [restaurantId, productName, item.quantitySold, null, importId]
       );
 
       continue;
@@ -134,6 +141,13 @@ async function applyImport(tx, importId, restaurantId, userId, items, fileHash, 
       [uuidv4(), importId, itemId, productName, quantitySold]
     );
 
+    // Record exact stock reduction so cancellation can reverse it later.
+    await tx(
+      `INSERT INTO sales_import_effects (id, import_id, item_id, stock_reduction)
+       VALUES (gen_random_uuid(), $1, $2, $3)`,
+      [importId, itemId, stockReduction]
+    );
+
     const stockRes = await tx(
       `SELECT quantity FROM stocks WHERE item_id = $1 AND restaurant_id = $2`,
       [itemId, restaurantId]
@@ -166,11 +180,67 @@ async function applyImport(tx, importId, restaurantId, userId, items, fileHash, 
     }
 
     await tx(
-      `INSERT INTO pos_sales (restaurant_id, provider, product_name, quantity, sold_at, unit)
-       VALUES ($1, 'flatpay', $2, $3, NOW(), $4)`,
-      [restaurantId, productName, quantitySold, item.salesUnit || null]
+      `INSERT INTO pos_sales (restaurant_id, provider, product_name, quantity, sold_at, unit, sales_import_id)
+       VALUES ($1, 'flatpay', $2, $3, NOW(), $4, $5)`,
+      [restaurantId, productName, quantitySold, item.salesUnit || null, importId]
     );
   }
+}
+
+async function cancelImport(tx, importId, restaurantId, userId) {
+  const importRes = await tx(
+    `SELECT id, status
+     FROM sales_imports
+     WHERE id = $1 AND restaurant_id = $2
+     FOR UPDATE`,
+    [importId, restaurantId]
+  );
+
+  if (importRes.rows.length === 0) {
+    throw { code: 'NOT_FOUND', error: 'Sales import not found.' };
+  }
+
+  if (importRes.rows[0].status === 'cancelled') {
+    throw { code: 'ALREADY_CANCELLED', error: 'Sales import is already cancelled.' };
+  }
+
+  const effects = await tx(
+    `SELECT item_id, stock_reduction
+     FROM sales_import_effects
+     WHERE import_id = $1`,
+    [importId]
+  );
+
+  for (const effect of effects.rows) {
+    const stockReduction = parseFloat(effect.stock_reduction);
+
+    await tx(
+      `UPDATE stocks
+       SET quantity = quantity + $1, updated_at = NOW()
+       WHERE item_id = $2 AND restaurant_id = $3`,
+      [stockReduction, effect.item_id, restaurantId]
+    );
+  }
+
+  await tx(
+    `UPDATE sales_imports
+     SET status = 'cancelled',
+         cancelled_at = NOW(),
+         cancelled_by = $1
+     WHERE id = $2 AND restaurant_id = $3`,
+    [userId || null, importId, restaurantId]
+  );
+
+  await tx(
+    `DELETE FROM pos_sales WHERE sales_import_id = $1`,
+    [importId]
+  );
+
+  await tx(
+    `INSERT INTO logs (id, action, details, user_id, restaurant_id, timestamp)
+     VALUES (gen_random_uuid(), 'CANCEL_SALES_IMPORT', $1, $2, $3, NOW())`,
+    [`Sales import ${importId} cancelled and stock reversed`, userId, restaurantId]
+  );
 }
 
 module.exports = {
@@ -178,5 +248,6 @@ module.exports = {
   saveProductMapping,
   getMappings,
   importExists,
-  applyImport
+  applyImport,
+  cancelImport
 };

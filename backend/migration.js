@@ -482,6 +482,22 @@ async function runMigrations() {
     await tx(`CREATE INDEX IF NOT EXISTS idx_pos_sales_restaurant ON pos_sales(restaurant_id);`);
     await tx(`CREATE INDEX IF NOT EXISTS idx_pos_sales_sold_at ON pos_sales(sold_at);`);
     await tx(`ALTER TABLE pos_sales ADD COLUMN IF NOT EXISTS unit TEXT;`);
+    await tx(`ALTER TABLE pos_sales ADD COLUMN IF NOT EXISTS sales_import_id UUID REFERENCES sales_imports(id) ON DELETE SET NULL;`);
+
+    await tx(`ALTER TABLE sales_imports ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';`);
+    await tx(`ALTER TABLE sales_imports ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ;`);
+    await tx(`ALTER TABLE sales_imports ADD COLUMN IF NOT EXISTS cancelled_by UUID REFERENCES users(id);`);
+
+    await tx(`
+      CREATE TABLE IF NOT EXISTS sales_import_effects (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        import_id UUID NOT NULL REFERENCES sales_imports(id) ON DELETE CASCADE,
+        item_id UUID NOT NULL REFERENCES items(id),
+        stock_reduction NUMERIC NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_sales_import_effects_import ON sales_import_effects(import_id);`);
 
         // =================================================================
     // Inventory Adjustments (header + detail)

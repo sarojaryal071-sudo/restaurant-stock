@@ -49,4 +49,17 @@ async function apply(req, res) {
   }
 }
 
-module.exports = { preview, saveMapping, apply };
+async function cancel(req, res) {
+  try {
+    const { restaurantId, userId } = req.auth;
+    const importId = req.params.id;
+    await service.cancelSalesImport(restaurantId, userId, importId);
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code) return res.json({ ok: false, code: err.code, error: err.error });
+    console.error('cancel sales import error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+module.exports = { preview, saveMapping, apply, cancel };

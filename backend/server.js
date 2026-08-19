@@ -331,6 +331,12 @@ app.post('/api/pos/sales/import/apply', (req, res, next) => {
   });
 });
 
+app.post('/api/pos/sales/import/:id/cancel', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => posSalesImportActions.cancel(req, res));
+  });
+});
+
 // ---------------------------------------------------------------
 // Settings routes (manager only)
 // ---------------------------------------------------------------
