@@ -205,11 +205,18 @@ async function loadSalesSummary(period) {
     if (!summary.length) {
       html += '<p style="font-size:0.82rem;color:var(--paper-faint);">No sales recorded for this period.</p>';
     } else {
-      html += `<table class="staff-table"><thead><tr><th>Item</th><th>Quantity Sold</th></tr></thead><tbody>`;
+      html += `<table class="staff-table"><thead><tr><th>Entry Date</th><th>Product</th><th>Quantity Sold</th><th>Unit</th></tr></thead><tbody>`;
       summary.forEach(s => {
         const productName = s.product || s.itemName || 'Unknown';
         const quantity = s.quantity ?? s.totalSold ?? 0;
-        html += `<tr><td>${escapeHtml(productName)}</td><td>${quantity}</td></tr>`;
+        const entryDate = s.date || '';
+        const unitLabel = s.unit || '—';
+        html += `<tr>
+          <td>${escapeHtml(entryDate)}</td>
+          <td>${escapeHtml(productName)}</td>
+          <td>${quantity}</td>
+          <td>${escapeHtml(unitLabel)}</td>
+        </tr>`;
       });
       html += '</tbody></table>';
     }
