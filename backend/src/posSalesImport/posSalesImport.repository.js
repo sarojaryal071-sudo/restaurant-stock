@@ -1,7 +1,7 @@
 const { query, transaction } = require('../../database');
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
-const { applyRecipeSaleTx } = require('../../recipes');
+const { applyRecipeSaleTx, stockUnitsFromServing } = require('../../recipes');
 
 /**
  * Compute SHA-256 hash of a buffer.
@@ -28,38 +28,43 @@ async function saveProductMapping(restaurantId, sourceProductName, itemId, sourc
  */
 async function getMappings(restaurantId, source = 'flatpay') {
   const res = await query(
-    `SELECT source_product_name, item_id FROM sales_product_mappings WHERE restaurant_id = $1 AND source = $2`,
+    `SELECT source_product_name, item_id
+     FROM sales_product_mappings
+     WHERE restaurant_id = $1 AND source = $2`,
     [restaurantId, source]
   );
 
   const map = {};
+
   for (const row of res.rows) {
     map[row.source_product_name] = row.item_id;
   }
+
   return map;
 }
 
 /**
- * Check if an import with the given file hash already exists for the restaurant.
+ * Check if an import with the given file hash already exists.
  */
 async function importExists(restaurantId, fileHash) {
   const res = await query(
     `SELECT id FROM sales_imports WHERE restaurant_id = $1 AND file_hash = $2`,
     [restaurantId, fileHash]
   );
+
   return res.rows.length > 0;
 }
 
 /**
- * Record a sales import and its items, update stocks and insert pos_sales rows.
- * Runs inside a transaction provided by the caller.
+ * Record sales import and apply stock deductions.
+ *
+ * Runs inside an existing transaction.
  *
  * items may contain:
- *   { type: 'inventory', itemId, sourceProductName, quantitySold }
+ *   { type: 'inventory', itemId, sourceProductName, quantitySold, salesUnit? }
  *   { type: 'recipe', recipeId, sourceProductName, quantitySold }
  */
 async function applyImport(tx, importId, restaurantId, userId, items, fileHash, periodStart, periodEnd) {
-  // Insert import header
   await tx(
     `INSERT INTO sales_imports (id, restaurant_id, imported_by, source, period_start, period_end, file_hash)
      VALUES ($1, $2, $3, 'flatpay', $4, $5, $6)`,
@@ -70,7 +75,7 @@ async function applyImport(tx, importId, restaurantId, userId, items, fileHash, 
     const productName = item.sourceProductName || 'Unknown';
 
     if (item.type === 'recipe') {
-      // Reuse the authoritative recipe sale/deduction engine.
+      // Reuse the authoritative recipe deduction engine.
       await applyRecipeSaleTx(
         tx,
         restaurantId,
@@ -93,32 +98,60 @@ async function applyImport(tx, importId, restaurantId, userId, items, fileHash, 
     // Direct inventory item sale.
     const itemId = item.itemId;
     const quantitySold = item.quantitySold;
+    const salesUnit = item.salesUnit || null;
 
-    // Insert import item
+    const itemRes = await tx(
+      `SELECT id, name, unit, volume, volume_unit
+       FROM items
+       WHERE id = $1 AND restaurant_id = $2 AND is_deleted = FALSE`,
+      [itemId, restaurantId]
+    );
+
+    if (itemRes.rows.length === 0) {
+      throw { code: 'ITEM_NOT_FOUND', error: `Item not found: ${itemId}` };
+    }
+
+    const dbItem = itemRes.rows[0];
+
+    let stockReduction = quantitySold;
+
+    if (salesUnit && dbItem.volume != null && dbItem.volume_unit) {
+      const converted = stockUnitsFromServing(
+        quantitySold,
+        salesUnit,
+        dbItem.volume,
+        dbItem.volume_unit
+      );
+
+      if (converted !== null && !isNaN(converted)) {
+        stockReduction = converted;
+      }
+    }
+
     await tx(
       `INSERT INTO sales_import_items (id, import_id, item_id, source_product_name, quantity_sold)
        VALUES ($1, $2, $3, $4, $5)`,
       [uuidv4(), importId, itemId, productName, quantitySold]
     );
 
-    // Decrement stock
     const stockRes = await tx(
       `SELECT quantity FROM stocks WHERE item_id = $1 AND restaurant_id = $2`,
       [itemId, restaurantId]
     );
+
     const current = stockRes.rows.length > 0 ? parseFloat(stockRes.rows[0].quantity) : 0;
-    const newQty = current - quantitySold;
+    const newQty = current - stockReduction;
 
     const negSetting = await tx(
       `SELECT value FROM settings WHERE key = 'negativeStockAllowed'`
     );
+
     const negativeAllowed = negSetting.rows.length > 0 ? negSetting.rows[0].value === 'true' : false;
 
     if (!negativeAllowed && newQty < 0) {
-      throw { code: 'NEGATIVE_STOCK_NOT_ALLOWED', error: `Insufficient stock for item ${itemId}.` };
+      throw { code: 'NEGATIVE_STOCK_NOT_ALLOWED', error: `Insufficient stock for item ${dbItem.name}.` };
     }
 
-    // Upsert stock
     if (stockRes.rows.length > 0) {
       await tx(
         `UPDATE stocks SET quantity = $1, updated_at = NOW() WHERE item_id = $2 AND restaurant_id = $3`,
@@ -132,7 +165,6 @@ async function applyImport(tx, importId, restaurantId, userId, items, fileHash, 
       );
     }
 
-    // Insert into canonical pos_sales for sales summary
     await tx(
       `INSERT INTO pos_sales (restaurant_id, provider, product_name, quantity, sold_at)
        VALUES ($1, 'flatpay', $2, $3, NOW())`,

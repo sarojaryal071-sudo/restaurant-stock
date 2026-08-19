@@ -1,9 +1,35 @@
 const { v4: uuidv4 } = require('uuid');
 const { query, transaction } = require('./database');
-const { writeLog } = require('./inventory');  // reuse log helper
+const { writeLog } = require('./inventory');
 
 // -------------------------------------------------------------------
-// Helper: fetch item name by ID (used when building responses)
+// Volume conversion helpers
+// -------------------------------------------------------------------
+function amountToMl(amount, unit) {
+  const value = parseFloat(amount);
+  if (isNaN(value)) return null;
+
+  const normalizedUnit = String(unit || '').trim().toLowerCase();
+
+  if (normalizedUnit === 'ml') return value;
+  if (normalizedUnit === 'cl') return value * 10;
+  if (normalizedUnit === 'l') return value * 1000;
+
+  return null;
+}
+
+function stockUnitsFromServing(amount, unit, itemVolume, itemVolumeUnit) {
+  const servingMl = amountToMl(amount, unit);
+  if (servingMl === null) return null;
+
+  const itemVolumeMl = amountToMl(itemVolume, itemVolumeUnit);
+  if (itemVolumeMl === null || itemVolumeMl <= 0) return null;
+
+  return servingMl / itemVolumeMl;
+}
+
+// -------------------------------------------------------------------
+// Helper: fetch item name by ID
 // -------------------------------------------------------------------
 async function getItemName(itemId) {
   if (!itemId) return null;
@@ -12,10 +38,11 @@ async function getItemName(itemId) {
 }
 
 // -------------------------------------------------------------------
-// Helper: attach item names and custom names to ingredients list
+// Helper: enrich ingredients
 // -------------------------------------------------------------------
 async function enrichIngredients(ingredients) {
   const enriched = [];
+
   for (const ing of ingredients) {
     const enrichedIng = {
       id: ing.id,
@@ -26,13 +53,16 @@ async function enrichIngredients(ingredients) {
       amount: parseFloat(ing.amount),
       unit: ing.unit
     };
+
     if (ing.inventory_item_id) {
       enrichedIng.inventoryItemName = await getItemName(ing.inventory_item_id);
     } else {
       enrichedIng.customName = ing.ingredient_name;
     }
+
     enriched.push(enrichedIng);
   }
+
   return enriched;
 }
 
@@ -42,11 +72,13 @@ async function enrichIngredients(ingredients) {
 async function createRecipe(req, res) {
   const { restaurantId, userId } = req.auth;
   const { name, description, glass, method, garnish, ingredients } = req.body;
+
   if (!name || !String(name).trim()) {
     return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Recipe name is required' });
   }
 
   const recipeId = uuidv4();
+
   try {
     await transaction(async (tx) => {
       await tx(
@@ -54,6 +86,7 @@ async function createRecipe(req, res) {
          VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, NOW(), NOW())`,
         [recipeId, restaurantId, String(name).trim(), description || '', glass || '', method || '', garnish || '']
       );
+
       if (Array.isArray(ingredients)) {
         for (const ing of ingredients) {
           const invItemId = ing.inventoryItemId || null;
@@ -67,6 +100,7 @@ async function createRecipe(req, res) {
               throw { code: 'NOT_FOUND', error: `Inventory item not found: ${invItemId}` };
             }
           }
+
           await tx(
             `INSERT INTO recipe_ingredients (id, recipe_id, inventory_item_id, ingredient_name, amount, unit)
              VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -100,6 +134,7 @@ async function createRecipe(req, res) {
 async function updateRecipe(req, res) {
   const { restaurantId, userId } = req.auth;
   const { recipeId, name, description, glass, method, garnish, isActive, ingredients } = req.body;
+
   if (!recipeId) return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Missing recipeId' });
 
   try {
@@ -131,6 +166,7 @@ async function updateRecipe(req, res) {
 
       if (Array.isArray(ingredients)) {
         await tx(`DELETE FROM recipe_ingredients WHERE recipe_id = $1`, [recipeId]);
+
         for (const ing of ingredients) {
           const invItemId = ing.inventoryItemId || null;
           const customName = ing.customName || null;
@@ -142,6 +178,7 @@ async function updateRecipe(req, res) {
               throw { code: 'NOT_FOUND', error: `Inventory item not found: ${invItemId}` };
             }
           }
+
           await tx(
             `INSERT INTO recipe_ingredients (id, recipe_id, inventory_item_id, ingredient_name, amount, unit)
              VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -175,6 +212,7 @@ async function updateRecipe(req, res) {
 async function deleteRecipe(req, res) {
   const { restaurantId, userId } = req.auth;
   const { recipeId } = req.body;
+
   if (!recipeId) return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Missing recipeId' });
 
   try {
@@ -192,11 +230,12 @@ async function deleteRecipe(req, res) {
 }
 
 // -------------------------------------------------------------------
-// getRecipe – returns full recipe with enriched ingredients
+// getRecipe
 // -------------------------------------------------------------------
 async function getRecipe(req, res) {
   const { restaurantId } = req.auth;
   const recipeId = req.body.recipeId || req.query.recipeId;
+
   if (!recipeId) return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Missing recipeId' });
 
   try {
@@ -233,10 +272,11 @@ async function getRecipe(req, res) {
 }
 
 // -------------------------------------------------------------------
-// listRecipes – now includes ingredients for each recipe
+// listRecipes
 // -------------------------------------------------------------------
 async function listRecipes(req, res) {
   const { restaurantId } = req.auth;
+
   try {
     const recipeRows = await query(
       `SELECT id, name, description, glass, method, garnish, is_active AS "isActive", created_at AS "createdAt", updated_at AS "updatedAt"
@@ -245,13 +285,16 @@ async function listRecipes(req, res) {
     );
 
     const recipes = [];
+
     for (const rec of recipeRows.rows) {
       const ingRows = await query(
         `SELECT id, recipe_id, inventory_item_id, ingredient_name, amount, unit
          FROM recipe_ingredients WHERE recipe_id = $1`,
         [rec.id]
       );
+
       const ingredients = await enrichIngredients(ingRows.rows);
+
       recipes.push({
         ...rec,
         ingredients
@@ -270,7 +313,6 @@ async function listRecipes(req, res) {
 //
 // Reusable transaction-aware recipe sale logic.
 // This is the ONLY authoritative recipe ingredient deduction path.
-// It expects to run INSIDE an existing database transaction.
 // -------------------------------------------------------------------
 async function applyRecipeSaleTx(tx, restaurantId, userId, recipeId, quantity, logAction = 'RECIPE_SALE', logDetails = null) {
   const quantitySold = parseInt(quantity, 10);
@@ -283,12 +325,17 @@ async function applyRecipeSaleTx(tx, restaurantId, userId, recipeId, quantity, l
     `SELECT id, name FROM recipes WHERE id = $1 AND restaurant_id = $2`,
     [recipeId, restaurantId]
   );
+
   if (recipe.rows.length === 0) {
     throw { code: 'NOT_FOUND', error: 'Recipe not found' };
   }
 
   const ingredients = await tx(
-    `SELECT ri.inventory_item_id, ri.amount, i.name AS item_name, i.container_volume
+    `SELECT ri.inventory_item_id, ri.amount, ri.unit AS recipe_unit,
+            i.name AS item_name,
+            i.container_volume,
+            i.volume,
+            i.volume_unit
      FROM recipe_ingredients ri
      JOIN items i ON ri.inventory_item_id = i.id
      WHERE ri.recipe_id = $1 AND ri.inventory_item_id IS NOT NULL AND i.restaurant_id = $2`,
@@ -296,41 +343,60 @@ async function applyRecipeSaleTx(tx, restaurantId, userId, recipeId, quantity, l
   );
 
   const deductions = [];
+
   for (const ing of ingredients.rows) {
     const itemId = ing.inventory_item_id;
-    const containerVolume = ing.container_volume || 0;
 
     const stock = await tx(
       `SELECT quantity FROM stocks WHERE item_id = $1 AND restaurant_id = $2`,
       [itemId, restaurantId]
     );
-    const currentBottles = stock.rows.length > 0 ? parseFloat(stock.rows[0].quantity) : 0;
 
-    let deductBottles;
-    if (containerVolume > 0) {
-      deductBottles = (parseFloat(ing.amount) * quantitySold) / containerVolume;
-    } else {
-      deductBottles = parseFloat(ing.amount) * quantitySold;
+    const currentStock = stock.rows.length > 0 ? parseFloat(stock.rows[0].quantity) : 0;
+
+    let deductStockUnits = null;
+
+    // 1. Preferred: new volume model.
+    if (ing.volume != null && ing.volume_unit) {
+      const converted = stockUnitsFromServing(ing.amount, ing.recipe_unit, ing.volume, ing.volume_unit);
+      if (converted !== null && !isNaN(converted)) {
+        deductStockUnits = converted * quantitySold;
+      }
     }
 
-    if (currentBottles < deductBottles) {
+    // 2. Fallback: old container_volume model.
+    if (deductStockUnits === null) {
+      const containerVolume = ing.container_volume || 0;
+
+      if (containerVolume > 0) {
+        deductStockUnits = (parseFloat(ing.amount) * quantitySold) / containerVolume;
+      } else {
+        deductStockUnits = parseFloat(ing.amount) * quantitySold;
+      }
+    }
+
+    if (currentStock < deductStockUnits) {
       throw {
         code: 'INSUFFICIENT_STOCK',
-        error: `Not enough stock for "${ing.item_name}". Required: ${deductBottles.toFixed(2)}, have: ${currentBottles.toFixed(2)}`
+        error: `Not enough stock for "${ing.item_name}". Required: ${deductStockUnits.toFixed(2)}, have: ${currentStock.toFixed(2)}`
       };
     }
 
-    deductions.push({ itemId, newBottles: currentBottles - deductBottles });
+    deductions.push({
+      itemId,
+      newStock: currentStock - deductStockUnits
+    });
   }
 
   for (const ded of deductions) {
     await tx(
       `UPDATE stocks SET quantity = $1, updated_at = NOW() WHERE item_id = $2 AND restaurant_id = $3`,
-      [ded.newBottles, ded.itemId, restaurantId]
+      [ded.newStock, ded.itemId, restaurantId]
     );
   }
 
   const details = logDetails || `Recipe "${recipe.rows[0].name}" sold x${quantitySold}`;
+
   await tx(
     `INSERT INTO logs (id, action, details, user_id, restaurant_id, timestamp)
      VALUES ($1, $2, $3, $4, $5, NOW())`,
@@ -339,7 +405,7 @@ async function applyRecipeSaleTx(tx, restaurantId, userId, recipeId, quantity, l
 }
 
 // -------------------------------------------------------------------
-// recordSale – existing API action, now delegates to reusable function
+// recordSale
 // -------------------------------------------------------------------
 async function recordSale(req, res) {
   const { restaurantId, userId } = req.auth;
@@ -367,5 +433,7 @@ module.exports = {
   getRecipe,
   listRecipes,
   recordSale,
-  applyRecipeSaleTx
+  applyRecipeSaleTx,
+  stockUnitsFromServing,
+  amountToMl
 };
