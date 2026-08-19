@@ -971,6 +971,30 @@ button {
   transition: color 0.2s ease;
 }
 
+.qty-value.qty-input {
+  width: clamp(54px, 12vw, 72px);
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: inherit;
+  padding: 3px 4px;
+}
+
+.qty-value.qty-input:focus {
+  outline: none;
+  border-color: var(--gold-deep);
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.12);
+}
+
+.qty-value.qty-input::-webkit-outer-spin-button,
+.qty-value.qty-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.qty-value.qty-input[type=number] {
+  -moz-appearance: textfield;
+}
+
 .qty-value.zero {
   color: var(--qty-zero);
 }

@@ -76,9 +76,27 @@ function renderItemRowOrig(c, it) {
   mb.setAttribute('aria-label', 'Decrease');
   mb.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14"/></svg>';
   mb.addEventListener('click', e => { e.stopPropagation(); changeQty(it.id, -1); });
-  const qe = document.createElement('div');
-  qe.className = 'qty-value ' + qtyClass(it.qty);
-  qe.textContent = it.qty;
+        const qe = document.createElement('input');
+        qe.type = 'number';
+        qe.step = 'any';
+        qe.inputMode = 'decimal';
+        qe.className = 'qty-value qty-input ' + qtyClass(it.qty);
+        qe.value = it.qty;
+
+        // Allow negative values only when backend setting permits it
+        if (!(settingsData && settingsData.inventoryBehaviour && settingsData.inventoryBehaviour.negativeStockAllowed)) {
+          qe.min = '0';
+        }
+
+        qe.addEventListener('input', e => {
+          const val = parseFloat(e.target.value);
+          if (isNaN(val)) return;
+          it.qty = val;
+          updateItemRowUI(it.id, it);
+          updateOverview();
+          updateDirty();
+          setActive(it.id);
+        });
   const pb = document.createElement('button');
   pb.className = 'qty-btn plus';
   pb.setAttribute('aria-label', 'Increase');
@@ -152,14 +170,16 @@ function changeQty(iid, delta) {
   setActive(iid);
 }
 
-function updateItemRowUI(iid, it) {
-  const row = rootEl.querySelector(`.item-row[data-item-id="${cssEscape(iid)}"]`);
-  if (!row) return;
-  const q = row.querySelector('.qty-value');
-  q.textContent = it.qty;
-  q.className = 'qty-value ' + qtyClass(it.qty);
-  row.classList.toggle('is-pending', it.qty !== it.lastConfirmedQty);
-}
+      function updateItemRowUI(iid, it) {
+        const row = rootEl.querySelector(`.item-row[data-item-id="${cssEscape(iid)}"]`);
+        if (!row) return;
+        const q = row.querySelector('.qty-value');
+        if (q) {
+          q.value = it.qty;
+          q.className = 'qty-value qty-input ' + qtyClass(it.qty);
+        }
+        row.classList.toggle('is-pending', it.qty !== it.lastConfirmedQty);
+      }
 
 function dirtyUpdates() {
   const u = [];
@@ -206,19 +226,21 @@ document.addEventListener('click', e => {
   if (!e.target.closest('.item-row')) clearActive();
 });
 
-function refreshItem(id) {
-  const f = findItem(id);
-  if (!f) return;
-  const { item } = f;
-  const row = document.querySelector(`.item-row[data-item-id="${cssEscape(id)}"]`);
-  if (!row) return;
-  row.querySelector('.item-name').innerHTML = escapeHtml(item.name) + (item.custom ? '<span class="custom-tag">Custom</span>' : '');
-  const q = row.querySelector('.qty-value');
-  q.textContent = item.qty;
-  q.className = 'qty-value ' + qtyClass(item.qty);
-  row.classList.toggle('is-pending', item.qty !== item.lastConfirmedQty);
-  row.dataset.itemName = item.name.toLowerCase();
-}
+      function refreshItem(id) {
+        const f = findItem(id);
+        if (!f) return;
+        const { item } = f;
+        const row = document.querySelector(`.item-row[data-item-id="${cssEscape(id)}"]`);
+        if (!row) return;
+        row.querySelector('.item-name').innerHTML = escapeHtml(item.name) + (item.custom ? '<span class="custom-tag">Custom</span>' : '');
+        const q = row.querySelector('.qty-value');
+        if (q) {
+          q.value = item.qty;
+          q.className = 'qty-value qty-input ' + qtyClass(item.qty);
+        }
+        row.classList.toggle('is-pending', item.qty !== item.lastConfirmedQty);
+        row.dataset.itemName = item.name.toLowerCase();
+      }
 
 function refreshCat(cid) {
   const c = findCat(cid);
