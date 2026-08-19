@@ -481,6 +481,7 @@ async function runMigrations() {
     `);
     await tx(`CREATE INDEX IF NOT EXISTS idx_pos_sales_restaurant ON pos_sales(restaurant_id);`);
     await tx(`CREATE INDEX IF NOT EXISTS idx_pos_sales_sold_at ON pos_sales(sold_at);`);
+    await tx(`ALTER TABLE pos_sales ADD COLUMN IF NOT EXISTS unit TEXT;`);
 
         // =================================================================
     // Inventory Adjustments (header + detail)

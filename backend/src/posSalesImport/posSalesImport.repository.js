@@ -87,9 +87,9 @@ async function applyImport(tx, importId, restaurantId, userId, items, fileHash, 
       );
 
       await tx(
-        `INSERT INTO pos_sales (restaurant_id, provider, product_name, quantity, sold_at)
-         VALUES ($1, 'flatpay', $2, $3, NOW())`,
-        [restaurantId, productName, item.quantitySold]
+        `INSERT INTO pos_sales (restaurant_id, provider, product_name, quantity, sold_at, unit)
+         VALUES ($1, 'flatpay', $2, $3, NOW(), $4)`,
+        [restaurantId, productName, item.quantitySold, null]
       );
 
       continue;
@@ -166,9 +166,9 @@ async function applyImport(tx, importId, restaurantId, userId, items, fileHash, 
     }
 
     await tx(
-      `INSERT INTO pos_sales (restaurant_id, provider, product_name, quantity, sold_at)
-       VALUES ($1, 'flatpay', $2, $3, NOW())`,
-      [restaurantId, productName, quantitySold]
+      `INSERT INTO pos_sales (restaurant_id, provider, product_name, quantity, sold_at, unit)
+       VALUES ($1, 'flatpay', $2, $3, NOW(), $4)`,
+      [restaurantId, productName, quantitySold, item.salesUnit || null]
     );
   }
 }
