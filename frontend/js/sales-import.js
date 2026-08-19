@@ -205,7 +205,7 @@ async function loadSalesSummary(period) {
     } else {
       html += `<table class="staff-table"><thead><tr><th>Item</th><th>Quantity Sold</th></tr></thead><tbody>`;
       summary.forEach(s => {
-        html += `<tr><td>${escapeHtml(s.itemName)}</td><td>${s.totalSold}</td></tr>`;
+        html += `<tr><td>${escapeHtml(s.product || s.itemName || 'Unknown')}</td><td>${s.quantity ?? s.totalSold ?? 0}</td></tr>`;
       });
       html += '</tbody></table>';
     }
