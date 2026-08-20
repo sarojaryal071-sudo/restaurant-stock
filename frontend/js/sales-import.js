@@ -4,7 +4,20 @@ function showSalesDetail() {
   const content = document.getElementById('settingsDetailContent');
   if (!content) return;
   content.innerHTML = `
-    <div class="sales-summary-card" style="margin-top:0;">
+    <div id="salesUploadSection" class="sales-summary-card" style="margin-top:0;">
+      <div class="sales-summary-header">
+        <div class="sales-summary-title">Upload Sales CSV</div>
+        <div class="sales-summary-desc">Import a new POS sales report.</div>
+      </div>
+      <label class="file-upload-wrap" for="salesCsvFile">
+        <span class="file-upload-btn">Choose CSV File</span>
+        <span class="file-upload-filename" id="salesCsvFileName">No file selected</span>
+      </label>
+      <input type="file" id="salesCsvFile" accept=".csv" class="file-upload-input">
+      <div id="salesImportPreview"></div>
+    </div>
+
+    <div class="sales-summary-card">
       <div class="sales-summary-header">
         <div class="sales-summary-title">Sales Summary</div>
         <div class="sales-summary-desc">Track sales, recipes, inventory deductions, and imported sales reports.</div>
@@ -38,19 +51,6 @@ function showSalesDetail() {
         <div class="sales-summary-desc">Sales reports imported during the selected period.</div>
       </div>
       <div id="salesImportBatchesContent"></div>
-    </div>
-
-    <div id="salesUploadSection" class="sales-summary-card" style="margin-top:var(--space-3);">
-      <div class="sales-summary-header">
-        <div class="sales-summary-title">Upload Sales CSV</div>
-        <div class="sales-summary-desc">Import a new POS sales report.</div>
-      </div>
-      <label class="file-upload-wrap" for="salesCsvFile">
-        <span class="file-upload-btn">Choose CSV File</span>
-        <span class="file-upload-filename" id="salesCsvFileName">No file selected</span>
-      </label>
-      <input type="file" id="salesCsvFile" accept=".csv" class="file-upload-input">
-      <div id="salesImportPreview"></div>
     </div>
   `;
 
