@@ -104,7 +104,7 @@ const modalOverlays = [
   'actionSheetOverlay', 'editItemOverlay', 'confirmOverlay', 'categoryDialogOverlay',
   'addModalOverlay', 'resetModalOverlay', 'recipeModalOverlay', 'resolveAllocationModal',
   'staffAddModalOverlay', 'staffEditModalOverlay', 'adjustReasonModalOverlay',
-  'packageManagerModalOverlay', 'purchaseModalOverlay', 'purchaseDetailsModalOverlay'
+  'packageManagerModalOverlay', 'purchaseModalOverlay', 'purchaseDetailsModalOverlay', 'salesImportDetailsModalOverlay'
 ];
 
 modalOverlays.forEach(id => {

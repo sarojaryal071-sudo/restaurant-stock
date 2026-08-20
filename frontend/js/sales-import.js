@@ -4,10 +4,46 @@ function showSalesDetail() {
   const content = document.getElementById('settingsDetailContent');
   if (!content) return;
   content.innerHTML = `
-    <div id="salesImportSection" class="sales-summary-card" style="margin-top:0;">
+    <div class="sales-summary-card" style="margin-top:0;">
       <div class="sales-summary-header">
-        <div class="sales-summary-title">Sales Import</div>
-        <div class="sales-summary-desc">Import your POS sales report to automatically deduct sold drinks from inventory.</div>
+        <div class="sales-summary-title">Sales Summary</div>
+        <div class="sales-summary-desc">Track sales, recipes, inventory deductions, and imported sales reports.</div>
+      </div>
+      <div class="segmented-control" id="salesPeriodControl">
+        <button class="segmented-btn active" data-period="today">Today</button>
+        <button class="segmented-btn" data-period="7days">Last 7 days</button>
+        <button class="segmented-btn" data-period="30days">Last 30 days</button>
+        <button class="segmented-btn" data-period="month">This Month</button>
+      </div>
+    </div>
+
+    <div id="salesOverviewSection" class="sales-summary-card">
+      <div class="sales-summary-header">
+        <div class="sales-summary-title">Sales Overview</div>
+      </div>
+      <div id="salesOverviewContent"></div>
+    </div>
+
+    <div id="salesRecordsSection" class="sales-summary-card">
+      <div class="sales-summary-header">
+        <div class="sales-summary-title">Sales Records</div>
+        <div class="sales-summary-desc">Products sold during the selected period.</div>
+      </div>
+      <div id="salesRecordsContent"></div>
+    </div>
+
+    <div id="salesImportBatchesSection" class="sales-summary-card">
+      <div class="sales-summary-header">
+        <div class="sales-summary-title">Import Batches</div>
+        <div class="sales-summary-desc">Sales reports imported during the selected period.</div>
+      </div>
+      <div id="salesImportBatchesContent"></div>
+    </div>
+
+    <div id="salesUploadSection" class="sales-summary-card" style="margin-top:var(--space-3);">
+      <div class="sales-summary-header">
+        <div class="sales-summary-title">Upload Sales CSV</div>
+        <div class="sales-summary-desc">Import a new POS sales report.</div>
       </div>
       <label class="file-upload-wrap" for="salesCsvFile">
         <span class="file-upload-btn">Choose CSV File</span>
@@ -16,24 +52,20 @@ function showSalesDetail() {
       <input type="file" id="salesCsvFile" accept=".csv" class="file-upload-input">
       <div id="salesImportPreview"></div>
     </div>
-    <div id="salesImportHistorySection" class="sales-summary-card">
-      <div class="sales-summary-header">
-        <div class="sales-summary-title">Sales Import History</div>
-        <div class="sales-summary-desc">Previously imported sales reports and their status.</div>
-      </div>
-      <div id="salesImportHistoryContent"></div>
-    </div>
-    <div id="salesSummarySection" class="sales-summary-card">
-      <div class="sales-summary-header">
-        <div class="sales-summary-title">Sales Summary</div>
-        <div class="sales-summary-desc">Quantities sold per item for the selected period.</div>
-      </div>
-      <div id="salesSummaryContent"></div>
-    </div>
   `;
+
   document.getElementById('salesCsvFile').addEventListener('change', handleSalesFileSelect);
-  loadSalesImportHistory();
+
+  document.querySelectorAll('#salesPeriodControl .segmented-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#salesPeriodControl .segmented-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      loadSalesSummary(btn.dataset.period);
+    });
+  });
+
   loadSalesSummary('today');
+  loadSalesImportHistory();
 }
 
 async function handleSalesFileSelect(e) {
@@ -196,48 +228,77 @@ function renderSalesPreview() {
 }
 
 async function loadSalesSummary(period) {
-  const summaryDiv = document.getElementById('salesSummaryContent');
-  if (!summaryDiv) return;
-  summaryDiv.innerHTML = '<div class="loading-spinner" style="margin:1rem auto;"></div>';
+  const overviewDiv = document.getElementById('salesOverviewContent');
+  const recordsDiv = document.getElementById('salesRecordsContent');
+  if (!overviewDiv || !recordsDiv) return;
+
+  overviewDiv.innerHTML = '<div class="loading-spinner" style="margin:1rem auto;"></div>';
+  recordsDiv.innerHTML = '';
+
   try {
     const data = await api.getSalesSummary(period);
     const summary = (data && data.summary && Array.isArray(data.summary)) ? data.summary : [];
 
-    let html = `<div style="display:flex;gap:var(--space-2);margin-bottom:var(--space-3);flex-wrap:wrap;">
-      <button class="btn btn-ghost btn-small period-btn" data-period="today">Today</button>
-      <button class="btn btn-ghost btn-small period-btn" data-period="7days">Last 7 days</button>
-      <button class="btn btn-ghost btn-small period-btn" data-period="30days">Last 30 days</button>
-      <button class="btn btn-ghost btn-small period-btn" data-period="month">This Month</button>
-    </div>`;
-
-    if (!summary.length) {
-      html += '<p style="font-size:0.82rem;color:var(--paper-faint);">No sales recorded for this period.</p>';
-    } else {
-      html += `<table class="staff-table"><thead><tr><th>Entry Date</th><th>Product</th><th>Quantity Sold</th><th>Unit</th></tr></thead><tbody>`;
-      summary.forEach(s => {
-        const productName = s.product || s.itemName || 'Unknown';
-        const quantity = s.quantity ?? s.totalSold ?? 0;
-        const entryDate = s.date || '';
-        const unitLabel = s.unit || '—';
-        html += `<tr>
-          <td>${escapeHtml(entryDate)}</td>
-          <td>${escapeHtml(productName)}</td>
-          <td>${quantity}</td>
-          <td>${escapeHtml(unitLabel)}</td>
-        </tr>`;
-      });
-      html += '</tbody></table>';
-    }
-
-    summaryDiv.innerHTML = html;
-
-    summaryDiv.querySelectorAll('.period-btn').forEach(btn => {
-      if (btn.dataset.period === period) btn.classList.add('btn-gold');
-      btn.addEventListener('click', () => loadSalesSummary(btn.dataset.period));
-    });
+    renderSalesOverview(summary);
+    renderSalesRecords(summary);
   } catch (err) {
-    summaryDiv.innerHTML = '<p style="font-size:0.82rem;color:var(--danger);">Failed to load sales summary.</p>';
+    overviewDiv.innerHTML = '<div class="sales-state-box">Failed to load sales data.</div>';
+    recordsDiv.innerHTML = '';
   }
+}
+
+function renderSalesOverview(summary) {
+  const overviewDiv = document.getElementById('salesOverviewContent');
+  if (!overviewDiv) return;
+
+  const totalUnits = summary.reduce((sum, s) => sum + (parseFloat(s.quantity) || 0), 0);
+  const totalProducts = summary.length;
+
+  overviewDiv.innerHTML = `
+    <div class="sales-overview-grid">
+      <div class="sales-overview-card">
+        <div class="sales-overview-num">${totalProducts}</div>
+        <div class="sales-overview-label">Products Sold</div>
+      </div>
+      <div class="sales-overview-card">
+        <div class="sales-overview-num">${totalUnits}</div>
+        <div class="sales-overview-label">Units Sold</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderSalesRecords(summary) {
+  const recordsDiv = document.getElementById('salesRecordsContent');
+  if (!recordsDiv) return;
+
+  if (!summary.length) {
+    recordsDiv.innerHTML = '<div class="sales-state-box">No sales recorded for this period.</div>';
+    return;
+  }
+
+  let html = `<table class="sales-records-table">
+    <thead><tr><th>Product</th><th>Quantity</th><th>Type</th></tr></thead><tbody>`;
+
+  summary.forEach(s => {
+    const productName = s.product || s.itemName || 'Unknown';
+    const quantity = s.quantity ?? s.totalSold ?? 0;
+    const type = s.type || 'Sales'; // Fallback if backend provides type later
+
+    let typeLabel = '';
+    if (type === 'inventory') typeLabel = '<span class="sales-record-type">📦 Inventory</span>';
+    else if (type === 'recipe') typeLabel = '<span class="sales-record-type">🥃 Recipe</span>';
+    else typeLabel = '<span class="sales-record-type">—</span>';
+
+    html += `<tr>
+      <td>${escapeHtml(productName)}</td>
+      <td>${quantity}</td>
+      <td>${typeLabel}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  recordsDiv.innerHTML = html;
 }
 
 async function loadSalesImportHistory() {
@@ -254,7 +315,7 @@ async function loadSalesImportHistory() {
 }
 
 function renderSalesImportHistory(imports) {
-  const container = document.getElementById('salesImportHistoryContent');
+  const container = document.getElementById('salesImportBatchesContent');
   if (!container) return;
 
   if (!imports.length) {
@@ -274,31 +335,46 @@ function renderSalesImportHistory(imports) {
     const productCount = products.length;
     const totalSales = products.reduce((sum, p) => sum + (parseFloat(p.quantity) || 0), 0);
 
-    const cancelBtn = imp.status !== 'cancelled'
-      ? `<button class="btn btn-danger btn-small sales-import-cancel-btn" data-import-id="${imp.id}">Cancel Import</button>`
-      : '<div style="color:var(--paper-faint);font-size:0.74rem;margin-top:6px;">Stock deductions reversed</div>';
-
     html += `
-      <div class="purchase-card" data-import-id="${imp.id}">
-        <div class="purchase-card-header">
-          <span class="purchase-card-time">${escapeHtml(dateLabel)}${timeLabel ? ' · ' + escapeHtml(timeLabel) : ''}</span>
+      <div class="sales-import-batch" data-import-id="${imp.id}">
+        <div class="sales-import-batch-header">
+          <span class="sales-import-batch-time">${escapeHtml(dateLabel)}${timeLabel ? ' · ' + escapeHtml(timeLabel) : ''}</span>
           ${statusBadge}
-          <span class="purchase-card-id">${imp.id ? '#' + imp.id.slice(0, 8) : ''}</span>
+          <button class="sales-import-context-btn" data-import-id="${imp.id}" aria-label="Import actions">•••</button>
         </div>
-        <div class="purchase-card-body">
-          ${productCount} product${productCount === 1 ? '' : 's'} · ${totalSales} sales
-        </div>
-        <div style="display:flex;justify-content:flex-end;margin-top:8px;">${cancelBtn}</div>
+        <div class="sales-import-batch-meta">${productCount} product${productCount === 1 ? '' : 's'} · ${totalSales} sales</div>
+        ${imp.status === 'cancelled' ? '<div style="color:var(--paper-faint);font-size:0.74rem;margin-top:6px;">Stock deductions reversed</div>' : ''}
       </div>
     `;
   });
 
   container.innerHTML = html;
 
-  container.querySelectorAll('.sales-import-cancel-btn').forEach(btn => {
+  container.querySelectorAll('.sales-import-context-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      confirmCancelSalesImport(btn.dataset.importId);
+      const importId = btn.dataset.importId;
+      const importData = imports.find(i => i.id === importId);
+      if (!importData) return;
+
+      const menuItems = [
+        {
+          label: 'View import details',
+          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
+          action: () => openSalesImportDetails(importData)
+        }
+      ];
+
+      if (importData.status !== 'cancelled') {
+        menuItems.push({
+          label: 'Cancel import',
+          icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+          danger: true,
+          action: () => confirmCancelSalesImport(importData.id)
+        });
+      }
+
+      openCtx(btn, menuItems);
     });
   });
 }
@@ -322,8 +398,66 @@ function confirmCancelSalesImport(importId) {
   );
 }
 
+function openSalesImportDetails(importData) {
+  const modal = document.getElementById('salesImportDetailsModalOverlay');
+  const content = document.getElementById('salesImportDetailsContent');
+  const cancelBtn = document.getElementById('salesImportDetailsCancelBtn');
+  if (!modal || !content) return;
+
+  const created = importData.createdAt ? new Date(importData.createdAt) : null;
+  const dateLabel = created && !isNaN(created) ? fmtDate(created) : '';
+  const timeLabel = created && !isNaN(created) ? fmtTime(created) : '';
+  const products = importData.items || [];
+  const productCount = products.length;
+  const totalSales = products.reduce((sum, p) => sum + (parseFloat(p.quantity) || 0), 0);
+
+  let html = `
+    <div style="margin-bottom:var(--space-2);color:var(--paper-dim);font-size:0.85rem;">
+      ${escapeHtml(dateLabel)}${timeLabel ? ' · ' + escapeHtml(timeLabel) : ''}
+      <br>Import #${escapeHtml(importData.id ? importData.id.slice(0, 8) : '')}
+    </div>
+    <div style="margin-bottom:var(--space-2);color:var(--paper-faint);font-size:0.78rem;">
+      ${productCount} product${productCount === 1 ? '' : 's'} · ${totalSales} sales
+    </div>
+    <div style="border-top:1px solid var(--line);margin-top:var(--space-2);padding-top:var(--space-2);">
+  `;
+
+  products.forEach(item => {
+    const quantity = parseFloat(item.quantity) || 0;
+    const productName = item.productName || 'Unknown';
+    const unit = item.unit || '—';
+    html += `
+      <div class="sales-import-detail-item">
+        <span class="sales-import-detail-name">${escapeHtml(productName)}</span>
+        <span class="sales-import-detail-qty">${quantity} ${escapeHtml(unit)}</span>
+      </div>
+    `;
+  });
+
+  html += '</div>';
+  content.innerHTML = html;
+
+  if (importData.status !== 'cancelled') {
+    cancelBtn.classList.remove('hidden');
+    cancelBtn.onclick = () => {
+      closeModal(modal);
+      confirmCancelSalesImport(importData.id);
+    };
+  } else {
+    cancelBtn.classList.add('hidden');
+    cancelBtn.onclick = null;
+  }
+
+  openModal(modal);
+}
+
+document.getElementById('salesImportDetailsCloseBtn').addEventListener('click', () => {
+  closeModal(document.getElementById('salesImportDetailsModalOverlay'));
+});
+
 window.showSalesDetail = showSalesDetail;
 window.handleSalesFileSelect = handleSalesFileSelect;
 window.renderSalesPreview = renderSalesPreview;
 window.loadSalesSummary = loadSalesSummary;
 window.loadSalesImportHistory = loadSalesImportHistory;
+window.openSalesImportDetails = openSalesImportDetails;
