@@ -278,22 +278,21 @@ function renderSalesRecords(summary) {
   }
 
   let html = `<table class="sales-records-table">
-    <thead><tr><th>Product</th><th>Quantity</th><th>Type</th></tr></thead><tbody>`;
+    <thead><tr><th>Date</th><th>Product</th><th>Quantity</th><th>Unit</th></tr></thead><tbody>`;
 
   summary.forEach(s => {
     const productName = s.product || s.itemName || 'Unknown';
     const quantity = s.quantity ?? s.totalSold ?? 0;
-    const type = s.type || 'Sales'; // Fallback if backend provides type later
-
-    let typeLabel = '';
-    if (type === 'inventory') typeLabel = '<span class="sales-record-type">📦 Inventory</span>';
-    else if (type === 'recipe') typeLabel = '<span class="sales-record-type">🥃 Recipe</span>';
-    else typeLabel = '<span class="sales-record-type">—</span>';
+    const unit = s.unit || '—';
+    const saleDate = s.date
+      ? new Date(s.date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+      : '—';
 
     html += `<tr>
+      <td>${escapeHtml(saleDate)}</td>
       <td>${escapeHtml(productName)}</td>
       <td>${quantity}</td>
-      <td>${typeLabel}</td>
+      <td>${escapeHtml(unit)}</td>
     </tr>`;
   });
 
@@ -302,7 +301,7 @@ function renderSalesRecords(summary) {
 }
 
 async function loadSalesImportHistory() {
-  const container = document.getElementById('salesImportHistoryContent');
+  const container = document.getElementById('salesImportBatchesContent');
   if (!container) return;
   container.innerHTML = '<div class="loading-spinner" style="margin:1rem auto;"></div>';
   try {
