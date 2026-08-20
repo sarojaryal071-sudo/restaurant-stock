@@ -292,9 +292,14 @@ async function cancelSalesImport(restaurantId, userId, importId) {
   });
 }
 
+async function listSalesImports(restaurantId, start, end) {
+  return repository.listImports(restaurantId, start, end);
+}
+
 module.exports = {
   previewSales,
   applySalesImport,
   cancelSalesImport,
+  listSalesImports,
   saveProductMapping: repository.saveProductMapping
 };

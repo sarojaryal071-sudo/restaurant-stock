@@ -144,10 +144,11 @@ const api = {
   listStaff: () => apiCall('GET', '/staff'),
   createStaff: (name, pin) => apiCall('POST', '/staff', { name, pin }),
   updateStaff: (id, data) => apiCall('PATCH', `/staff/${id}`, data),
-  getSalesSummary: (period) => apiCall('GET', '/pos/sales?period=' + encodeURIComponent(period)),
-  saveSalesMapping: (sourceProductName, itemId) => apiCall('POST', '/pos/sales/mappings', { sourceProductName, itemId }),
-  applySalesImport: (fileHash, periodStart, periodEnd, items) => apiCall('POST', '/pos/sales/import/apply', { fileHash, periodStart, periodEnd, items })
-};
+        getSalesSummary: (period) => apiCall('GET', '/pos/sales?period=' + encodeURIComponent(period)),
+        saveSalesMapping: (sourceProductName, itemId) => apiCall('POST', '/pos/sales/mappings', { sourceProductName, itemId }),
+        applySalesImport: (fileHash, periodStart, periodEnd, items) => apiCall('POST', '/pos/sales/import/apply', { fileHash, periodStart, periodEnd, items }),
+        getSalesImportHistory: () => apiCall('GET', '/pos/sales/import/history'),
+        cancelSalesImport: (id) => apiCall('POST', `/pos/sales/import/${id}/cancel`, {})};
 
 window.apiCall = apiCall;
 window.apiUpload = apiUpload;

@@ -16,6 +16,13 @@ function showSalesDetail() {
       <input type="file" id="salesCsvFile" accept=".csv" class="file-upload-input">
       <div id="salesImportPreview"></div>
     </div>
+    <div id="salesImportHistorySection" class="sales-summary-card">
+      <div class="sales-summary-header">
+        <div class="sales-summary-title">Sales Import History</div>
+        <div class="sales-summary-desc">Previously imported sales reports and their status.</div>
+      </div>
+      <div id="salesImportHistoryContent"></div>
+    </div>
     <div id="salesSummarySection" class="sales-summary-card">
       <div class="sales-summary-header">
         <div class="sales-summary-title">Sales Summary</div>
@@ -25,6 +32,7 @@ function showSalesDetail() {
     </div>
   `;
   document.getElementById('salesCsvFile').addEventListener('change', handleSalesFileSelect);
+  loadSalesImportHistory();
   loadSalesSummary('today');
 }
 
@@ -232,7 +240,90 @@ async function loadSalesSummary(period) {
   }
 }
 
+async function loadSalesImportHistory() {
+  const container = document.getElementById('salesImportHistoryContent');
+  if (!container) return;
+  container.innerHTML = '<div class="loading-spinner" style="margin:1rem auto;"></div>';
+  try {
+    const data = await api.getSalesImportHistory();
+    const imports = (data && Array.isArray(data.imports)) ? data.imports : [];
+    renderSalesImportHistory(imports);
+  } catch (err) {
+    container.innerHTML = `<div class="sales-state-box">Could not load sales import history. ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function renderSalesImportHistory(imports) {
+  const container = document.getElementById('salesImportHistoryContent');
+  if (!container) return;
+
+  if (!imports.length) {
+    container.innerHTML = '<div class="sales-state-box">No sales imports recorded yet.</div>';
+    return;
+  }
+
+  let html = '';
+  imports.forEach(imp => {
+    const created = imp.createdAt ? new Date(imp.createdAt) : null;
+    const dateLabel = created && !isNaN(created) ? fmtDate(created) : '';
+    const timeLabel = created && !isNaN(created) ? fmtTime(created) : '';
+    const statusBadge = imp.status === 'cancelled'
+      ? '<span class="badge-inactive">CANCELLED</span>'
+      : '<span class="badge-active">ACTIVE</span>';
+    const products = imp.items || [];
+    const productCount = products.length;
+    const totalSales = products.reduce((sum, p) => sum + (parseFloat(p.quantity) || 0), 0);
+
+    const cancelBtn = imp.status !== 'cancelled'
+      ? `<button class="btn btn-danger btn-small sales-import-cancel-btn" data-import-id="${imp.id}">Cancel Import</button>`
+      : '<div style="color:var(--paper-faint);font-size:0.74rem;margin-top:6px;">Stock deductions reversed</div>';
+
+    html += `
+      <div class="purchase-card" data-import-id="${imp.id}">
+        <div class="purchase-card-header">
+          <span class="purchase-card-time">${escapeHtml(dateLabel)}${timeLabel ? ' · ' + escapeHtml(timeLabel) : ''}</span>
+          ${statusBadge}
+          <span class="purchase-card-id">${imp.id ? '#' + imp.id.slice(0, 8) : ''}</span>
+        </div>
+        <div class="purchase-card-body">
+          ${productCount} product${productCount === 1 ? '' : 's'} · ${totalSales} sales
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:8px;">${cancelBtn}</div>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+
+  container.querySelectorAll('.sales-import-cancel-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      confirmCancelSalesImport(btn.dataset.importId);
+    });
+  });
+}
+
+function confirmCancelSalesImport(importId) {
+  openConfirm(
+    'Cancel Sales Import?',
+    'This will reverse the stock deductions created by this sales import.<br>This action cannot be undone.',
+    async () => {
+      try {
+        await api.cancelSalesImport(importId);
+        toast('Sales import cancelled and stock restored.');
+        await loadSalesImportHistory();
+        await loadSalesSummary('today');
+        await loadInventory();
+      } catch (err) {
+        toast(err.message || 'Failed to cancel sales import.', true);
+      }
+    },
+    'Cancel Import'
+  );
+}
+
 window.showSalesDetail = showSalesDetail;
 window.handleSalesFileSelect = handleSalesFileSelect;
 window.renderSalesPreview = renderSalesPreview;
 window.loadSalesSummary = loadSalesSummary;
+window.loadSalesImportHistory = loadSalesImportHistory;

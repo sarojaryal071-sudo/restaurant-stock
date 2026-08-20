@@ -62,4 +62,16 @@ async function cancel(req, res) {
   }
 }
 
-module.exports = { preview, saveMapping, apply, cancel };
+async function history(req, res) {
+  try {
+    const { restaurantId } = req.auth;
+    const { start, end } = req.query;
+    const imports = await service.listSalesImports(restaurantId, start, end);
+    res.json({ ok: true, imports });
+  } catch (err) {
+    console.error('sales import history error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
+module.exports = { preview, saveMapping, apply, cancel, history };

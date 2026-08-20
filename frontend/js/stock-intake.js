@@ -322,6 +322,10 @@ function renderPurchaseRegister(intakes) {
             </div>`
           : '';
 
+        const cancelledNote = intake.status === 'cancelled'
+          ? '<div style="color:var(--paper-faint);font-size:0.74rem;margin-top:6px;">Stock effect reversed</div>'
+          : '';
+
         html += `<div class="purchase-card" data-intake-id="${intake.id}">
           <div class="purchase-card-header">
             <span class="purchase-card-time">${escapeHtml(enteredTime ? 'Entered ' + enteredTime : '')}</span>
@@ -329,7 +333,7 @@ function renderPurchaseRegister(intakes) {
             <span class="purchase-card-id">${intake.id ? '#' + intake.id.slice(0, 8) : ''}</span>
           </div>
           ${actionButtons}
-          <div class="purchase-card-body">${itemRows || '<div class="purchase-card-item"><span class="purchase-item-name">No items</span></div>'}</div>
+          <div class="purchase-card-body">${itemRows || '<div class="purchase-card-item"><span class="purchase-item-name">No items</span></div>'}${cancelledNote}</div>
         </div>`;
       });
     });

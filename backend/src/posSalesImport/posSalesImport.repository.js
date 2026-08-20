@@ -243,11 +243,66 @@ async function cancelImport(tx, importId, restaurantId, userId) {
   );
 }
 
+async function listImports(restaurantId, start, end) {
+  let sql = `
+    SELECT si.id,
+           si.created_at,
+           si.status,
+           si.cancelled_at,
+           ps.product_name,
+           ps.quantity,
+           ps.unit,
+           ps.sold_at
+    FROM sales_imports si
+    LEFT JOIN pos_sales ps ON ps.sales_import_id = si.id
+    WHERE si.restaurant_id = $1
+  `;
+
+  const params = [restaurantId];
+
+  if (start) {
+    sql += ` AND si.created_at >= $${params.push(start)}`;
+  }
+
+  if (end) {
+    sql += ` AND si.created_at <= $${params.push(end)}`;
+  }
+
+  sql += ` ORDER BY si.created_at DESC, ps.sold_at ASC`;
+
+  const res = await query(sql, params);
+  const map = new Map();
+
+  for (const row of res.rows) {
+    if (!map.has(row.id)) {
+      map.set(row.id, {
+        id: row.id,
+        createdAt: row.created_at,
+        status: row.status,
+        cancelledAt: row.cancelled_at || null,
+        items: []
+      });
+    }
+
+    if (row.product_name) {
+      map.get(row.id).items.push({
+        productName: row.product_name,
+        quantity: parseFloat(row.quantity) || 0,
+        unit: row.unit || null,
+        soldAt: row.sold_at
+      });
+    }
+  }
+
+  return Array.from(map.values());
+}
+
 module.exports = {
   computeFileHash,
   saveProductMapping,
   getMappings,
   importExists,
   applyImport,
-  cancelImport
+  cancelImport,
+  listImports
 };

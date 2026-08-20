@@ -313,6 +313,12 @@ app.get('/api/pos/sales', (req, res, next) => {
 // ---------- Sales Import (manager only) ----------
 const posSalesImportActions = require('./src/posSalesImport/posSalesImport.actions');
 
+app.get('/api/pos/sales/import/history', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => posSalesImportActions.history(req, res));
+  });
+});
+
 app.post('/api/pos/sales/import/preview', (req, res, next) => {
   requireAuth(req, res, () => {
     requirePermission('settings', 'manage')(req, res, () => posSalesImportActions.preview(req, res));
