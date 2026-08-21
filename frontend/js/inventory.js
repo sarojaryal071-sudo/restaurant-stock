@@ -112,6 +112,13 @@ function renderItemRowOrig(c, it) {
   pb.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
   pb.addEventListener('click', e => { e.stopPropagation(); changeQty(it.id, 1); });
         ctrls.appendChild(mb); ctrls.appendChild(qtyWrap); ctrls.appendChild(pb);
+
+        const hasRemainder = Number(it.remainingVolume) > 0 || Math.floor(Number(it.qty)) !== Number(it.qty);
+        if (it.remainingVolume !== undefined && it.remainingVolume !== null && it.remainingVolumeUnit && hasRemainder) {
+          remaining.textContent = `${Math.floor(Number(it.qty) || 0)} : ${it.remainingVolume} ${it.remainingVolumeUnit}`;
+          remaining.classList.remove('hidden');
+        }
+
   const editable = it.editable !== false && it.locked !== true;
   const canEditItem = can('inventory', 'edit');
   const canDeleteItem = can('inventory', 'delete');
