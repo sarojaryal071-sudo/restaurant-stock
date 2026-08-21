@@ -190,6 +190,10 @@ function renderSalesPreview() {
       applyBtn.textContent = 'Applying…';
 
       try {
+        clearSessionCache(CACHE_KEYS.salesSummary);
+        clearSessionCache(CACHE_KEYS.salesImports);
+        clearSessionCache(CACHE_KEYS.inventory);
+
         await api.applySalesImport(
           salesFileHash,
           salesPeriodStart,
@@ -232,6 +236,14 @@ async function loadSalesSummary(period) {
   const recordsDiv = document.getElementById('salesRecordsContent');
   if (!overviewDiv || !recordsDiv) return;
 
+  const cacheKey = CACHE_KEYS.salesSummary + ':' + period;
+  const cached = getSessionCache(cacheKey);
+  if (cached) {
+    renderSalesOverview(cached);
+    renderSalesRecords(cached);
+    return;
+  }
+
   overviewDiv.innerHTML = '<div class="loading-spinner" style="margin:1rem auto;"></div>';
   recordsDiv.innerHTML = '';
 
@@ -239,6 +251,7 @@ async function loadSalesSummary(period) {
     const data = await api.getSalesSummary(period);
     const summary = (data && data.summary && Array.isArray(data.summary)) ? data.summary : [];
 
+    setSessionCache(cacheKey, summary);
     renderSalesOverview(summary);
     renderSalesRecords(summary);
   } catch (err) {
@@ -303,10 +316,18 @@ function renderSalesRecords(summary) {
 async function loadSalesImportHistory() {
   const container = document.getElementById('salesImportBatchesContent');
   if (!container) return;
+
+  const cached = getSessionCache(CACHE_KEYS.salesImports);
+  if (cached) {
+    renderSalesImportHistory(cached);
+    return;
+  }
+
   container.innerHTML = '<div class="loading-spinner" style="margin:1rem auto;"></div>';
   try {
     const data = await api.getSalesImportHistory();
     const imports = (data && Array.isArray(data.imports)) ? data.imports : [];
+    setSessionCache(CACHE_KEYS.salesImports, imports);
     renderSalesImportHistory(imports);
   } catch (err) {
     container.innerHTML = `<div class="sales-state-box">Could not load sales import history. ${escapeHtml(err.message)}</div>`;
@@ -384,6 +405,10 @@ function confirmCancelSalesImport(importId) {
     'This will reverse the stock deductions created by this sales import.<br>This action cannot be undone.',
     async () => {
       try {
+        clearSessionCache(CACHE_KEYS.salesSummary);
+        clearSessionCache(CACHE_KEYS.salesImports);
+        clearSessionCache(CACHE_KEYS.inventory);
+
         await api.cancelSalesImport(importId);
         toast('Sales import cancelled and stock restored.');
         await loadSalesImportHistory();

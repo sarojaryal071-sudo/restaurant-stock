@@ -241,12 +241,21 @@ function openEditPurchaseModal(intake) {
 async function loadPurchaseRegister() {
   const container = document.getElementById('stockIntakeContainer');
   if (!container) return;
+
+  const cached = getSessionCache(CACHE_KEYS.purchases);
+  if (cached) {
+    cachedStockIntakeData = cached;
+    renderPurchaseRegister(cached);
+    return;
+  }
+
   container.innerHTML = '<div class="loading-spinner" style="margin:2rem auto;"></div>';
   try {
     await loadPackagesIfNeeded();
     const data = await api.getStockIntake();
     const intakes = (data && Array.isArray(data.intakes)) ? data.intakes : [];
     cachedStockIntakeData = intakes;
+    setSessionCache(CACHE_KEYS.purchases, intakes);
     renderPurchaseRegister(intakes);
   } catch (e) {
     container.innerHTML = `<div class="empty-state show"><div>Could not load purchase history. ${escapeHtml(e.message)}</div></div>`;
@@ -429,6 +438,9 @@ function confirmCancelPurchase(intake) {
     'Cancel this purchase? The stock previously received will be reversed.',
     async () => {
       try {
+        clearSessionCache(CACHE_KEYS.purchases);
+        clearSessionCache(CACHE_KEYS.inventory);
+
         await api.cancelStockIntake(intake.id);
         toast('Purchase cancelled. Stock corrected.');
         await loadPurchaseRegister();
@@ -473,26 +485,29 @@ document.getElementById('purchaseSaveBtn').addEventListener('click', async () =>
   const btn = document.getElementById('purchaseSaveBtn');
   btn.disabled = true;
   btn.textContent = 'Saving…';
-  try {
-    if (editingPurchaseId) {
-      await api.updateStockIntake(editingPurchaseId, items, purchaseDate);
-      toast('Purchase updated. Inventory corrected.');
-    } else {
-      await api.createStockIntake(items, purchaseDate);
-      toast('Purchase recorded. Inventory updated.');
-    }
+        try {
+          clearSessionCache(CACHE_KEYS.purchases);
+          clearSessionCache(CACHE_KEYS.inventory);
 
-    closeModal(document.getElementById('purchaseModalOverlay'));
-    clearPurchaseModal();
-    editingPurchaseId = null;
-    await loadPurchaseRegister();
-    await loadInventory();
-  } catch (e) {
-    toast(e.message || 'Failed to save purchase.', true);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = editingPurchaseId ? 'Save Changes' : 'Save Purchase';
-  }
+          if (editingPurchaseId) {
+            await api.updateStockIntake(editingPurchaseId, items, purchaseDate);
+            toast('Purchase updated. Inventory corrected.');
+          } else {
+            await api.createStockIntake(items, purchaseDate);
+            toast('Purchase recorded. Inventory updated.');
+          }
+
+          closeModal(document.getElementById('purchaseModalOverlay'));
+          clearPurchaseModal();
+          editingPurchaseId = null;
+          await loadPurchaseRegister();
+          await loadInventory();
+        } catch (e) {
+          toast(e.message || 'Failed to save purchase.', true);
+        } finally {
+          btn.disabled = false;
+          btn.textContent = editingPurchaseId ? 'Save Changes' : 'Save Purchase';
+        }
 });
 
 window.buildItemOptionsHtml = buildItemOptionsHtml;

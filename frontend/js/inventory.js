@@ -424,42 +424,35 @@ arCancelBtn.addEventListener('click', () => {
   pendingAdjustmentUpdates = [];
 });
 
-arConfirmBtn.addEventListener('click', async () => {
-  const rows = arList.querySelectorAll('.adjust-reason-row');
-  const payload = [];
-  rows.forEach(row => {
-    const itemId = row.dataset.itemId;
-    const sel = row.querySelector('.adjust-reason-select');
-    const note = row.querySelector('.adjust-reason-note');
-    const u = pendingAdjustmentUpdates.find(x => x.itemId === itemId);
-    if (u) payload.push({ itemId: u.itemId, quantity: u.quantity, reason: sel.value, note: (sel.value && sel.value.includes('other_')) ? note.value.trim() : '' });
-  });
-  arConfirmBtn.disabled = true;
-  arConfirmBtn.textContent = 'Saving…';
-  isSaving = true;
-  svBtn.disabled = true;
-  svBtn.classList.add('is-saving');
-  document.getElementById('saveBtnLabel').textContent = 'Saving…';
-  try {
-    await api.saveStock(payload);
-    setOnline(true);
-    closeModal(arModalOverlay);
-    pendingAdjustmentUpdates = [];
-    toast('Inventory adjustment saved.');
-    await loadInventory();
-  } catch (e) {
-    setOnline(false);
-    toast(e.message || 'Failed to save inventory.', true);
-  } finally {
-    arConfirmBtn.disabled = false;
-    arConfirmBtn.textContent = 'Save Changes';
-    isSaving = false;
-    svBtn.disabled = false;
-    svBtn.classList.remove('is-saving');
-    document.getElementById('saveBtnLabel').textContent = 'Save Changes';
-  }
-});
-
+      arConfirmBtn.addEventListener('click', async () => {
+        const rows = arList.querySelectorAll('.adjust-reason-row');
+        const payload = [];
+        rows.forEach(row => {
+          const itemId = row.dataset.itemId;
+          const sel = row.querySelector('.adjust-reason-select');
+          const note = row.querySelector('.adjust-reason-note');
+          const u = pendingAdjustmentUpdates.find(x => x.itemId === itemId);
+          if (u) payload.push({ itemId: u.itemId, quantity: u.quantity, reason: sel.value, note: (sel.value && sel.value.includes('other_')) ? note.value.trim() : '' });
+        });
+        arConfirmBtn.disabled = true; arConfirmBtn.textContent = 'Saving…';
+        isSaving = true; svBtn.disabled = true; svBtn.classList.add('is-saving'); document.getElementById('saveBtnLabel').textContent = 'Saving…';
+        try {
+          await api.saveStock(payload);
+          clearSessionCache(CACHE_KEYS.inventory);
+          setOnline(true);
+          closeModal(arModalOverlay);
+          pendingAdjustmentUpdates = [];
+          toast('Inventory adjustment saved.');
+          await loadInventory();
+        } catch (e) {
+          setOnline(false);
+          toast(e.message || 'Failed to save inventory.', true);
+        } finally {
+          arConfirmBtn.disabled = false; arConfirmBtn.textContent = 'Save Changes';
+          isSaving = false; svBtn.disabled = false; svBtn.classList.remove('is-saving'); document.getElementById('saveBtnLabel').textContent = 'Save Changes';
+        }
+      });
+      
 function doSave() {
   if (isSaving) return;
   const u = dirtyUpdates();
@@ -507,47 +500,41 @@ document.getElementById('exportBtn').addEventListener('click', async () => {
   }
 });
 
-async function loadInventory() {
-  document.getElementById('loadingText').textContent = 'Loading inventory…';
-  if (loadCache()) {
-    render();
-    document.getElementById('loadingScreen').classList.add('fade-out');
-    applySearchFilter();
-    updateDirty();
-  }
-  try {
-    const cats = await api.loadStock();
-    const arr = (cats && Array.isArray(cats.categories)) ? cats.categories : (Array.isArray(cats) ? cats : []);
-    state.categories = arr.map(c => ({
-      id: c.id, name: c.name, icon: c.icon || 'default',
-      items: (c.items || []).map(it => ({
-        id: it.id, name: it.name, qty: Number(it.qty) || 0, custom: !!it.custom,
-        unit: it.unit || undefined, volume: it.volume !== undefined ? it.volume : undefined,
-        volumeUnit: it.volumeUnit || undefined, containerVolume: it.containerVolume,
-        editable: it.editable, locked: it.locked, lastConfirmedQty: Number(it.qty) || 0
-      }))
-    }));
-    saveCache();
-    render();
-  } catch (e) {
-    if (state.categories.length > 0) {
-      toast('Could not refresh inventory. Using cached data.', true);
-    } else {
-      document.getElementById('statusTitle').textContent = 'Could not load stock data';
-      document.getElementById('statusMsg').textContent = e.message || 'Something went wrong.';
-      document.getElementById('statusScreen').classList.remove('hidden');
-      document.getElementById('loadingScreen').classList.add('fade-out');
-      return;
-    }
-  }
-  try {
-    const r = localStorage.getItem(EXPANDED_KEY);
-    expandedState = r ? JSON.parse(r) : {};
-  } catch (e) { expandedState = {}; }
-  if (!Object.keys(expandedState).length && state.categories[0]) expandedState[state.categories[0].id] = true;
-  setOnline(true);
-  document.getElementById('loadingScreen').classList.add('fade-out');
-}
+      async function loadInventory() {
+        document.getElementById('loadingText').textContent = 'Loading inventory…';
+
+        const cachedInventory = getSessionCache(CACHE_KEYS.inventory);
+        if (cachedInventory) {
+          state.categories = cachedInventory;
+          render();
+          document.getElementById('loadingScreen').classList.add('fade-out');
+          applySearchFilter();
+          updateDirty();
+          setOnline(true);
+          return;
+        }
+
+        if (loadCache()) { render(); document.getElementById('loadingScreen').classList.add('fade-out'); applySearchFilter(); updateDirty(); }
+        try {
+          const cats = await api.loadStock();
+          const arr = (cats && Array.isArray(cats.categories)) ? cats.categories : (Array.isArray(cats) ? cats : []);
+          state.categories = arr.map(c => ({ id: c.id, name: c.name, icon: c.icon || 'default', items: (c.items || []).map(it => ({ id: it.id, name: it.name, qty: Number(it.qty) || 0, custom: !!it.custom, unit: it.unit || undefined, volume: it.volume !== undefined ? it.volume : undefined, volumeUnit: it.volumeUnit || undefined, containerVolume: it.containerVolume, editable: it.editable, locked: it.locked, lastConfirmedQty: Number(it.qty) || 0 })) }));
+          saveCache();
+          setSessionCache(CACHE_KEYS.inventory, state.categories);
+          render();
+        } catch (e) {
+          if (state.categories.length > 0) { toast('Could not refresh inventory. Using cached data.', true); }
+          else {
+            document.getElementById('statusTitle').textContent = 'Could not load stock data';
+            document.getElementById('statusMsg').textContent = e.message || 'Something went wrong.';
+            document.getElementById('statusScreen').classList.remove('hidden');
+            document.getElementById('loadingScreen').classList.add('fade-out'); return;
+          }
+        }
+        try { const r = localStorage.getItem(EXPANDED_KEY); expandedState = r ? JSON.parse(r) : {}; } catch (e) { expandedState = {}; }
+        if (!Object.keys(expandedState).length && state.categories[0]) expandedState[state.categories[0].id] = true;
+        setOnline(true); document.getElementById('loadingScreen').classList.add('fade-out');
+      }
 
 window.rootEl = rootEl;
 window.render = render;

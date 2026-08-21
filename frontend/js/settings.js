@@ -224,8 +224,10 @@ function showInventoryBehaviourDetail() {
 
 async function showPermissionsDetail() {
   try {
-    const data = cachedPermissionsData || await api.getPermissions();
-    cachedPermissionsData = data;
+    const cachedPermissions = getSessionCache(CACHE_KEYS.permissions);
+    const data = cachedPermissionsData || cachedPermissions || await api.getPermissions();
+    if (cachedPermissions && !cachedPermissionsData) cachedPermissionsData = cachedPermissions;
+
     const definitions = data && data.definitions ? data.definitions : [];
     const perms = data && data.permissions ? data.permissions : { staff: {}, manager: {} };
     const staffPerms = perms.staff || {};
@@ -276,6 +278,7 @@ async function showPermissionsDetail() {
           if (fullStaff[mod]) fullStaff[mod][perm] = cb.checked;
         });
         await api.updatePermissions('staff', fullStaff);
+        clearSessionCache(CACHE_KEYS.permissions);
         toast('Staff permissions updated.');
       } catch (err) {
         toast(err.message || 'Failed to save permissions', true);
@@ -299,15 +302,21 @@ async function showStaffManagementDetail() {
     content.innerHTML = '<div class="empty-state show"><div>You do not have permission to manage staff.</div></div>';
     return;
   }
-  if (cachedStaffData) {
-    renderStaffList(cachedStaffData);
+
+  const cached = getSessionCache(CACHE_KEYS.staff) || cachedStaffData;
+  if (cached) {
+    cachedStaffData = cached;
+    renderStaffList(cached);
     return;
   }
+
   content.innerHTML = '<div class="loading-spinner" style="margin:2rem auto;"></div>';
   try {
     const data = await api.listStaff();
-    cachedStaffData = data.staff || [];
-    renderStaffList(cachedStaffData);
+    const staff = data.staff || [];
+    cachedStaffData = staff;
+    setSessionCache(CACHE_KEYS.staff, staff);
+    renderStaffList(staff);
   } catch (e) {
     content.innerHTML = `<div class="empty-state show"><div>Could not load staff list. ${escapeHtml(e.message)}</div></div>`;
   }
@@ -382,11 +391,12 @@ document.getElementById('staffAddConfirm').addEventListener('click', async () =>
   btn.disabled = true;
   btn.textContent = 'Creating…';
   try {
-    await api.createStaff(name, pin);
-    toast('Staff created.');
-    closeModal(document.getElementById('staffAddModalOverlay'));
-    cachedStaffData = null;
-    showStaffManagementDetail();
+        await api.createStaff(name, pin);
+        clearSessionCache(CACHE_KEYS.staff);
+        toast('Staff created.');
+        closeModal(document.getElementById('staffAddModalOverlay'));
+        cachedStaffData = null;
+        showStaffManagementDetail();
   } catch (e) {
     toast(e.message || 'Failed to create staff.', true);
   } finally {
@@ -412,12 +422,13 @@ document.getElementById('staffEditConfirm').addEventListener('click', async () =
   btn.disabled = true;
   btn.textContent = 'Saving…';
   try {
-    await api.updateStaff(editingStaffId, payload);
-    toast('Staff updated.');
-    closeModal(document.getElementById('staffEditModalOverlay'));
-    editingStaffId = null;
-    cachedStaffData = null;
-    showStaffManagementDetail();
+        await api.updateStaff(editingStaffId, payload);
+        clearSessionCache(CACHE_KEYS.staff);
+        toast('Staff updated.');
+        closeModal(document.getElementById('staffEditModalOverlay'));
+        editingStaffId = null;
+        cachedStaffData = null;
+        showStaffManagementDetail();
   } catch (e) {
     toast(e.message || 'Failed to update staff.', true);
   } finally {

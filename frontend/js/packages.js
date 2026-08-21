@@ -2,9 +2,18 @@
 
 async function loadPackagesIfNeeded() {
   if (cachedPackagesData) return cachedPackagesData;
+
+  const cached = getSessionCache(CACHE_KEYS.packages);
+  if (cached) {
+    cachedPackagesData = cached;
+    return cached;
+  }
+
   const data = await api.getPackages();
-  cachedPackagesData = (data && Array.isArray(data.packages)) ? data.packages : [];
-  return cachedPackagesData;
+  const packages = (data && Array.isArray(data.packages)) ? data.packages : [];
+  cachedPackagesData = packages;
+  setSessionCache(CACHE_KEYS.packages, packages);
+  return packages;
 }
 
 function packagesForItem(itemId) {
@@ -87,6 +96,7 @@ function renderPackageManagerList() {
       btn.addEventListener('click', async () => {
         btn.disabled = true;
         try {
+          clearSessionCache(CACHE_KEYS.packages);
           await api.updatePackage(btn.dataset.packageId, { enabled: btn.dataset.enabled !== 'true' });
           cachedPackagesData = null;
           await loadPackagesIfNeeded();
@@ -104,9 +114,10 @@ function renderPackageManagerList() {
       btn.addEventListener('click', async () => {
         btn.disabled = true;
         try {
-          await api.deletePackage(btn.dataset.packageId);
-          cachedPackagesData = null;
-          await loadPackagesIfNeeded();
+        clearSessionCache(CACHE_KEYS.packages);
+        await api.deletePackage(btn.dataset.packageId);
+        cachedPackagesData = null;
+        await loadPackagesIfNeeded();
           renderPackageManagerList();
           renderInventoryConfig();
           if (editingItemId) renderEditItemPackageSummary(editingItemId);
@@ -131,16 +142,17 @@ document.getElementById('packageAddBtn').addEventListener('click', async () => {
   const btn = document.getElementById('packageAddBtn');
   btn.disabled = true;
   try {
-    if (editingPackageId) {
-      await api.updatePackage(editingPackageId, { package_unit: unitVal, units_per_package: perPackage });
-      toast('Package updated.');
-      editingPackageId = null;
-    } else {
-      await api.createPackage(managingPackagesForItemId, unitVal, perPackage, 0);
-      toast('Package added.');
-    }
-    cachedPackagesData = null;
-    await loadPackagesIfNeeded();
+        if (editingPackageId) {
+          await api.updatePackage(editingPackageId, { package_unit: unitVal, units_per_package: perPackage });
+          toast('Package updated.');
+          editingPackageId = null;
+        } else {
+          await api.createPackage(managingPackagesForItemId, unitVal, perPackage, 0);
+          toast('Package added.');
+        }
+        clearSessionCache(CACHE_KEYS.packages);
+        cachedPackagesData = null;
+        await loadPackagesIfNeeded();
     unitInput.value = '';
     perPackageInput.value = '';
     btn.textContent = 'Add Package';

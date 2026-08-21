@@ -55,6 +55,50 @@ let shouldOpenAllocations = false;
 
 const PERMISSIONS_KEY = 'sc_permissions';
 
+const SESSION_CACHE_MAX_AGE = 5 * 60 * 1000;
+
+const CACHE_KEYS = {
+  inventory: 'sc_cache_inventory',
+  purchases: 'sc_cache_purchases',
+  salesSummary: 'sc_cache_sales_summary',
+  salesImports: 'sc_cache_sales_imports',
+  staff: 'sc_cache_staff',
+  permissions: 'sc_cache_permissions',
+  packages: 'sc_cache_packages'
+};
+
+function getSessionCache(key) {
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    if (Date.now() - parsed.timestamp > SESSION_CACHE_MAX_AGE) {
+      sessionStorage.removeItem(key);
+      return null;
+    }
+
+    return parsed.data;
+  } catch (e) {
+    return null;
+  }
+}
+
+function setSessionCache(key, data) {
+  try {
+    sessionStorage.setItem(key, JSON.stringify({
+      timestamp: Date.now(),
+      data
+    }));
+  } catch (e) { }
+}
+
+function clearSessionCache(key) {
+  try {
+    sessionStorage.removeItem(key);
+  } catch (e) { }
+}
+
 function loadPermissions() {
   try {
     const v = localStorage.getItem(PERMISSIONS_KEY);
@@ -124,6 +168,11 @@ window.pendingAdjustmentUpdates = pendingAdjustmentUpdates;
 window.userPermissions = userPermissions;
 window.shouldOpenAllocations = shouldOpenAllocations;
 window.PERMISSIONS_KEY = PERMISSIONS_KEY;
+window.SESSION_CACHE_MAX_AGE = SESSION_CACHE_MAX_AGE;
+window.CACHE_KEYS = CACHE_KEYS;
+window.getSessionCache = getSessionCache;
+window.setSessionCache = setSessionCache;
+window.clearSessionCache = clearSessionCache;
 window.loadPermissions = loadPermissions;
 window.savePermissions = savePermissions;
 window.clearPermissions = clearPermissions;
