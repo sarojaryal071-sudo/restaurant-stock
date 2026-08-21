@@ -76,6 +76,9 @@ function renderItemRowOrig(c, it) {
   mb.setAttribute('aria-label', 'Decrease');
   mb.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14"/></svg>';
   mb.addEventListener('click', e => { e.stopPropagation(); changeQty(it.id, -1); });
+        const qtyWrap = document.createElement('div');
+        qtyWrap.className = 'qty-wrap';
+
         const qe = document.createElement('input');
         qe.type = 'number';
         qe.step = 'any';
@@ -97,14 +100,18 @@ function renderItemRowOrig(c, it) {
           updateDirty();
           setActive(it.id);
         });
+
+        const remaining = document.createElement('div');
+        remaining.className = 'qty-remaining';
+        remaining.classList.add('hidden');
+        qtyWrap.appendChild(qe);
+        qtyWrap.appendChild(remaining);
   const pb = document.createElement('button');
   pb.className = 'qty-btn plus';
   pb.setAttribute('aria-label', 'Increase');
   pb.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
   pb.addEventListener('click', e => { e.stopPropagation(); changeQty(it.id, 1); });
-  ctrls.appendChild(mb);
-  ctrls.appendChild(qe);
-  ctrls.appendChild(pb);
+        ctrls.appendChild(mb); ctrls.appendChild(qtyWrap); ctrls.appendChild(pb);
   const editable = it.editable !== false && it.locked !== true;
   const canEditItem = can('inventory', 'edit');
   const canDeleteItem = can('inventory', 'delete');
@@ -178,6 +185,18 @@ function changeQty(iid, delta) {
           q.value = it.qty;
           q.className = 'qty-value qty-input ' + qtyClass(it.qty);
         }
+
+        const rem = row.querySelector('.qty-remaining');
+        if (rem) {
+          if (it.remainingVolume !== undefined && it.remainingVolume !== null && it.remainingVolumeUnit) {
+            const wholeUnits = Math.floor(Number(it.qty) || 0);
+            rem.textContent = `${wholeUnits} : ${it.remainingVolume} ${it.remainingVolumeUnit}`;
+            rem.classList.remove('hidden');
+          } else {
+            rem.classList.add('hidden');
+          }
+        }
+
         row.classList.toggle('is-pending', it.qty !== it.lastConfirmedQty);
       }
 
@@ -238,6 +257,18 @@ document.addEventListener('click', e => {
           q.value = item.qty;
           q.className = 'qty-value qty-input ' + qtyClass(item.qty);
         }
+
+        const rem = row.querySelector('.qty-remaining');
+        if (rem) {
+          if (item.remainingVolume !== undefined && item.remainingVolume !== null && item.remainingVolumeUnit) {
+            const wholeUnits = Math.floor(Number(item.qty) || 0);
+            rem.textContent = `${wholeUnits} : ${item.remainingVolume} ${item.remainingVolumeUnit}`;
+            rem.classList.remove('hidden');
+          } else {
+            rem.classList.add('hidden');
+          }
+        }
+
         row.classList.toggle('is-pending', item.qty !== item.lastConfirmedQty);
         row.dataset.itemName = item.name.toLowerCase();
       }
@@ -452,7 +483,7 @@ arCancelBtn.addEventListener('click', () => {
           isSaving = false; svBtn.disabled = false; svBtn.classList.remove('is-saving'); document.getElementById('saveBtnLabel').textContent = 'Save Changes';
         }
       });
-      
+
 function doSave() {
   if (isSaving) return;
   const u = dirtyUpdates();
@@ -518,7 +549,7 @@ document.getElementById('exportBtn').addEventListener('click', async () => {
         try {
           const cats = await api.loadStock();
           const arr = (cats && Array.isArray(cats.categories)) ? cats.categories : (Array.isArray(cats) ? cats : []);
-          state.categories = arr.map(c => ({ id: c.id, name: c.name, icon: c.icon || 'default', items: (c.items || []).map(it => ({ id: it.id, name: it.name, qty: Number(it.qty) || 0, custom: !!it.custom, unit: it.unit || undefined, volume: it.volume !== undefined ? it.volume : undefined, volumeUnit: it.volumeUnit || undefined, containerVolume: it.containerVolume, editable: it.editable, locked: it.locked, lastConfirmedQty: Number(it.qty) || 0 })) }));
+          state.categories = arr.map(c => ({ id: c.id, name: c.name, icon: c.icon || 'default', items: (c.items || []).map(it => ({ id: it.id, name: it.name, qty: Number(it.qty) || 0, custom: !!it.custom, unit: it.unit || undefined, volume: it.volume !== undefined ? it.volume : undefined, volumeUnit: it.volumeUnit || undefined, remainingVolume: it.remainingVolume, remainingVolumeUnit: it.remainingVolumeUnit || null, containerVolume: it.containerVolume, editable: it.editable, locked: it.locked, lastConfirmedQty: Number(it.qty) || 0 })) }));
           saveCache();
           setSessionCache(CACHE_KEYS.inventory, state.categories);
           render();

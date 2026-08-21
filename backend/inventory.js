@@ -61,14 +61,34 @@ async function loadStock(req, res) {
         [restaurantId, cat.id]
       );
 
-      const items = itemRes.rows.map(item => ({
-        id: item.id,
-        name: item.name,
-        unit: item.unit || undefined,
-        volume: item.volume !== null && item.volume !== undefined ? parseFloat(item.volume) : undefined,
-        volumeUnit: item.volume_unit || undefined,
-        qty: parseFloat(item.qty) || 0
-      }));
+      const items = itemRes.rows.map(item => {
+        const qty = parseFloat(item.qty) || 0;
+        const volume = item.volume !== null && item.volume !== undefined ? parseFloat(item.volume) : null;
+        const volumeUnit = item.volume_unit || null;
+
+        let remainingVolume = null;
+        let remainingVolumeUnit = null;
+
+        if (volume !== null && volumeUnit) {
+          const wholeUnits = Math.floor(Math.abs(qty) + Number.EPSILON) * (qty < 0 ? -1 : 1);
+          const fractionalUnits = qty - wholeUnits;
+          const rawRemainingVolume = fractionalUnits * volume;
+
+          remainingVolumeUnit = volumeUnit;
+          remainingVolume = Number(rawRemainingVolume.toFixed(3));
+        }
+
+        return {
+          id: item.id,
+          name: item.name,
+          unit: item.unit || undefined,
+          volume,
+          volumeUnit,
+          qty,
+          remainingVolume,
+          remainingVolumeUnit
+        };
+      });
 
       categories.push({
         id: cat.id,

@@ -76,15 +76,7 @@ async function preloadWorkspace() {
   }
 
   const arr = (stockRes && Array.isArray(stockRes.categories)) ? stockRes.categories : (Array.isArray(stockRes) ? stockRes : []);
-  state.categories = arr.map(c => ({
-    id: c.id, name: c.name, icon: c.icon || 'default',
-    items: (c.items || []).map(it => ({
-      id: it.id, name: it.name, qty: Number(it.qty) || 0, custom: !!it.custom,
-      unit: it.unit || undefined, volume: it.volume !== undefined ? it.volume : undefined,
-      volumeUnit: it.volumeUnit || undefined, containerVolume: it.containerVolume,
-      editable: it.editable, locked: it.locked, lastConfirmedQty: Number(it.qty) || 0
-    }))
-  }));
+        state.categories = arr.map(c => ({ id: c.id, name: c.name, icon: c.icon || 'default', items: (c.items || []).map(it => ({ id: it.id, name: it.name, qty: Number(it.qty) || 0, custom: !!it.custom, unit: it.unit || undefined, volume: it.volume !== undefined ? it.volume : undefined, volumeUnit: it.volumeUnit || undefined, remainingVolume: it.remainingVolume, remainingVolumeUnit: it.remainingVolumeUnit || null, containerVolume: it.containerVolume, editable: it.editable, locked: it.locked, lastConfirmedQty: Number(it.qty) || 0 })) }));
   saveCache();
 
   recipeState.recipes = (recipesRes && Array.isArray(recipesRes.recipes)) ? recipesRes.recipes : (recipesRes && Array.isArray(recipesRes) ? recipesRes : []);
