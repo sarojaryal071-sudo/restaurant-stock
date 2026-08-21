@@ -10,27 +10,30 @@ async function recordSale(restaurantId, provider, productName, quantity, soldAt,
 
 async function getSummary(restaurantId, startDate, endDate) {
   let sql = `
-    SELECT sold_at::date AS sale_date,
-           product_name,
-           unit,
-           SUM(quantity)::numeric AS total_quantity
-    FROM pos_sales
-    WHERE restaurant_id = $1
+    SELECT ps.sold_at::date AS sale_date,
+           ps.product_name,
+           ps.unit,
+           SUM(ps.quantity)::numeric AS total_quantity
+    FROM pos_sales ps
+    LEFT JOIN sales_imports si
+      ON si.id = ps.sales_import_id
+    WHERE ps.restaurant_id = $1
+      AND (si.id IS NULL OR si.status = 'active')
   `;
   const params = [restaurantId];
 
   if (startDate) {
-    sql += ` AND sold_at >= $2`;
+    sql += ` AND ps.sold_at >= $2`;
     params.push(startDate);
   }
 
   if (endDate) {
-    sql += ` AND sold_at <= $${params.length + 1}`;
+    sql += ` AND ps.sold_at <= $${params.length + 1}`;
     params.push(endDate);
   }
 
   sql += `
-    GROUP BY sold_at::date, product_name, unit
+    GROUP BY ps.sold_at::date, ps.product_name, ps.unit
     ORDER BY sale_date DESC, total_quantity DESC
   `;
 

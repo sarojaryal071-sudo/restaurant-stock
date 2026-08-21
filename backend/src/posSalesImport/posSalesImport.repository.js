@@ -231,10 +231,9 @@ async function cancelImport(tx, importId, restaurantId, userId) {
     [userId || null, importId, restaurantId]
   );
 
-  await tx(
-    `DELETE FROM pos_sales WHERE sales_import_id = $1`,
-    [importId]
-  );
+  // Do NOT delete pos_sales rows.
+  // They remain for historical audit and are excluded from active sales summary
+  // by filtering on sales_imports.status = 'active'.
 
   await tx(
     `INSERT INTO logs (id, action, details, user_id, restaurant_id, timestamp)
