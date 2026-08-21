@@ -188,7 +188,8 @@ function changeQty(iid, delta) {
 
         const rem = row.querySelector('.qty-remaining');
         if (rem) {
-          if (it.remainingVolume !== undefined && it.remainingVolume !== null && it.remainingVolumeUnit) {
+          const hasRemainder = Number(it.remainingVolume) > 0 || Math.floor(Number(it.qty)) !== Number(it.qty);
+          if (it.remainingVolume !== undefined && it.remainingVolume !== null && it.remainingVolumeUnit && hasRemainder) {
             const wholeUnits = Math.floor(Number(it.qty) || 0);
             rem.textContent = `${wholeUnits} : ${it.remainingVolume} ${it.remainingVolumeUnit}`;
             rem.classList.remove('hidden');
@@ -260,7 +261,8 @@ document.addEventListener('click', e => {
 
         const rem = row.querySelector('.qty-remaining');
         if (rem) {
-          if (item.remainingVolume !== undefined && item.remainingVolume !== null && item.remainingVolumeUnit) {
+          const hasRemainder = Number(item.remainingVolume) > 0 || Math.floor(Number(item.qty)) !== Number(item.qty);
+          if (item.remainingVolume !== undefined && item.remainingVolume !== null && item.remainingVolumeUnit && hasRemainder) {
             const wholeUnits = Math.floor(Number(item.qty) || 0);
             rem.textContent = `${wholeUnits} : ${item.remainingVolume} ${item.remainingVolumeUnit}`;
             rem.classList.remove('hidden');
