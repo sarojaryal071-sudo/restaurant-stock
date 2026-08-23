@@ -7,13 +7,13 @@ function showSalesDetail() {
     <div id="salesUploadSection" class="sales-summary-card" style="margin-top:0;">
       <div class="sales-summary-header">
         <div class="sales-summary-title">Upload Sales CSV</div>
-        <div class="sales-summary-desc">Import a new POS sales report.</div>
+        <div class="sales-summary-desc">Import a new Flatpay CSV or XLSX sales report.</div>
       </div>
       <label class="file-upload-wrap" for="salesCsvFile">
-        <span class="file-upload-btn">Choose CSV File</span>
+        <span class="file-upload-btn">Choose CSV or XLSX File</span>
         <span class="file-upload-filename" id="salesCsvFileName">No file selected</span>
       </label>
-      <input type="file" id="salesCsvFile" accept=".csv" class="file-upload-input">
+      <input type="file" id="salesCsvFile" accept=".csv,.xlsx" class="file-upload-input">
       <div id="salesImportPreview"></div>
     </div>
 

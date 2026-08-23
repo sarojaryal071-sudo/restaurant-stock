@@ -2,67 +2,194 @@ const repository = require('./posSalesImport.repository');
 const salesResolver = require('../sales/salesResolver.service');
 const { v4: uuidv4 } = require('uuid');
 const { transaction } = require('../../database');
+const XLSX = require('xlsx');
+const path = require('path');
 
 /**
- * Parse CSV buffer into an array of { productName, quantity, unit }.
- *
- * Supported columns:
- *   Product,Quantity
- *   Product,Quantity,Unit
+ * Normalize a header value for safe column-name matching.
  */
-function parseCSV(buffer) {
-  const text = buffer.toString('utf-8').trim();
-  if (!text) throw { code: 'INVALID_CSV', error: 'CSV file is empty.' };
+function normalizeHeader(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
 
-  const lines = text.split(/\r?\n/);
-  const header = lines[0].split(',').map(h => h.trim().toLowerCase());
+/**
+ * Find the first matching column index for a set of accepted header names.
+ */
+function findColumnIndex(header, candidates) {
+  for (let i = 0; i < header.length; i++) {
+    const normalized = normalizeHeader(header[i]);
 
-  const productIdx = header.indexOf('product');
-  const qtyIdx = header.indexOf('quantity');
-  const unitIdx = header.indexOf('unit');
-
-  if (productIdx === -1 || qtyIdx === -1) {
-    throw { code: 'INVALID_CSV_FORMAT', error: 'CSV must have "Product" and "Quantity" columns.' };
+    if (candidates.includes(normalized)) {
+      return i;
+    }
   }
 
-  const rows = [];
+  return -1;
+}
 
-  for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(',');
-    if (cols.length < Math.max(productIdx, qtyIdx) + 1) continue;
+/**
+ * Validate and map one row of sales-file data.
+ */
+function readRow(row, productIdx, saleIdx) {
+  const rawProduct = String(row[productIdx] || '').trim();
+  const rawSale = String(row[saleIdx] || '').trim();
 
-    const product = cols[productIdx].trim();
-    const qty = parseFloat(cols[qtyIdx].trim());
-    const unit = unitIdx !== -1 && cols.length > unitIdx
-      ? cols[unitIdx].trim()
-      : '';
+  if (!rawProduct && !rawSale) {
+    return null;
+  }
 
-    if (!product || isNaN(qty) || qty < 0) continue;
+  if (!rawProduct) {
+    return null;
+  }
 
-    rows.push({
+  const quantity = parseFloat(rawSale);
+
+  if (isNaN(quantity) || quantity <= 0) {
+    throw {
+      code: 'INVALID_SALES_FILE',
+      error: `Sale must be a valid positive number for product "${rawProduct}".`
+    };
+  }
+
+  return {
+    productName: rawProduct,
+    quantity
+  };
+}
+
+/**
+ * Parse CSV content into row arrays.
+ */
+function parseCSVContent(buffer) {
+  const text = buffer.toString('utf-8').trim();
+
+  if (!text) {
+    throw { code: 'INVALID_SALES_FILE', error: 'Sales file is empty.' };
+  }
+
+  return text.split(/\r?\n/).map(line => line.split(','));
+}
+
+/**
+ * Parse XLSX content into row arrays.
+ */
+function parseXlsxContent(buffer) {
+  const workbook = XLSX.read(buffer, {
+    type: 'buffer',
+    cellDates: false,
+    cellFormula: false,
+    cellText: true
+  });
+
+  const firstSheetName = workbook.SheetNames[0];
+
+  if (!firstSheetName) {
+    throw { code: 'INVALID_SALES_FILE', error: 'Sales file does not contain any sheets.' };
+  }
+
+  const sheet = workbook.Sheets[firstSheetName];
+
+  return XLSX.utils.sheet_to_json(sheet, {
+    header: 1,
+    defval: '',
+    raw: false
+  });
+}
+
+/**
+ * Parse the uploaded sales file into normalized sales rows.
+ */
+function parseSalesFile(file) {
+  const { buffer, originalname = '', mimetype = '' } = file || {};
+
+  if (!buffer) {
+    throw { code: 'INVALID_SALES_FILE', error: 'Sales file is empty.' };
+  }
+
+  const extension = path.extname(originalname).toLowerCase();
+  const isCsv = extension === '.csv' || mimetype === 'text/csv';
+  const isXlsx =
+    extension === '.xlsx' ||
+    mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+  if (!isCsv && !isXlsx) {
+    throw {
+      code: 'UNSUPPORTED_FILE_TYPE',
+      error: 'Only CSV and XLSX sales reports are supported.'
+    };
+  }
+
+  const rows = isXlsx ? parseXlsxContent(buffer) : parseCSVContent(buffer);
+
+  if (!rows.length) {
+    throw { code: 'INVALID_SALES_FILE', error: 'Sales file is empty.' };
+  }
+
+  const header = rows[0].map(normalizeHeader);
+
+  const productIdx = findColumnIndex(header, ['product name', 'product']);
+  const saleIdx = findColumnIndex(header, ['sale', 'quantity']);
+  const unitIdx = findColumnIndex(header, ['unit']);
+
+  if (productIdx === -1 || saleIdx === -1) {
+    throw {
+      code: 'INVALID_SALES_FILE',
+      error: 'Sales file must contain Product Name and Sale columns.'
+    };
+  }
+
+  const sales = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const product = String(row[productIdx] || '').trim();
+    const saleText = String(row[saleIdx] || '').trim();
+
+    if (!product && !saleText) continue;
+    if (!product) continue;
+
+    const quantity = parseFloat(saleText);
+
+    if (isNaN(quantity) || quantity <= 0) {
+      throw {
+        code: 'INVALID_SALES_FILE',
+        error: `Sale must be a valid positive number for product "${product}".`
+      };
+    }
+
+    const unit = unitIdx !== -1 && row[unitIdx]
+      ? String(row[unitIdx]).trim()
+      : undefined;
+
+    sales.push({
       productName: product,
-      quantity: qty,
+      quantity,
       unit: unit || undefined
     });
   }
 
-  if (rows.length === 0) throw { code: 'INVALID_CSV', error: 'No valid sales rows found.' };
+  if (sales.length === 0) {
+    throw { code: 'INVALID_SALES_FILE', error: 'No valid sales rows found.' };
+  }
 
-  // Aggregate duplicate product/unit combinations.
+  // Aggregate duplicate product names, preserving any unit when consistent.
   const aggregated = new Map();
 
-  for (const row of rows) {
-    const key = `${row.productName}||${row.unit || ''}`;
+  for (const sale of sales) {
+    const key = `${sale.productName}||${sale.unit || ''}`;
 
     if (!aggregated.has(key)) {
       aggregated.set(key, {
-        productName: row.productName,
+        productName: sale.productName,
         quantity: 0,
-        unit: row.unit
+        unit: sale.unit
       });
     }
 
-    aggregated.get(key).quantity += row.quantity;
+    aggregated.get(key).quantity += sale.quantity;
   }
 
   return Array.from(aggregated.values());
@@ -72,7 +199,9 @@ async function getItemDetails(restaurantId, itemId) {
   const { query } = require('../../database');
 
   const res = await query(
-    `SELECT id, name FROM items WHERE id = $1 AND restaurant_id = $2 AND is_deleted = FALSE`,
+    `SELECT id, name
+     FROM items
+     WHERE id = $1 AND restaurant_id = $2 AND is_deleted = FALSE`,
     [itemId, restaurantId]
   );
 
@@ -80,12 +209,12 @@ async function getItemDetails(restaurantId, itemId) {
 }
 
 /**
- * Build preview items by resolving product names against inventory/recipes.
+ * Build preview items by resolving Product Name against inventory/recipes.
  * This function is read-only and has NO side effects.
  */
-async function previewSales(restaurantId, buffer) {
-  const parsed = parseCSV(buffer);
-  const fileHash = repository.computeFileHash(buffer);
+async function previewSales(restaurantId, file) {
+  const parsed = parseSalesFile(file);
+  const fileHash = repository.computeFileHash(file.buffer);
   const mappings = await repository.getMappings(restaurantId);
   const items = [];
 
@@ -114,7 +243,10 @@ async function previewSales(restaurantId, buffer) {
       continue;
     }
 
-    const resolution = await salesResolver.resolveSalesProduct(restaurantId, sourceProductName);
+    const resolution = await salesResolver.resolveSalesProduct(
+      restaurantId,
+      sourceProductName
+    );
 
     if (resolution.type === 'inventory') {
       const item = await getItemDetails(restaurantId, resolution.id);
@@ -169,19 +301,34 @@ async function previewSales(restaurantId, buffer) {
     }
   }
 
-  return { fileHash, periodStart: null, periodEnd: null, items };
+  return {
+    fileHash,
+    periodStart: null,
+    periodEnd: null,
+    items
+  };
 }
 
 /**
  * Apply a sales import atomically.
  *
- * Supports:
- *   - mapped inventory items with itemId
- *   - raw productName resolved again by backend
- *   - recipe sales via recipeId or resolved recipe name
- *   - optional unit for direct inventory serving quantities
+ * The backend resolves every product again and never trusts:
+ * - itemId
+ * - recipeId
+ * - quantityAdded
+ * - ingredient quantities
+ * - calculated stock deductions
+ *
+ * unless the product was explicitly mapped/verified by this backend.
  */
-async function applySalesImport(restaurantId, userId, fileHash, periodStart, periodEnd, items) {
+async function applySalesImport(
+  restaurantId,
+  userId,
+  fileHash,
+  periodStart,
+  periodEnd,
+  items
+) {
   if (!Array.isArray(items) || items.length === 0) {
     throw { code: 'VALIDATION_ERROR', error: 'items array is required.' };
   }
@@ -192,10 +339,19 @@ async function applySalesImport(restaurantId, userId, fileHash, periodStart, per
     const qty = parseFloat(it.quantitySold || it.quantity);
 
     if (isNaN(qty) || qty <= 0) {
-      throw { code: 'VALIDATION_ERROR', error: 'Each sales item must have a positive quantity.' };
+      throw {
+        code: 'VALIDATION_ERROR',
+        error: 'Each sales item must have a positive quantity.'
+      };
     }
 
-    const productName = (it.sourceProductName || it.productName || '').trim();
+    const productName = (
+      it.sourceProductName ||
+      it.productName ||
+      it.product_name ||
+      ''
+    ).trim();
+
     const salesUnit = it.unit || null;
 
     if (it.itemId) {
@@ -228,10 +384,16 @@ async function applySalesImport(restaurantId, userId, fileHash, periodStart, per
     }
 
     if (!productName) {
-      throw { code: 'VALIDATION_ERROR', error: 'Each item must have itemId, recipeId, or productName.' };
+      throw {
+        code: 'VALIDATION_ERROR',
+        error: 'Each item must have itemId, recipeId, or productName.'
+      };
     }
 
-    const resolution = await salesResolver.resolveSalesProduct(restaurantId, productName);
+    const resolution = await salesResolver.resolveSalesProduct(
+      restaurantId,
+      productName
+    );
 
     if (resolution.type === 'inventory') {
       const item = await getItemDetails(restaurantId, resolution.id);
@@ -255,22 +417,33 @@ async function applySalesImport(restaurantId, userId, fileHash, periodStart, per
         quantitySold: qty
       });
     } else if (resolution.type === 'ambiguous') {
-      throw { code: 'AMBIGUOUS_PRODUCT', error: `Ambiguous product name: ${productName}` };
+      throw {
+        code: 'AMBIGUOUS_PRODUCT',
+        error: `Ambiguous product name: ${productName}`
+      };
     } else {
-      throw { code: 'UNRESOLVED_PRODUCT', error: `Product not found: ${productName}` };
+      throw {
+        code: 'UNRESOLVED_PRODUCT',
+        error: `Product not found: ${productName}`
+      };
     }
   }
 
   const importId = uuidv4();
 
-  await transaction(async (tx) => {
+  await transaction(async tx => {
     const dup = await tx(
-      `SELECT id FROM sales_imports WHERE restaurant_id = $1 AND file_hash = $2`,
+      `SELECT id
+       FROM sales_imports
+       WHERE restaurant_id = $1 AND file_hash = $2`,
       [restaurantId, fileHash]
     );
 
     if (dup.rows.length > 0) {
-      throw { code: 'SALES_IMPORT_ALREADY_EXISTS', error: 'This sales report has already been imported.' };
+      throw {
+        code: 'SALES_IMPORT_ALREADY_EXISTS',
+        error: 'This sales report has already been imported.'
+      };
     }
 
     await repository.applyImport(
@@ -286,12 +459,18 @@ async function applySalesImport(restaurantId, userId, fileHash, periodStart, per
   });
 }
 
+/**
+ * Cancel a sales import by reversing its exact historical stock effects.
+ */
 async function cancelSalesImport(restaurantId, userId, importId) {
-  await transaction(async (tx) => {
+  await transaction(async tx => {
     await repository.cancelImport(tx, importId, restaurantId, userId);
   });
 }
 
+/**
+ * List sales import history for the authenticated restaurant.
+ */
 async function listSalesImports(restaurantId, start, end) {
   return repository.listImports(restaurantId, start, end);
 }
