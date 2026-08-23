@@ -87,6 +87,46 @@ async function handleSalesFileSelect(e) {
   }
 }
 
+function buildMappingOptionsHtml(item) {
+  let html = '<option value="">-- Select --</option>';
+
+  // Inventory items grouped by category
+  state.categories.forEach(cat => {
+    const group = document.createElement('optgroup');
+    group.label = cat.name || 'Uncategorised';
+    cat.items.forEach(it => {
+      const selected = item.matched && item.type === 'inventory' && item.itemId === it.id ? ' selected' : '';
+      group.innerHTML += `<option value="${it.id}" data-mapping-type="inventory"${selected}>${escapeHtml(it.name)}</option>`;
+    });
+    if (group.children.length) {
+      html += group.outerHTML;
+    }
+  });
+
+  // Recipe group
+  const recipes = (recipeState && Array.isArray(recipeState.recipes)) ? recipeState.recipes : [];
+  if (recipes.length) {
+    const recipeGroup = document.createElement('optgroup');
+    recipeGroup.label = 'Recipes';
+    recipes.forEach(r => {
+      const selected = item.matched && item.type === 'recipe' && item.recipeId === r.id ? ' selected' : '';
+      recipeGroup.innerHTML += `<option value="${r.id}" data-mapping-type="recipe"${selected}>${escapeHtml(r.name || 'Unnamed Recipe')}</option>`;
+    });
+    html += recipeGroup.outerHTML;
+  }
+
+  return html;
+}
+
+function buildUnitOptionsHtml(selectedUnit) {
+  let html = '<option value="">-- Select unit --</option>';
+  (appConfig.units || []).forEach(u => {
+    const selected = u.value === selectedUnit ? ' selected' : '';
+    html += `<option value="${escapeHtml(u.value)}"${selected}>${escapeHtml(u.label)}</option>`;
+  });
+  return html;
+}
+
 function getSalesPreviewBadge(item) {
   if (item.type === 'inventory' && item.matched) {
     return '<span class="badge-active">📦 Inventory · ✓ Found</span>';
@@ -118,25 +158,29 @@ function renderSalesPreview() {
 
   salesItems.forEach((item, idx) => {
     const badge = getSalesPreviewBadge(item);
-    let resolvedTo = '—';
+    let resolvedTo = '';
 
     if (item.matched && item.type === 'inventory') {
       resolvedTo = escapeHtml(item.itemName || '—');
     } else if (item.matched && item.type === 'recipe') {
       resolvedTo = escapeHtml(item.recipeName || '—');
-    } else if (!item.matched) {
-      resolvedTo = `<select class="field-select" id="mapSelect_${idx}" style="width:auto;min-width:160px;display:inline-block;padding:8px 10px;font-size:0.82rem;"><option value="">-- Select --</option></select>`;
+    } else {
+      resolvedTo = '<span class="badge-inactive">Unmatched</span>';
     }
 
-    const unitLabel = item.matched && item.type === 'inventory'
-      ? escapeHtml(item.unit || '—')
+    const mappingSelect = `<select class="field-select sales-map-select" id="mapSelect_${idx}" style="width:auto;min-width:160px;display:inline-block;padding:8px 10px;font-size:0.82rem;">${buildMappingOptionsHtml(item)}</select>`;
+
+    const unitControl = item.type === 'inventory'
+      ? (item.unit
+          ? escapeHtml(item.unit)
+          : `<select class="field-select sales-unit-select" id="unitSelect_${idx}" style="width:auto;min-width:100px;display:inline-block;padding:8px 10px;font-size:0.82rem;">${buildUnitOptionsHtml('')}</select>`)
       : '—';
 
     html += `<tr>
       <td>${escapeHtml(item.sourceProductName)}</td>
-      <td>${resolvedTo}</td>
+      <td>${mappingSelect}</td>
       <td>${item.quantitySold}</td>
-      <td>${unitLabel}</td>
+      <td>${unitControl}</td>
       <td>${badge}</td>
     </tr>`;
   });
@@ -146,36 +190,49 @@ function renderSalesPreview() {
   previewDiv.innerHTML = html;
 
   salesItems.forEach((item, idx) => {
-    if (!item.matched) {
-      const select = document.getElementById(`mapSelect_${idx}`);
-      if (!select) return;
-
-      state.categories.forEach(cat => {
-        cat.items.forEach(it => {
-          const option = document.createElement('option');
-          option.value = it.id;
-          option.textContent = it.name;
-          select.appendChild(option);
-        });
-      });
-
-      select.addEventListener('change', async (e) => {
-        const itemId = e.target.value;
-        if (!itemId) return;
+    const mapSelect = document.getElementById(`mapSelect_${idx}`);
+    if (mapSelect) {
+      mapSelect.addEventListener('change', async (e) => {
+        const selectedOption = e.target.selectedOptions[0];
+        const value = e.target.value;
+        const mappingType = selectedOption ? selectedOption.dataset.mappingType : null;
+        if (!value || !mappingType) {
+          // If cleared, set unmatched but keep type from backend?
+          item.matched = false;
+          renderSalesPreview();
+          return;
+        }
 
         try {
-          await api.saveSalesMapping(item.sourceProductName, itemId);
-          item.itemId = itemId;
-          item.itemName = e.target.selectedOptions[0].textContent;
-          item.recipeId = null;
-          item.recipeName = null;
-          item.type = 'inventory';
+          if (mappingType === 'recipe') {
+            await api.saveSalesMapping(item.sourceProductName, null, value);
+            item.itemId = null;
+            item.itemName = null;
+            item.recipeId = value;
+            item.recipeName = selectedOption.textContent;
+            item.type = 'recipe';
+          } else {
+            await api.saveSalesMapping(item.sourceProductName, value, null);
+            item.itemId = value;
+            item.itemName = selectedOption.textContent;
+            item.recipeId = null;
+            item.recipeName = null;
+            item.type = 'inventory';
+          }
+
           item.matched = true;
           renderSalesPreview();
           toast('Mapping saved.');
         } catch (err) {
           toast(err.message || 'Failed to save mapping', true);
         }
+      });
+    }
+
+    const unitSelect = document.getElementById(`unitSelect_${idx}`);
+    if (unitSelect) {
+      unitSelect.addEventListener('change', (e) => {
+        item.unit = e.target.value || null;
       });
     }
   });
@@ -190,10 +247,6 @@ function renderSalesPreview() {
       applyBtn.textContent = 'Applying…';
 
       try {
-        clearSessionCache(CACHE_KEYS.salesSummary);
-        clearSessionCache(CACHE_KEYS.salesImports);
-        clearSessionCache(CACHE_KEYS.inventory);
-
         await api.applySalesImport(
           salesFileHash,
           salesPeriodStart,
@@ -230,7 +283,6 @@ function renderSalesPreview() {
     });
   }
 }
-
 async function loadSalesSummary(period) {
   const overviewDiv = document.getElementById('salesOverviewContent');
   const recordsDiv = document.getElementById('salesRecordsContent');

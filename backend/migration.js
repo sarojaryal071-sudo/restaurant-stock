@@ -645,12 +645,18 @@ async function runMigrations() {
         restaurant_id UUID NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
         source TEXT NOT NULL DEFAULT 'flatpay',
         source_product_name TEXT NOT NULL,
-        item_id UUID NOT NULL REFERENCES items(id),
+        item_id UUID REFERENCES items(id),
+        recipe_id UUID REFERENCES recipes(id),
+        unit TEXT,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         UNIQUE(restaurant_id, source, source_product_name)
       );
     `);
+
+    await tx(`ALTER TABLE sales_product_mappings ADD COLUMN IF NOT EXISTS recipe_id UUID REFERENCES recipes(id);`);
+    await tx(`ALTER TABLE sales_product_mappings ADD COLUMN IF NOT EXISTS unit TEXT;`);
+    await tx(`ALTER TABLE sales_product_mappings ALTER COLUMN item_id DROP NOT NULL;`);
 
         // =================================================================
     // Product Barcode Cache (restaurant-scoped)

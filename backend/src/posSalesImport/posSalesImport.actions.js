@@ -29,17 +29,29 @@ async function preview(req, res) {
 
 async function saveMapping(req, res) {
   try {
-    const { sourceProductName, itemId } = req.body;
+    const {
+      sourceProductName,
+      itemId = null,
+      recipeId = null,
+      unit = null
+    } = req.body;
 
-    if (!sourceProductName || !itemId) {
+    if (!sourceProductName) {
       return res.json({
         ok: false,
         code: 'VALIDATION_ERROR',
-        error: 'sourceProductName and itemId are required.'
+        error: 'sourceProductName is required.'
       });
     }
 
-    await service.saveProductMapping(req.auth.restaurantId, sourceProductName, itemId);
+    await service.saveProductMapping(
+      req.auth.restaurantId,
+      sourceProductName,
+      itemId || null,
+      recipeId || null,
+      unit || null
+    );
+
     res.json({ ok: true });
   } catch (err) {
     if (err.code) return res.json({ ok: false, code: err.code, error: err.error });

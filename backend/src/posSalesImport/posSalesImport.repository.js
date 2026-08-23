@@ -11,24 +11,34 @@ function computeFileHash(buffer) {
 }
 
 /**
- * Save a product mapping.
+ * Save or update a product mapping.
+ *
+ * Accepts either itemId or recipeId, plus an optional unit.
  */
-async function saveProductMapping(restaurantId, sourceProductName, itemId, source = 'flatpay') {
+async function saveProductMapping(restaurantId, sourceProductName, itemId = null, recipeId = null, unit = null, source = 'flatpay') {
   await query(
-    `INSERT INTO sales_product_mappings (restaurant_id, source, source_product_name, item_id)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO sales_product_mappings
+       (restaurant_id, source, source_product_name, item_id, recipe_id, unit)
+     VALUES ($1, $2, $3, $4, $5, $6)
      ON CONFLICT (restaurant_id, source, source_product_name)
-     DO UPDATE SET item_id = $4, updated_at = NOW()`,
-    [restaurantId, source, sourceProductName, itemId]
+     DO UPDATE SET
+       item_id = EXCLUDED.item_id,
+       recipe_id = EXCLUDED.recipe_id,
+       unit = EXCLUDED.unit,
+       updated_at = NOW()`,
+    [restaurantId, source, sourceProductName, itemId, recipeId, unit]
   );
 }
 
 /**
  * Get all mappings for a restaurant + source.
+ *
+ * Returns an object keyed by source_product_name.
+ * Each value contains itemId, recipeId, and unit.
  */
 async function getMappings(restaurantId, source = 'flatpay') {
   const res = await query(
-    `SELECT source_product_name, item_id
+    `SELECT source_product_name, item_id, recipe_id, unit
      FROM sales_product_mappings
      WHERE restaurant_id = $1 AND source = $2`,
     [restaurantId, source]
@@ -37,7 +47,11 @@ async function getMappings(restaurantId, source = 'flatpay') {
   const map = {};
 
   for (const row of res.rows) {
-    map[row.source_product_name] = row.item_id;
+    map[row.source_product_name] = {
+      itemId: row.item_id || null,
+      recipeId: row.recipe_id || null,
+      unit: row.unit || null
+    };
   }
 
   return map;

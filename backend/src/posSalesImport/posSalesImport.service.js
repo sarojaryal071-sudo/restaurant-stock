@@ -226,6 +226,19 @@ async function getItemDetails(restaurantId, itemId) {
   return res.rows[0] || null;
 }
 
+async function getRecipeDetails(restaurantId, recipeId) {
+  const { query } = require('../../database');
+
+  const res = await query(
+    `SELECT id, name
+     FROM recipes
+     WHERE id = $1 AND restaurant_id = $2`,
+    [recipeId, restaurantId]
+  );
+
+  return res.rows[0] || null;
+}
+
 /**
  * Build preview items by resolving Product Name against inventory/recipes.
  * This function is read-only and has NO side effects.
@@ -241,24 +254,49 @@ async function previewSales(restaurantId, file) {
     const quantitySold = sale.quantity;
     const salesUnit = sale.unit || null;
 
-    const mappedItemId = mappings[sourceProductName] || null;
+    const mapping = mappings[sourceProductName] || null;
 
-    if (mappedItemId) {
-      const item = await getItemDetails(restaurantId, mappedItemId);
+    if (mapping) {
+      const mappedUnit = salesUnit || mapping.unit || null;
 
-      items.push({
-        sourceProductName,
-        itemId: item ? item.id : null,
-        itemName: item ? item.name : null,
-        recipeId: null,
-        recipeName: null,
-        quantitySold,
-        unit: item ? salesUnit : null,
-        type: item ? 'inventory' : 'unresolved',
-        matched: !!item
-      });
+      if (mapping.itemId) {
+        const item = await getItemDetails(restaurantId, mapping.itemId);
 
-      continue;
+        items.push({
+          sourceProductName,
+          itemId: item ? item.id : null,
+          itemName: item ? item.name : null,
+          recipeId: null,
+          recipeName: null,
+          quantitySold,
+          unit: item ? mappedUnit : null,
+          type: item ? 'inventory' : 'unresolved',
+          matched: !!item
+        });
+
+        continue;
+      }
+
+      if (mapping.recipeId) {
+        const recipe = await getRecipeDetails(restaurantId, mapping.recipeId);
+
+        items.push({
+          sourceProductName,
+          itemId: null,
+          itemName: null,
+          recipeId: mapping.recipeId,
+          recipeName: recipe ? recipe.name : null,
+          quantitySold,
+          unit: null,
+          type: recipe ? 'recipe' : 'unresolved',
+          matched: !!recipe
+        });
+
+        continue;
+      }
+
+      // If mapping exists but has neither itemId nor recipeId, fall through
+      // to normal name resolution.
     }
 
     const resolution = await salesResolver.resolveSalesProduct(
@@ -478,6 +516,48 @@ async function applySalesImport(
 }
 
 /**
+ * Save or update a product mapping after validating:
+ * - one of itemId or recipeId is provided, never both
+ * - item/recipe belongs to the authenticated restaurant
+ */
+async function saveProductMapping(restaurantId, sourceProductName, itemId = null, recipeId = null, unit = null) {
+  if (!sourceProductName || !String(sourceProductName).trim()) {
+    throw { code: 'VALIDATION_ERROR', error: 'sourceProductName is required.' };
+  }
+
+  if ((itemId && recipeId) || (!itemId && !recipeId)) {
+    throw {
+      code: 'VALIDATION_ERROR',
+      error: 'Provide either itemId or recipeId, but not both.'
+    };
+  }
+
+  if (itemId) {
+    const item = await getItemDetails(restaurantId, itemId);
+
+    if (!item) {
+      throw { code: 'ITEM_NOT_FOUND', error: `Item not found: ${itemId}` };
+    }
+  }
+
+  if (recipeId) {
+    const recipe = await getRecipeDetails(restaurantId, recipeId);
+
+    if (!recipe) {
+      throw { code: 'RECIPE_NOT_FOUND', error: `Recipe not found: ${recipeId}` };
+    }
+  }
+
+  await repository.saveProductMapping(
+    restaurantId,
+    String(sourceProductName).trim(),
+    itemId || null,
+    recipeId || null,
+    unit || null
+  );
+}
+
+/**
  * Cancel a sales import by reversing its exact historical stock effects.
  */
 async function cancelSalesImport(restaurantId, userId, importId) {
@@ -498,5 +578,5 @@ module.exports = {
   applySalesImport,
   cancelSalesImport,
   listSalesImports,
-  saveProductMapping: repository.saveProductMapping
+  saveProductMapping
 };

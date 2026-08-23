@@ -145,7 +145,12 @@ const api = {
   createStaff: (name, pin) => apiCall('POST', '/staff', { name, pin }),
   updateStaff: (id, data) => apiCall('PATCH', `/staff/${id}`, data),
         getSalesSummary: (period) => apiCall('GET', '/pos/sales?period=' + encodeURIComponent(period)),
-        saveSalesMapping: (sourceProductName, itemId) => apiCall('POST', '/pos/sales/mappings', { sourceProductName, itemId }),
+        saveSalesMapping: (sourceProductName, itemId, recipeId) => {
+          const payload = { sourceProductName };
+          if (itemId) payload.itemId = itemId;
+          if (recipeId) payload.recipeId = recipeId;
+          return apiCall('POST', '/pos/sales/mappings', payload);
+        },
         applySalesImport: (fileHash, periodStart, periodEnd, items) => apiCall('POST', '/pos/sales/import/apply', { fileHash, periodStart, periodEnd, items }),
         getSalesImportHistory: () => apiCall('GET', '/pos/sales/import/history'),
         cancelSalesImport: (id) => apiCall('POST', `/pos/sales/import/${id}/cancel`, {})};
