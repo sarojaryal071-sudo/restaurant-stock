@@ -107,8 +107,7 @@ function renderInventoryConfig() {
     html += '<div class="empty-state show"><div>No categories yet.</div></div>';
   } else {
     state.categories.forEach(cat => {
-      html += `<div class="settings-card" style="margin-bottom:var(--space-3);" data-cat-id="${cat.id}">
-        <button class="settings-header ic-cat-header" type="button">
+        html += `<div class="settings-card${expandedState[cat.id] ? ' expanded' : ''}" style="margin-bottom:var(--space-3);" data-cat-id="${cat.id}">        <button class="settings-header ic-cat-header" type="button">
           <span class="section-title">${escapeHtml(cat.name)}</span>
           <span style="display:flex;align-items:center;gap:8px;">
             <span style="font-size:0.72rem;color:var(--paper-faint);">${cat.items.length} item${cat.items.length === 1 ? '' : 's'}</span>
@@ -147,9 +146,15 @@ function renderInventoryConfig() {
   }
   content.innerHTML = html;
 
-  content.querySelectorAll('.ic-cat-header').forEach(h => {
-    h.addEventListener('click', () => { h.closest('.settings-card').classList.toggle('expanded'); });
-  });
+        content.querySelectorAll('.ic-cat-header').forEach(h => {
+          h.addEventListener('click', () => {
+            const card = h.closest('.settings-card');
+            const catId = card.dataset.catId;
+            expandedState[catId] = !expandedState[catId];
+            card.classList.toggle('expanded', expandedState[catId]);
+            try { localStorage.setItem(EXPANDED_KEY, JSON.stringify(expandedState)); } catch (e) { }
+          });
+        });
   const addCatBtn = document.getElementById('icAddCategoryBtn');
   if (addCatBtn) addCatBtn.addEventListener('click', () => openCatDialog('add'));
   const addItemBtn = document.getElementById('icAddItemBtn');
