@@ -151,6 +151,24 @@ function parseSalesFile(file) {
     if (!product && !saleText) continue;
     if (!product) continue;
 
+    const normalizedProduct = normalizeHeader(product);
+    const dateLike = /^\d{1,2}\/\d{1,2}\/\d{2,4}( \d{1,2}:\d{2})?$/.test(product.trim());
+
+    const isMetadata =
+      normalizedProduct === 'total' ||
+      normalizedProduct === 'grand total' ||
+      normalizedProduct === 'period:' ||
+      normalizedProduct.startsWith('period:') ||
+      normalizedProduct.startsWith('generated') ||
+      normalizedProduct.startsWith('date:') ||
+      normalizedProduct.startsWith('page') ||
+      normalizedProduct === 'report' ||
+      dateLike;
+
+    if (isMetadata) {
+      continue;
+    }
+
     const quantity = parseFloat(saleText);
 
     if (isNaN(quantity) || quantity <= 0) {
