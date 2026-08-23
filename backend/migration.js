@@ -753,6 +753,10 @@ async function runMigrations() {
     await tx(`ALTER TABLE items ADD COLUMN IF NOT EXISTS volume DECIMAL(10,2)`);
     await tx(`ALTER TABLE items ADD COLUMN IF NOT EXISTS volume_unit TEXT`);
 
+    // Default sales serving size, used when a sales record does not specify a unit.
+    await tx(`ALTER TABLE items ADD COLUMN IF NOT EXISTS sales_volume DECIMAL(10,2)`);
+    await tx(`ALTER TABLE items ADD COLUMN IF NOT EXISTS sales_volume_unit TEXT`);
+
     // Item purchase packages
     await tx(`
       CREATE TABLE IF NOT EXISTS item_packages (

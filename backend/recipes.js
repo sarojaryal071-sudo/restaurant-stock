@@ -28,6 +28,45 @@ function stockUnitsFromServing(amount, unit, itemVolume, itemVolumeUnit) {
   return servingMl / itemVolumeMl;
 }
 
+/**
+ * Convert a number of sales servings into stock units.
+ *
+ * Example:
+ * quantitySold = 4 glasses
+ * salesVolume = 0.4 L per glass
+ * item volume = 30 L per keg
+ * => (4 * 0.4) / 30 = 0.053333 keg
+ *
+ * If the sales volume unit equals the stock unit, the sales volume is
+ * already expressed in stock units.
+ */
+function stockUnitsFromSalesServing(quantitySold, salesVolume, salesVolumeUnit, itemVolume, itemVolumeUnit, stockUnit) {
+  const qty = parseFloat(quantitySold);
+  const sv = parseFloat(salesVolume);
+
+  if (isNaN(qty) || isNaN(sv) || qty <= 0 || sv <= 0) return null;
+
+  const normalizedSalesUnit = String(salesVolumeUnit || '').trim().toLowerCase();
+  const normalizedStockUnit = String(stockUnit || '').trim().toLowerCase();
+
+  if (
+    normalizedSalesUnit &&
+    normalizedStockUnit &&
+    normalizedSalesUnit === normalizedStockUnit
+  ) {
+    return qty * sv;
+  }
+
+  const totalServingMl = amountToMl(sv, salesVolumeUnit);
+  const itemVolumeMl = amountToMl(itemVolume, itemVolumeUnit);
+
+  if (totalServingMl === null || itemVolumeMl === null || itemVolumeMl <= 0) {
+    return null;
+  }
+
+  return (qty * totalServingMl) / itemVolumeMl;
+}
+
 // -------------------------------------------------------------------
 // Helper: fetch item name by ID
 // -------------------------------------------------------------------
@@ -438,5 +477,6 @@ module.exports = {
   recordSale,
   applyRecipeSaleTx,
   stockUnitsFromServing,
+  stockUnitsFromSalesServing,
   amountToMl
 };

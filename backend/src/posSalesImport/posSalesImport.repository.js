@@ -1,7 +1,7 @@
 const { query, transaction } = require('../../database');
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
-const { applyRecipeSaleTx, stockUnitsFromServing } = require('../../recipes');
+const { applyRecipeSaleTx, stockUnitsFromServing, stockUnitsFromSalesServing } = require('../../recipes');
 
 /**
  * Compute SHA-256 hash of a buffer.
@@ -122,7 +122,7 @@ async function applyImport(tx, importId, restaurantId, userId, items, fileHash, 
     const salesUnit = item.salesUnit || null;
 
     const itemRes = await tx(
-      `SELECT id, name, unit, volume, volume_unit
+      `SELECT id, name, unit, volume, volume_unit, sales_volume, sales_volume_unit
        FROM items
        WHERE id = $1 AND restaurant_id = $2 AND is_deleted = FALSE`,
       [itemId, restaurantId]
@@ -142,6 +142,19 @@ async function applyImport(tx, importId, restaurantId, userId, items, fileHash, 
         salesUnit,
         dbItem.volume,
         dbItem.volume_unit
+      );
+
+      if (converted !== null && !isNaN(converted)) {
+        stockReduction = converted;
+      }
+    } else if (!salesUnit && dbItem.sales_volume != null && dbItem.sales_volume_unit) {
+      const converted = stockUnitsFromSalesServing(
+        quantitySold,
+        dbItem.sales_volume,
+        dbItem.sales_volume_unit,
+        dbItem.volume,
+        dbItem.volume_unit,
+        dbItem.unit
       );
 
       if (converted !== null && !isNaN(converted)) {

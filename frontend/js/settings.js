@@ -120,13 +120,16 @@ function renderInventoryConfig() {
         html += `<div style="font-size:0.8rem;color:var(--paper-faint);padding:8px 0;">No items in this category.</div>`;
       } else {
         cat.items.forEach(it => {
-          const volLabel = it.volume ? `${it.volume}${it.volumeUnit ? ' ' + it.volumeUnit : ''}` : '—';
+                const volLabel = it.volume ? `${it.volume}${it.volumeUnit ? ' ' + it.volumeUnit : ''}` : '—';
+                const salesLabel = it.salesVolume !== null && it.salesVolume !== undefined && it.salesVolumeUnit
+                  ? `${it.salesVolume} ${it.salesVolumeUnit}`
+                  : '—';
           const pkgs = packagesForItem(it.id);
           html += `<div style="border-top:1px solid var(--line);padding:10px 0;">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
               <div>
                 <div style="font-weight:700;font-size:0.9rem;color:var(--paper);">${escapeHtml(it.name)}</div>
-                <div style="font-size:0.72rem;color:var(--paper-faint);">Volume: ${escapeHtml(volLabel)} · Stock unit: ${escapeHtml(it.unit || '—')}</div>
+                      <div style="font-size:0.72rem;color:var(--paper-faint);">Volume: ${escapeHtml(volLabel)} · Sales serving: ${escapeHtml(salesLabel)} · Stock unit: ${escapeHtml(it.unit || '—')}</div>
               </div>
               <div style="display:flex;gap:6px;">
                 <button class="btn btn-ghost btn-small ic-edit-item-btn" data-item-id="${it.id}">Edit</button>

@@ -5,8 +5,8 @@ const ein = document.getElementById('editItemName');
 const eic = document.getElementById('editItemCategory');
 const eiu = document.getElementById('editItemUnit');
 const eicf = document.getElementById('editItemConfirm');
-const eiVol = document.getElementById('editItemVolume');
-const eiVolUnit = document.getElementById('editItemVolumeUnit');
+const eiVol = document.getElementById('editItemVolume'), eiVolUnit = document.getElementById('editItemVolumeUnit');
+const eiSalesVol = document.getElementById('editItemSalesVolume'), eiSalesVolUnit = document.getElementById('editItemSalesVolumeUnit');
 
 function popEditCat(sel) {
   eic.innerHTML = '';
@@ -32,15 +32,25 @@ async function openEditItem(it) {
     if (u.value === (it.unit || '')) opt.selected = true;
     eiu.appendChild(opt);
   });
-  eiVol.value = it.volume !== undefined ? it.volume : '';
-  eiVolUnit.innerHTML = '<option value="">--</option>';
-  (appConfig.units || []).filter(u => ['ml', 'cl', 'L'].includes(u.value)).forEach(u => {
-    const opt = document.createElement('option');
-    opt.value = u.value;
-    opt.textContent = u.label;
-    if (u.value === (it.volumeUnit || '')) opt.selected = true;
-    eiVolUnit.appendChild(opt);
-  });
+        eiVol.value = it.volume !== undefined ? it.volume : '';
+        eiVolUnit.innerHTML = '<option value="">--</option>';
+        (appConfig.units || []).filter(u => ['ml', 'cl', 'L'].includes(u.value)).forEach(u => {
+          const opt = document.createElement('option');
+          opt.value = u.value;
+          opt.textContent = u.label;
+          if (u.value === (it.volumeUnit || '')) opt.selected = true;
+          eiVolUnit.appendChild(opt);
+        });
+
+        eiSalesVol.value = it.salesVolume !== undefined && it.salesVolume !== null ? it.salesVolume : '';
+        eiSalesVolUnit.innerHTML = '<option value="">--</option>';
+        (appConfig.units || []).forEach(u => {
+          const opt = document.createElement('option');
+          opt.value = u.value;
+          opt.textContent = u.label;
+          if (u.value === (it.salesVolumeUnit || '')) opt.selected = true;
+          eiSalesVolUnit.appendChild(opt);
+        });
   try { await loadPackagesIfNeeded(); } catch (e) { }
   renderEditItemPackageSummary(it.id);
   openModal(eio);
@@ -63,9 +73,12 @@ eicf.addEventListener('click', async () => {
   if (!name) { ein.focus(); return; }
   const cid = eic.value;
   const unit = eiu.value || undefined;
-  const volRaw = eiVol.value;
-  const vol = volRaw ? parseFloat(volRaw) : undefined;
-  const volUnit = eiVolUnit.value || undefined;
+        const volRaw = eiVol.value;
+        const vol = volRaw ? parseFloat(volRaw) : undefined;
+        const volUnit = eiVolUnit.value || undefined;
+        const salesVolRaw = eiSalesVol.value;
+        const salesVol = salesVolRaw ? parseFloat(salesVolRaw) : null;
+        const salesVolUnit = salesVol ? (eiSalesVolUnit.value || null) : null;
   if (vol !== undefined && (isNaN(vol) || vol <= 0)) {
     toast('Volume must be greater than 0.', true);
     return;
@@ -81,11 +94,13 @@ eicf.addEventListener('click', async () => {
   eicf.disabled = true;
   eicf.textContent = 'Saving…';
   try {
-    await api.updateItem(editingItemId, { name, categoryId: cid, unit, volume: vol, volumeUnit: volUnit });
-    item.name = name;
-    item.unit = unit;
-    item.volume = vol;
-    item.volumeUnit = volUnit;
+          await api.updateItem(editingItemId, { name, categoryId: cid, unit, volume: vol, volumeUnit: volUnit, salesVolume: salesVol, salesVolumeUnit: salesVolUnit });
+          item.name = name;
+          item.unit = unit;
+          item.volume = vol;
+          item.volumeUnit = volUnit;
+          item.salesVolume = salesVol;
+          item.salesVolumeUnit = salesVolUnit;
     if (cid !== oid) moveItem(editingItemId, oid, cid);
     else refreshItem(editingItemId);
     updateOverview();
@@ -197,9 +212,8 @@ const cs = document.getElementById('newItemCategory');
 const nin = document.getElementById('newItemName');
 const niq = document.getElementById('newItemQty');
 const acf = document.getElementById('addModalConfirm');
-const niUnit = document.getElementById('newItemUnit');
-const niVol = document.getElementById('newItemVolume');
-const niVolUnit = document.getElementById('newItemVolumeUnit');
+const niUnit = document.getElementById('newItemUnit'), niVol = document.getElementById('newItemVolume'), niVolUnit = document.getElementById('newItemVolumeUnit');
+const niSalesVol = document.getElementById('newItemSalesVolume'), niSalesVolUnit = document.getElementById('newItemSalesVolumeUnit');
 
 function popCatSel() {
   cs.innerHTML = '';
@@ -221,15 +235,8 @@ function popStockUnitSel(selectEl) {
   });
 }
 
-function popVolumeUnitSel(selectEl) {
-  selectEl.innerHTML = '<option value="">--</option>';
-  (appConfig.units || []).filter(u => ['ml', 'cl', 'L'].includes(u.value)).forEach(u => {
-    const o = document.createElement('option');
-    o.value = u.value;
-    o.textContent = u.label;
-    selectEl.appendChild(o);
-  });
-}
+      function popVolumeUnitSel(selectEl) { selectEl.innerHTML = '<option value="">--</option>'; (appConfig.units || []).filter(u => ['ml', 'cl', 'L'].includes(u.value)).forEach(u => { const o = document.createElement('option'); o.value = u.value; o.textContent = u.label; selectEl.appendChild(o); }); }
+      function popSalesVolumeUnitSel(selectEl) { selectEl.innerHTML = '<option value="">--</option>'; (appConfig.units || []).forEach(u => { const o = document.createElement('option'); o.value = u.value; o.textContent = u.label; selectEl.appendChild(o); }); }
 
 document.getElementById('addModalCancel').addEventListener('click', () => closeModal(ao));
 
@@ -244,16 +251,21 @@ acf.addEventListener('click', async () => {
   const unit = niUnit.value || undefined;
   const vol = niVol.value ? parseFloat(niVol.value) : undefined;
   const volUnit = niVolUnit.value || undefined;
+  const salesVolRaw = niSalesVol.value;
+  const salesVol = salesVolRaw ? parseFloat(salesVolRaw) : null;
+  const salesVolUnit = salesVol ? (niSalesVolUnit.value || null) : null;
   acf.disabled = true;
   acf.textContent = 'Adding…';
   try {
-    const r = await api.addCustomItem(cid, name, q, { unit, volume: vol, volumeUnit: volUnit });
+    const r = await api.addCustomItem(cid, name, q, { unit, volume: vol, volumeUnit: volUnit, salesVolume: salesVol, salesVolumeUnit: salesVolUnit });
     const ni = (r && r.item) ? r.item : { id: uid(), name, q, custom: true };
     ni.custom = true;
     ni.lastConfirmedQty = ni.qty;
     ni.unit = unit;
     ni.volume = vol;
     ni.volumeUnit = volUnit;
+    ni.salesVolume = salesVol;
+    ni.salesVolumeUnit = salesVolUnit;
     appendItem(cid, ni);
     closeModal(ao);
     toast('Added "' + name + '"');
@@ -274,4 +286,5 @@ window.delCat = delCat;
 window.popCatSel = popCatSel;
 window.popStockUnitSel = popStockUnitSel;
 window.popVolumeUnitSel = popVolumeUnitSel;
+window.popSalesVolumeUnitSel = popSalesVolumeUnitSel;
 window.updateCatSelects = updateCatSelects;
