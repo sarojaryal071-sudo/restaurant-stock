@@ -170,10 +170,19 @@ function renderSalesPreview() {
 
     const mappingSelect = `<select class="field-select sales-map-select" id="mapSelect_${idx}" style="width:auto;min-width:160px;display:inline-block;padding:8px 10px;font-size:0.82rem;">${buildMappingOptionsHtml(item)}</select>`;
 
+    let defaultUnit = item.unit || '';
+
+    // If CSV unit is missing but product resolved to an inventory item, use item's stock unit
+    if (!defaultUnit && item.matched && item.type === 'inventory' && item.itemId) {
+      const resolvedItem = findItem(item.itemId);
+      if (resolvedItem && resolvedItem.item && resolvedItem.item.unit) {
+        defaultUnit = resolvedItem.item.unit;
+        item.unit = defaultUnit; // keep for apply payload
+      }
+    }
+
     const unitControl = item.type === 'inventory'
-      ? (item.unit
-          ? escapeHtml(item.unit)
-          : `<select class="field-select sales-unit-select" id="unitSelect_${idx}" style="width:auto;min-width:100px;display:inline-block;padding:8px 10px;font-size:0.82rem;">${buildUnitOptionsHtml('')}</select>`)
+      ? `<select class="field-select sales-unit-select" id="unitSelect_${idx}" style="width:auto;min-width:100px;display:inline-block;padding:8px 10px;font-size:0.82rem;">${buildUnitOptionsHtml(defaultUnit)}</select>`
       : '—';
 
     html += `<tr>
