@@ -3,6 +3,20 @@
 
 <head>
   <meta charset="UTF-8">
+  <script>
+    // Resolve and stamp the theme before first paint, so there is no
+    // flash of the wrong theme. Stored preference wins; otherwise the
+    // OS preference decides. Never touches the backend.
+    (function () {
+      try {
+        var stored = localStorage.getItem('sc_theme');
+        var theme = (stored === 'light' || stored === 'dark')
+          ? stored
+          : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch (e) { }
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
   <link rel="icon" type="image/png" sizes="192x192" href="assets/stock-logo.png">
   <link rel="apple-touch-icon" href="assets/stock-logo.png">
@@ -77,6 +91,15 @@
             <polyline points="7 10 12 15 17 10" />
             <line x1="12" y1="15" x2="12" y2="3" />
           </svg></button>
+        <button class="theme-toggle-btn" id="themeToggleBtn" title="Switch light/dark theme" aria-label="Switch light/dark theme">
+          <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+          </svg>
+          <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          </svg>
+        </button>
         <button class="logout-btn" id="logoutBtn" title="Logout"><svg viewBox="0 0 24 24" fill="none"
             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -257,25 +280,49 @@
     </div>
   </div>
 
-  <div class="modal-overlay" id="editItemOverlay">
+  <div class="modal-overlay" id="editItemOverlay" data-no-dismiss>
     <div class="modal-card">
       <div class="modal-title">Edit Item</div>
-      <label class="field-label" for="editItemName">Item Name</label><input class="field-input" id="editItemName"
-        type="text" maxlength="60">
-      <label class="field-label" for="editItemCategory">Category</label><select class="field-select"
-        id="editItemCategory"></select>
-      <label class="field-label" for="editItemUnit">Unit</label><select class="field-select" id="editItemUnit"></select>
-      <label class="field-label" for="editItemVolume">Volume (optional)</label><input class="field-input" id="editItemVolume"
-        type="number" min="0" step="0.01" placeholder="e.g. 0.3">
-      <label class="field-label" for="editItemVolumeUnit">Volume Unit</label><select class="field-select" id="editItemVolumeUnit"></select>
-      <label class="field-label" for="editItemSalesVolume">Sales Volume (optional)</label><input class="field-input" id="editItemSalesVolume"
-        type="number" min="0" step="0.01" placeholder="e.g. 0.4">
-      <label class="field-label" for="editItemSalesVolumeUnit">Sales Volume Unit</label><select class="field-select" id="editItemSalesVolumeUnit"></select>
-      <label class="field-label">Packages</label>
-      <div id="editItemPackagesList" class="package-readonly-list"></div>
-      <div style="margin-top:var(--space-3);">
-        <button class="btn btn-ghost btn-small" id="editItemPackagesBtn" type="button">Manage Packages</button>
+
+      <div class="config-group">
+        <div class="config-group-label">Basics</div>
+        <label class="field-label" for="editItemName">Item Name</label><input class="field-input" id="editItemName"
+          type="text" maxlength="60">
+        <label class="field-label" for="editItemCategory">Category</label><select class="field-select"
+          id="editItemCategory"></select>
+        <label class="field-label" for="editItemUnit">Counted in</label><select class="field-select" id="editItemUnit"></select>
+        <div class="field-help">This is the unit you count and adjust in Inventory — e.g. Bottle, Keg, Box, Piece.</div>
       </div>
+
+      <div class="config-group">
+        <div class="config-group-label">Physical volume<span class="config-group-optional">Optional</span></div>
+        <div class="config-row">
+          <div><label class="field-label" for="editItemVolume">Volume</label><input class="field-input" id="editItemVolume"
+              type="number" min="0" step="0.01" placeholder="e.g. 750"></div>
+          <div><label class="field-label" for="editItemVolumeUnit">Unit</label><select class="field-select" id="editItemVolumeUnit"></select></div>
+        </div>
+        <div class="field-help">How much physical product one counted unit contains — e.g. a 750&nbsp;ml bottle, a 30&nbsp;L keg. Leave blank for items that are never partially used, like napkins.</div>
+      </div>
+
+      <div class="config-group" id="editItemServingGroup">
+        <div class="config-group-label">Default serving size<span class="config-group-optional">Optional</span></div>
+        <div class="config-row">
+          <div><label class="field-label" for="editItemSalesVolume">Serving size</label><input class="field-input" id="editItemSalesVolume"
+              type="number" min="0" step="0.01" placeholder="e.g. 16"></div>
+          <div><label class="field-label" for="editItemSalesVolumeUnit">Unit</label><select class="field-select" id="editItemSalesVolumeUnit"></select></div>
+        </div>
+        <div class="field-help">The normal pour size when this item is sold on its own, outside of a recipe — e.g. a 16&nbsp;cl glass.</div>
+      </div>
+
+      <div class="config-group">
+        <div class="config-group-label">Purchase packages</div>
+        <div class="field-help" style="margin-top:0;margin-bottom:var(--space-1);">How this item is normally bought from the supplier. The counted unit above is always available too.</div>
+        <div id="editItemPackagesList" class="package-readonly-list"></div>
+        <div style="margin-top:var(--space-3);">
+          <button class="btn btn-ghost btn-small" id="editItemPackagesBtn" type="button">Manage Packages</button>
+        </div>
+      </div>
+
       <div class="modal-actions"><button class="btn btn-ghost" id="editItemCancel">Cancel</button><button
           class="btn btn-gold" id="editItemConfirm">Save Changes</button></div>    </div>
   </div>
@@ -289,7 +336,7 @@
     </div>
   </div>
 
-  <div class="modal-overlay" id="categoryDialogOverlay">
+  <div class="modal-overlay" id="categoryDialogOverlay" data-no-dismiss>
     <div class="modal-card">
       <div class="modal-title" id="categoryDialogTitle">Add Category</div>
       <label class="field-label" for="categoryDialogName">Category Name</label><input class="field-input"
@@ -299,22 +346,44 @@
     </div>
   </div>
 
-  <div class="modal-overlay" id="addModalOverlay">
+  <div class="modal-overlay" id="addModalOverlay" data-no-dismiss>
     <div class="modal-card">
       <div class="modal-title">Add Custom Item</div>
-      <label class="field-label" for="newItemCategory">Category</label><select class="field-select"
-        id="newItemCategory"></select>
-      <label class="field-label" for="newItemName">Item Name</label><input class="field-input" id="newItemName"
-        type="text" placeholder="e.g. Negroni Mix" maxlength="60">
-      <label class="field-label" for="newItemQty">Initial Quantity</label><input class="field-input" id="newItemQty"
-        type="number" min="0" value="0" inputmode="numeric">
-      <label class="field-label" for="newItemUnit">Stock Unit</label><select class="field-select" id="newItemUnit"></select>
-      <label class="field-label" for="newItemVolume">Volume (optional)</label><input class="field-input" id="newItemVolume"
-        type="number" min="0" step="0.01" placeholder="e.g. 0.3">
-      <label class="field-label" for="newItemVolumeUnit">Volume Unit</label><select class="field-select" id="newItemVolumeUnit"></select>
-      <label class="field-label" for="newItemSalesVolume">Sales Volume (optional)</label><input class="field-input" id="newItemSalesVolume"
-        type="number" min="0" step="0.01" placeholder="e.g. 0.4">
-      <label class="field-label" for="newItemSalesVolumeUnit">Sales Volume Unit</label><select class="field-select" id="newItemSalesVolumeUnit"></select>
+
+      <div class="config-group">
+        <div class="config-group-label">Basics</div>
+        <label class="field-label" for="newItemCategory">Category</label><select class="field-select"
+          id="newItemCategory"></select>
+        <label class="field-label" for="newItemName">Item Name</label><input class="field-input" id="newItemName"
+          type="text" placeholder="e.g. Negroni Mix" maxlength="60">
+        <label class="field-label" for="newItemQty">Initial Quantity</label><input class="field-input" id="newItemQty"
+          type="number" min="0" value="0" inputmode="numeric">
+        <label class="field-label" for="newItemUnit">Counted in</label><select class="field-select" id="newItemUnit"></select>
+        <div class="field-help">This is the unit you count and adjust in Inventory — e.g. Bottle, Keg, Box, Piece.</div>
+      </div>
+
+      <div class="config-group">
+        <div class="config-group-label">Physical volume<span class="config-group-optional">Optional</span></div>
+        <div class="config-row">
+          <div><label class="field-label" for="newItemVolume">Volume</label><input class="field-input" id="newItemVolume"
+              type="number" min="0" step="0.01" placeholder="e.g. 750"></div>
+          <div><label class="field-label" for="newItemVolumeUnit">Unit</label><select class="field-select" id="newItemVolumeUnit"></select></div>
+        </div>
+        <div class="field-help">How much physical product one counted unit contains — e.g. a 750&nbsp;ml bottle, a 30&nbsp;L keg. Leave blank for items that are never partially used, like napkins.</div>
+      </div>
+
+      <div class="config-group" id="newItemServingGroup">
+        <div class="config-group-label">Default serving size<span class="config-group-optional">Optional</span></div>
+        <div class="config-row">
+          <div><label class="field-label" for="newItemSalesVolume">Serving size</label><input class="field-input" id="newItemSalesVolume"
+              type="number" min="0" step="0.01" placeholder="e.g. 16"></div>
+          <div><label class="field-label" for="newItemSalesVolumeUnit">Unit</label><select class="field-select" id="newItemSalesVolumeUnit"></select></div>
+        </div>
+        <div class="field-help">The normal pour size when this item is sold on its own, outside of a recipe — e.g. a 16&nbsp;cl glass.</div>
+      </div>
+
+      <div class="field-help" style="margin-top:var(--space-2);">Purchase packages (e.g. "Case = 6 Bottles") can be added right after — the Package Manager opens automatically once this item is created.</div>
+
       <div class="modal-actions"><button class="btn btn-ghost" id="addModalCancel">Cancel</button><button
           class="btn btn-gold" id="addModalConfirm">Add Item</button></div>
     </div>
@@ -330,7 +399,7 @@
     </div>
   </div>
 
-  <div class="modal-overlay" id="recipeModalOverlay">
+  <div class="modal-overlay" id="recipeModalOverlay" data-no-dismiss>
     <div class="modal-card" style="max-width:500px">
       <div class="modal-title" id="recipeModalTitle">Add Recipe</div>
       <label class="field-label" for="recipeName">Recipe Name</label><input class="field-input" id="recipeName"
@@ -350,7 +419,7 @@
     </div>
   </div>
 
-  <div class="modal-overlay" id="resolveAllocationModal">
+  <div class="modal-overlay" id="resolveAllocationModal" data-no-dismiss>
     <div class="modal-card">
       <div class="modal-title">Resolve Pending Allocation</div>
       <div id="resolveModalContent"></div>
@@ -362,7 +431,7 @@
   </div>
 
   <!-- Staff Management Modals -->
-  <div class="modal-overlay" id="staffAddModalOverlay">
+  <div class="modal-overlay" id="staffAddModalOverlay" data-no-dismiss>
     <div class="modal-card">
       <div class="modal-title">Add Staff</div>
       <label class="field-label" for="staffAddName">Name</label><input class="field-input" id="staffAddName" type="text"
@@ -373,7 +442,7 @@
           class="btn btn-gold" id="staffAddConfirm">Create</button></div>
     </div>
   </div>
-  <div class="modal-overlay" id="staffEditModalOverlay">
+  <div class="modal-overlay" id="staffEditModalOverlay" data-no-dismiss>
     <div class="modal-card">
       <div class="modal-title">Edit Staff</div>
       <label class="field-label" for="staffEditName">Name</label><input class="field-input" id="staffEditName"
@@ -398,7 +467,7 @@
     </div>
   </div>
 
-  <div class="modal-overlay" id="adjustReasonModalOverlay">
+  <div class="modal-overlay" id="adjustReasonModalOverlay" data-no-dismiss>
     <div class="modal-card" style="max-width:520px">
       <div class="modal-title">Reason for Changes</div>
       <div id="adjustReasonList"></div>
@@ -409,21 +478,26 @@
     </div>
   </div>
 
-  <div class="modal-overlay" id="packageManagerModalOverlay">
+  <div class="modal-overlay" id="packageManagerModalOverlay" data-no-dismiss>
     <div class="modal-card" style="max-width:480px">
       <div class="modal-title" id="packageManagerTitle">Packages</div>
+      <div class="field-help" style="margin-top:0;">How this item is bought from the supplier, and how many counted units each package holds.</div>
       <div id="packageManagerList"></div>
-      <div style="display:flex;gap:6px;margin-top:var(--space-3);flex-wrap:wrap;">
-        <input type="text" id="packageUnitInput" class="field-input" placeholder="Purchase unit (e.g. Case)" style="flex:1;min-width:120px;">
-        <input type="number" id="packageUnitsPerInput" class="field-input" placeholder="Contains (e.g. 24)" min="0" step="0.01" style="width:110px;">
-        <button class="btn btn-gold btn-small" id="packageAddBtn">Add Package</button>
+      <div class="config-group-label" style="margin-top:var(--space-3);">Add a purchase package</div>
+      <div class="config-row">
+        <div><label class="field-label" for="packageUnitInput">Purchase package</label>
+          <input type="text" id="packageUnitInput" class="field-input" placeholder="e.g. Case"></div>
+        <div><label class="field-label" for="packageUnitsPerInput">Contains</label>
+          <input type="number" id="packageUnitsPerInput" class="field-input" placeholder="e.g. 6" min="0" step="0.01"></div>
       </div>
+      <div class="package-live-preview" id="packageLivePreview"></div>
+      <button class="btn btn-gold btn-small" id="packageAddBtn" style="width:100%;margin-top:var(--space-2);">Add Package</button>
       <div class="modal-actions"><button class="btn btn-ghost" id="packageManagerCloseBtn">Close</button></div>
     </div>
   </div>
 
   <!-- Purchase Register Modals -->
-  <div class="modal-overlay" id="purchaseModalOverlay">
+  <div class="modal-overlay" id="purchaseModalOverlay" data-no-dismiss>
     <div class="modal-card" style="max-width:600px">
       <div class="modal-title">Add Purchase</div>
       <p class="settings-detail-desc" style="margin-bottom:var(--space-3);font-size:clamp(0.78rem, 2.6vw, 0.82rem);line-height:1.5;">Record newly received stock. The backend calculates the final stock result.</p>

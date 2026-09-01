@@ -34,8 +34,8 @@ function renderEditItemPackageSummary(itemId) {
     const num = parseFloat(p.units_per_package);
     const status = p.enabled ? '' : ' <span class="package-readonly-status">Disabled</span>';
     return `<div class="package-readonly-row">
-      <div class="package-readonly-unit">${escapeHtml(p.package_unit)}</div>
-      <div class="package-readonly-qty">${num} ${escapeHtml(stockUnit)}${num === 1 ? '' : 's'}${status}</div>
+      <div class="package-readonly-unit">1 ${escapeHtml(p.package_unit)}</div>
+      <div class="package-readonly-qty">= ${num} ${escapeHtml(pluralizeUnit(num, stockUnit))}${status}</div>
     </div>`;
   }).join('');
 }
@@ -54,7 +54,28 @@ function openPackageManager(itemId) {
     addBtn.classList.add('btn-gold');
   }
   renderPackageManagerList();
+  updatePackageLivePreview();
   openModal(document.getElementById('packageManagerModalOverlay'));
+}
+
+/**
+ * Live "1 Case = 6 Bottles" relationship preview as the manager types.
+ * Presentation only — does not create or change any package record.
+ */
+function updatePackageLivePreview() {
+  const preview = document.getElementById('packageLivePreview');
+  if (!preview) return;
+  const unitVal = document.getElementById('packageUnitInput').value.trim();
+  const perPackage = parseFloat(document.getElementById('packageUnitsPerInput').value);
+  const f = findItem(managingPackagesForItemId);
+  const stockUnit = f ? (f.item.unit || 'unit') : 'unit';
+  if (!unitVal || !perPackage || perPackage <= 0) {
+    preview.textContent = '';
+    preview.classList.remove('show');
+    return;
+  }
+  preview.textContent = `1 ${unitVal} = ${perPackage} ${pluralizeUnit(perPackage, stockUnit)}`;
+  preview.classList.add('show');
 }
 
 function renderPackageManagerList() {
@@ -69,7 +90,7 @@ function renderPackageManagerList() {
     list.innerHTML = pkgs.map(p => `
       <div class="adjust-reason-row" data-package-id="${p.id}">
         <div class="adjust-reason-header">
-          <span class="adjust-reason-name">${escapeHtml(p.package_unit)} → ${p.units_per_package} ${escapeHtml(stockUnit)}</span>
+          <span class="adjust-reason-name">1 ${escapeHtml(p.package_unit)} = ${p.units_per_package} ${escapeHtml(pluralizeUnit(p.units_per_package, stockUnit))}</span>
           <span style="font-size:0.72rem;color:${p.enabled ? 'var(--qty-good)' : 'var(--paper-faint)'};">${p.enabled ? 'Enabled' : 'Disabled'}</span>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -90,6 +111,7 @@ function renderPackageManagerList() {
           addBtn.classList.remove('btn-gold');
           addBtn.classList.add('btn-ghost');
         }
+        updatePackageLivePreview();
       });
     });
     list.querySelectorAll('.pkg-toggle-btn').forEach(btn => {
@@ -158,6 +180,7 @@ document.getElementById('packageAddBtn').addEventListener('click', async () => {
     btn.textContent = 'Add Package';
     btn.classList.remove('btn-ghost');
     btn.classList.add('btn-gold');
+    updatePackageLivePreview();
     renderPackageManagerList();
     renderInventoryConfig();
   } catch (e) {
@@ -171,8 +194,12 @@ document.getElementById('packageManagerCloseBtn').addEventListener('click', () =
   closeModal(document.getElementById('packageManagerModalOverlay'));
 });
 
+document.getElementById('packageUnitInput').addEventListener('input', updatePackageLivePreview);
+document.getElementById('packageUnitsPerInput').addEventListener('input', updatePackageLivePreview);
+
 window.loadPackagesIfNeeded = loadPackagesIfNeeded;
 window.packagesForItem = packagesForItem;
 window.renderEditItemPackageSummary = renderEditItemPackageSummary;
 window.openPackageManager = openPackageManager;
+window.updatePackageLivePreview = updatePackageLivePreview;
 window.renderPackageManagerList = renderPackageManagerList;

@@ -115,7 +115,7 @@ function renderItemRowOrig(c, it) {
 
         const hasRemainder = Number(it.remainingVolume) > 0 || Math.floor(Number(it.qty)) !== Number(it.qty);
         if (it.remainingVolume !== undefined && it.remainingVolume !== null && it.remainingVolumeUnit && hasRemainder) {
-          remaining.textContent = `${Math.floor(Number(it.qty) || 0)} : ${it.remainingVolume} ${it.remainingVolumeUnit}`;
+          remaining.textContent = formatStockRemainder(Math.floor(Number(it.qty) || 0), it.unit, it.remainingVolume, it.remainingVolumeUnit);
           remaining.classList.remove('hidden');
         }
 
@@ -175,7 +175,12 @@ function changeQty(iid, delta) {
   const f = findItem(iid);
   if (!f) return;
   const { item } = f;
-  const nq = Math.max(0, item.qty + delta);
+  // Same floor the quantity <input>'s min attribute already uses (see
+  // the qe.min assignment above) — the stepper must not disagree with
+  // the field it sits next to.
+  const negativeAllowed = !!(settingsData && settingsData.inventoryBehaviour && settingsData.inventoryBehaviour.negativeStockAllowed);
+  const floor = negativeAllowed ? -Infinity : 0;
+  const nq = Math.max(floor, item.qty + delta);
   if (nq === item.qty) return;
   item.qty = nq;
   updateItemRowUI(iid, item);
@@ -198,7 +203,7 @@ function changeQty(iid, delta) {
           const hasRemainder = Number(it.remainingVolume) > 0 || Math.floor(Number(it.qty)) !== Number(it.qty);
           if (it.remainingVolume !== undefined && it.remainingVolume !== null && it.remainingVolumeUnit && hasRemainder) {
             const wholeUnits = Math.floor(Number(it.qty) || 0);
-            rem.textContent = `${wholeUnits} : ${it.remainingVolume} ${it.remainingVolumeUnit}`;
+            rem.textContent = formatStockRemainder(wholeUnits, it.unit, it.remainingVolume, it.remainingVolumeUnit);
             rem.classList.remove('hidden');
           } else {
             rem.classList.add('hidden');
@@ -271,7 +276,7 @@ document.addEventListener('click', e => {
           const hasRemainder = Number(item.remainingVolume) > 0 || Math.floor(Number(item.qty)) !== Number(item.qty);
           if (item.remainingVolume !== undefined && item.remainingVolume !== null && item.remainingVolumeUnit && hasRemainder) {
             const wholeUnits = Math.floor(Number(item.qty) || 0);
-            rem.textContent = `${wholeUnits} : ${item.remainingVolume} ${item.remainingVolumeUnit}`;
+            rem.textContent = formatStockRemainder(wholeUnits, item.unit, item.remainingVolume, item.remainingVolumeUnit);
             rem.classList.remove('hidden');
           } else {
             rem.classList.add('hidden');
@@ -575,6 +580,196 @@ document.getElementById('exportBtn').addEventListener('click', async () => {
         if (!Object.keys(expandedState).length && state.categories[0]) expandedState[state.categories[0].id] = true;
         setOnline(true); document.getElementById('loadingScreen').classList.add('fade-out');
       }
+
+// -------------------------------------------------------------------
+// Pending Allocations (Bug 1 fix)
+//
+// Read path: listPendingAllocations() / getPendingAllocationDetails().
+// Write path: resolvePendingAllocation() — an existing, unmodified,
+// already-correct backend endpoint. No new allocation business logic
+// is introduced here; this only wires the frontend to what the
+// backend already does.
+// -------------------------------------------------------------------
+let resolvingAllocation = null;
+let resolvingAllocationDetails = [];
+
+async function loadPendingAllocations() {
+  const container = document.getElementById('pendingAllocationsContainer');
+  if (!container) return;
+  if (!can('allocations', 'list')) {
+    container.classList.add('hidden');
+    return;
+  }
+  container.classList.remove('hidden');
+
+  const list = document.getElementById('pendingAllocationsList');
+  const emptyState = document.getElementById('pendingEmptyState');
+  const badge = document.getElementById('pendingBadge');
+  if (!list) return;
+
+  list.innerHTML = '<div class="loading-spinner" style="margin:1.2rem auto;"></div>';
+  if (emptyState) emptyState.classList.remove('show');
+
+  try {
+    const data = await api.listPendingAllocations();
+    pendingAllocations = (data && Array.isArray(data.allocations)) ? data.allocations : [];
+    renderPendingAllocations();
+  } catch (e) {
+    pendingAllocations = [];
+    list.innerHTML = `<div class="empty-state show"><div>Could not load pending allocations. ${escapeHtml(e.message || '')}</div></div>`;
+    if (badge) badge.classList.add('hidden');
+  }
+}
+
+function renderPendingAllocations() {
+  const list = document.getElementById('pendingAllocationsList');
+  const emptyState = document.getElementById('pendingEmptyState');
+  const badge = document.getElementById('pendingBadge');
+  if (!list) return;
+
+  if (!pendingAllocations.length) {
+    list.innerHTML = '';
+    if (emptyState) emptyState.classList.add('show');
+    if (badge) badge.classList.add('hidden');
+    return;
+  }
+
+  if (emptyState) emptyState.classList.remove('show');
+  if (badge) {
+    badge.textContent = pendingAllocations.length;
+    badge.classList.remove('hidden');
+  }
+
+  list.innerHTML = '';
+  pendingAllocations.forEach(a => {
+    const card = document.createElement('div');
+    card.className = 'pending-alloc-card';
+    const cocktailLabel = a.cocktailCount === 1 ? '1 recipe' : `${a.cocktailCount || 0} recipes`;
+    card.innerHTML = `
+      <div class="alloc-header">
+        <span class="alloc-name">${escapeHtml(a.categoryName || 'Category')}</span>
+        <span class="alloc-short">Short ${a.totalRequired} ${escapeHtml(a.unit || '')}</span>
+      </div>
+      <div class="alloc-count">Affects ${escapeHtml(cocktailLabel)} · tap to resolve</div>
+    `;
+    if (can('allocations', 'resolve')) {
+      card.addEventListener('click', () => openResolveAllocationModal(a));
+    } else {
+      card.style.cursor = 'default';
+    }
+    list.appendChild(card);
+  });
+}
+
+function buildReplacementOptionsHtml(categoryId) {
+  let html = '<option value="">-- Select replacement --</option>';
+  state.categories.forEach(c => {
+    if (categoryId && c.id !== categoryId) return;
+    c.items.forEach(it => {
+      html += `<option value="${it.id}">${escapeHtml(it.name)}</option>`;
+    });
+  });
+  return html;
+}
+
+async function openResolveAllocationModal(allocation) {
+  if (!can('allocations', 'resolve')) {
+    toast('You do not have permission to resolve allocations.', true);
+    return;
+  }
+  resolvingAllocation = allocation;
+  resolvingAllocationDetails = [];
+  const content = document.getElementById('resolveModalContent');
+  const confirmBtn = document.getElementById('resolveConfirm');
+  if (confirmBtn) confirmBtn.disabled = true;
+  if (content) content.innerHTML = '<div class="loading-spinner" style="margin:1.2rem auto;"></div>';
+  openModal(document.getElementById('resolveAllocationModal'));
+
+  try {
+    const data = await api.getPendingAllocationDetails(allocation.id);
+    resolvingAllocationDetails = (data && Array.isArray(data.details)) ? data.details : [];
+    renderResolveModalContent(allocation);
+  } catch (e) {
+    if (content) content.innerHTML = `<div class="empty-state show"><div>Could not load allocation details. ${escapeHtml(e.message || '')}</div></div>`;
+  }
+}
+
+function renderResolveModalContent(allocation) {
+  const content = document.getElementById('resolveModalContent');
+  if (!content) return;
+
+  if (!resolvingAllocationDetails.length) {
+    content.innerHTML = '<div class="empty-state show"><div>No shortfall details found for this allocation.</div></div>';
+    return;
+  }
+
+  content.innerHTML = '<p class="alloc-empty-hint">Choose which in-stock item should cover each shortfall below.</p>' +
+    resolvingAllocationDetails.map(d => `
+      <div class="replace-row" data-detail-id="${d.id}">
+        <div>
+          <div class="cocktail-name">${escapeHtml(d.recipeName || 'Recipe')}</div>
+          <div class="replace-need">needs ${d.quantity} ${escapeHtml(d.unit || '')} of ${escapeHtml(d.inventoryItemName || 'ingredient')}</div>
+        </div>
+        <select class="resolve-replacement-select">${buildReplacementOptionsHtml(allocation.categoryId)}</select>
+      </div>
+    `).join('');
+
+  content.querySelectorAll('.resolve-replacement-select').forEach(sel => {
+    sel.addEventListener('change', validateResolveForm);
+  });
+  validateResolveForm();
+}
+
+function validateResolveForm() {
+  const rows = document.querySelectorAll('#resolveModalContent .replace-row');
+  let allValid = rows.length > 0;
+  rows.forEach(row => {
+    const sel = row.querySelector('.resolve-replacement-select');
+    if (!sel || !sel.value) allValid = false;
+  });
+  const confirmBtn = document.getElementById('resolveConfirm');
+  if (confirmBtn) confirmBtn.disabled = !allValid;
+}
+
+document.getElementById('resolveCancel').addEventListener('click', () => {
+  closeModal(document.getElementById('resolveAllocationModal'));
+  resolvingAllocation = null;
+  resolvingAllocationDetails = [];
+});
+
+document.getElementById('resolveConfirm').addEventListener('click', async () => {
+  if (!resolvingAllocation) return;
+  const rows = document.querySelectorAll('#resolveModalContent .replace-row');
+  const mappings = [];
+  rows.forEach(row => {
+    const sel = row.querySelector('.resolve-replacement-select');
+    if (sel && sel.value) mappings.push({ detailId: row.dataset.detailId, newInventoryItemId: sel.value });
+  });
+  if (!mappings.length) return;
+
+  const btn = document.getElementById('resolveConfirm');
+  btn.disabled = true;
+  btn.textContent = 'Resolving…';
+  try {
+    await api.resolvePendingAllocation(resolvingAllocation.id, mappings);
+    toast('Allocation resolved. Stock updated.');
+    closeModal(document.getElementById('resolveAllocationModal'));
+    resolvingAllocation = null;
+    resolvingAllocationDetails = [];
+    clearSessionCache(CACHE_KEYS.inventory);
+    await loadPendingAllocations();
+    await loadInventory();
+  } catch (e) {
+    toast(e.message || 'Failed to resolve allocation.', true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Resolve';
+  }
+});
+
+window.loadPendingAllocations = loadPendingAllocations;
+window.renderPendingAllocations = renderPendingAllocations;
+window.openResolveAllocationModal = openResolveAllocationModal;
 
 window.rootEl = rootEl;
 window.render = render;

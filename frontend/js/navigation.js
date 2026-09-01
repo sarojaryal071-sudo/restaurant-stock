@@ -109,8 +109,11 @@ document.getElementById('actionAddItem').addEventListener('click', () => {
   document.getElementById('newItemName').value = '';
   document.getElementById('newItemQty').value = 0;
   document.getElementById('newItemVolume').value = '';
+  document.getElementById('newItemSalesVolume').value = '';
   popStockUnitSel(document.getElementById('newItemUnit'));
   popVolumeUnitSel(document.getElementById('newItemVolumeUnit'));
+  popSalesVolumeUnitSel(document.getElementById('newItemSalesVolumeUnit'));
+  syncServingVisibility();
   openModal(document.getElementById('addModalOverlay'));
   setTimeout(() => document.getElementById('newItemName').focus(), 250);
 });

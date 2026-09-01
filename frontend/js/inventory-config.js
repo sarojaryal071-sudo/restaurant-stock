@@ -43,16 +43,21 @@ async function openEditItem(it) {
         });
 
         eiSalesVol.value = it.salesVolume !== undefined && it.salesVolume !== null ? it.salesVolume : '';
-        eiSalesVolUnit.innerHTML = '<option value="">--</option>';
-        (appConfig.units || []).forEach(u => {
-          const opt = document.createElement('option');
-          opt.value = u.value;
-          opt.textContent = u.label;
-          if (u.value === (it.salesVolumeUnit || '')) opt.selected = true;
-          eiSalesVolUnit.appendChild(opt);
-        });
+        popSalesVolumeUnitSel(eiSalesVolUnit);
+        // If this item's existing sales-volume unit predates the ml/cl/L
+        // filter, keep it selectable rather than silently dropping it —
+        // saving the form without touching this field must never change
+        // a value the user didn't ask to change.
+        if (it.salesVolumeUnit && !Array.from(eiSalesVolUnit.options).some(o => o.value === it.salesVolumeUnit)) {
+          const extra = document.createElement('option');
+          extra.value = it.salesVolumeUnit;
+          extra.textContent = it.salesVolumeUnit;
+          eiSalesVolUnit.appendChild(extra);
+        }
+        eiSalesVolUnit.value = it.salesVolumeUnit || '';
   try { await loadPackagesIfNeeded(); } catch (e) { }
   renderEditItemPackageSummary(it.id);
+  syncServingVisibility();
   openModal(eio);
   setTimeout(() => ein.focus(), 250);
 }
@@ -236,7 +241,19 @@ function popStockUnitSel(selectEl) {
 }
 
       function popVolumeUnitSel(selectEl) { selectEl.innerHTML = '<option value="">--</option>'; (appConfig.units || []).filter(u => ['ml', 'cl', 'L'].includes(u.value)).forEach(u => { const o = document.createElement('option'); o.value = u.value; o.textContent = u.label; selectEl.appendChild(o); }); }
-      function popSalesVolumeUnitSel(selectEl) { selectEl.innerHTML = '<option value="">--</option>'; (appConfig.units || []).forEach(u => { const o = document.createElement('option'); o.value = u.value; o.textContent = u.label; selectEl.appendChild(o); }); }
+      function popSalesVolumeUnitSel(selectEl) { selectEl.innerHTML = '<option value="">--</option>'; (appConfig.units || []).filter(u => ['ml', 'cl', 'L'].includes(u.value)).forEach(u => { const o = document.createElement('option'); o.value = u.value; o.textContent = u.label; selectEl.appendChild(o); }); }
+
+      // Progressive disclosure: the "Default serving size" group only
+      // becomes relevant once a physical Volume has been set — matches
+      // the same rule for both the Edit Item and Add Custom Item modals.
+      function syncServingVisibility() {
+        const eiGroup = document.getElementById('editItemServingGroup');
+        if (eiGroup) eiGroup.classList.toggle('hidden', !(eiVol.value !== '' && parseFloat(eiVol.value) > 0));
+        const niGroup = document.getElementById('newItemServingGroup');
+        if (niGroup) niGroup.classList.toggle('hidden', !(niVol.value !== '' && parseFloat(niVol.value) > 0));
+      }
+      eiVol.addEventListener('input', syncServingVisibility);
+      niVol.addEventListener('input', syncServingVisibility);
 
 document.getElementById('addModalCancel').addEventListener('click', () => closeModal(ao));
 
@@ -287,4 +304,5 @@ window.popCatSel = popCatSel;
 window.popStockUnitSel = popStockUnitSel;
 window.popVolumeUnitSel = popVolumeUnitSel;
 window.popSalesVolumeUnitSel = popSalesVolumeUnitSel;
+window.syncServingVisibility = syncServingVisibility;
 window.updateCatSelects = updateCatSelects;

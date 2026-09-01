@@ -128,7 +128,7 @@ function renderInventoryConfig() {
             <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
               <div>
                 <div style="font-weight:700;font-size:0.9rem;color:var(--paper);">${escapeHtml(it.name)}</div>
-                      <div style="font-size:0.72rem;color:var(--paper-faint);">Volume: ${escapeHtml(volLabel)} · Sales serving: ${escapeHtml(salesLabel)} · Stock unit: ${escapeHtml(it.unit || '—')}</div>
+                      <div style="font-size:0.72rem;color:var(--paper-faint);">Counted in: ${escapeHtml(it.unit || '—')} · Volume: ${escapeHtml(volLabel)} · Default serving: ${escapeHtml(salesLabel)}</div>
               </div>
               <div style="display:flex;gap:6px;">
                 <button class="btn btn-ghost btn-small ic-edit-item-btn" data-item-id="${it.id}">Edit</button>
@@ -136,7 +136,7 @@ function renderInventoryConfig() {
               </div>
             </div>
             <div style="margin-top:6px;font-size:0.76rem;color:var(--paper-dim);">
-              ${pkgs.length ? pkgs.map(p => `${escapeHtml(p.package_unit)} → ${p.units_per_package} ${escapeHtml(it.unit || 'units')}${p.enabled ? '' : ' (disabled)'}`).join(' · ') : 'No packages configured yet.'}
+              ${pkgs.length ? pkgs.map(p => `1 ${escapeHtml(p.package_unit)} = ${p.units_per_package} ${escapeHtml(pluralizeUnit(p.units_per_package, it.unit || 'units'))}${p.enabled ? '' : ' (disabled)'}`).join(' · ') : 'No packages configured yet.'}
             </div>
           </div>`;
         });
@@ -164,8 +164,11 @@ function renderInventoryConfig() {
     document.getElementById('newItemName').value = '';
     document.getElementById('newItemQty').value = 0;
     document.getElementById('newItemVolume').value = '';
+    document.getElementById('newItemSalesVolume').value = '';
     popStockUnitSel(document.getElementById('newItemUnit'));
     popVolumeUnitSel(document.getElementById('newItemVolumeUnit'));
+    popSalesVolumeUnitSel(document.getElementById('newItemSalesVolumeUnit'));
+    syncServingVisibility();
     openModal(document.getElementById('addModalOverlay'));
   });
   content.querySelectorAll('.ic-edit-item-btn').forEach(btn => {

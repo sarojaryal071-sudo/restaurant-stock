@@ -24,6 +24,19 @@ function pluralizeUnit(qty, unit) {
   return /s$/i.test(unit) ? unit : unit + 's';
 }
 
+/**
+ * Format the backend-provided whole-units + remaining-volume pair into a
+ * human-readable line, e.g. "1 Bottle + 40 ml" or "2 Kegs + 4 L".
+ * Presentation only — does not recalculate or invent any value; the
+ * numbers themselves always come from the backend (items.volume /
+ * remainingVolume via loadStock).
+ */
+function formatStockRemainder(wholeUnits, unit, remainingVolume, remainingVolumeUnit) {
+  const unitLabel = pluralizeUnit(wholeUnits, unit || 'unit');
+  const capLabel = unitLabel.charAt(0).toUpperCase() + unitLabel.slice(1);
+  return `${wholeUnits} ${capLabel} + ${remainingVolume} ${remainingVolumeUnit}`;
+}
+
 function fmtTime(d) {
   return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
@@ -132,6 +145,31 @@ function applyBranding(r) {
   if (r.themeColor) document.documentElement.style.setProperty('--ember-1', r.themeColor);
 }
 
+// -------------------------------------------------------------------
+// Light/Dark theme — preference only, never sent to the backend.
+// A tiny inline script in index.html <head> stamps data-theme
+// synchronously before first paint to avoid a flash; these helpers
+// handle the explicit toggle from here on.
+// -------------------------------------------------------------------
+const THEME_KEY = 'sc_theme';
+
+function getTheme() {
+  return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+}
+
+function setTheme(theme) {
+  const t = theme === 'light' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', t);
+  try { localStorage.setItem(THEME_KEY, t); } catch (e) { }
+}
+
+function toggleTheme() {
+  setTheme(getTheme() === 'dark' ? 'light' : 'dark');
+}
+
+const themeToggleBtn = document.getElementById('themeToggleBtn');
+if (themeToggleBtn) themeToggleBtn.addEventListener('click', toggleTheme);
+
 window.escapeHtml = escapeHtml;
 window.cssEscape = cssEscape;
 window.qtyClass = qtyClass;
@@ -152,3 +190,8 @@ window.saveCache = saveCache;
 window.clearCache = clearCache;
 window.resetLogos = resetLogos;
 window.applyBranding = applyBranding;
+window.formatStockRemainder = formatStockRemainder;
+window.THEME_KEY = THEME_KEY;
+window.getTheme = getTheme;
+window.setTheme = setTheme;
+window.toggleTheme = toggleTheme;

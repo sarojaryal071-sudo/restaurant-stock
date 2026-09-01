@@ -107,11 +107,21 @@ const modalOverlays = [
   'packageManagerModalOverlay', 'purchaseModalOverlay', 'purchaseDetailsModalOverlay', 'salesImportDetailsModalOverlay'
 ];
 
+// Data-entry modals (Edit Item, Add Custom Item, Add/Rename Category,
+// Recipe, Purchase, Package Manager, Add/Edit Staff, Reason for Changes,
+// Resolve Pending Allocation) carry a `data-no-dismiss` attribute in
+// index.html and are protected here from accidental dismissal. They can
+// only be closed via their own Cancel/X button or a successful save —
+// never by clicking the backdrop or pressing Escape. Confirmation/info
+// modals (Confirm, Action Sheet, Reset Quantities, Purchase Details,
+// Sales Import Details) carry no such attribute and keep the original
+// dismiss-anywhere behavior. One shared mechanism for all overlays,
+// not a second modal system.
 modalOverlays.forEach(id => {
   const o = document.getElementById(id);
   if (o) {
     o.addEventListener('click', e => {
-      if (e.target === o) closeModal(o);
+      if (e.target === o && !o.hasAttribute('data-no-dismiss')) closeModal(o);
     });
   }
 });
@@ -120,7 +130,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     modalOverlays.forEach(id => {
       const o = document.getElementById(id);
-      if (o) closeModal(o);
+      if (o && !o.hasAttribute('data-no-dismiss')) closeModal(o);
     });
   }
 });

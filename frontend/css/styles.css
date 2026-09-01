@@ -1,4 +1,97 @@
+/* ==================================================================
+   DESIGN TOKENS — Light theme is the base (:root). Dark theme
+   (the app's original identity) is layered on top via the
+   prefers-color-scheme media query and the explicit [data-theme]
+   attribute, so an un-stamped document still resolves correctly and
+   an explicit user choice always wins. See frontend/js/utils.js for
+   getTheme()/setTheme()/toggleTheme().
+   ================================================================== */
 :root {
+  /* ---- base palette (theme-aware — redefined below for dark) ---- */
+  --charcoal-0: #f2ede3;
+  --charcoal-1: #f8f4ec;
+  --charcoal-2: #e9e2d2;
+  --charcoal-3: #ded5bf;
+  --line: rgba(80, 64, 36, 0.12);
+  --line-strong: rgba(80, 64, 36, 0.22);
+  --paper: #2b2416;
+  --paper-dim: #6b5f47;
+  --paper-faint: #948a73;
+  --ember-1: #c2481f;
+  --gold: #8a6a1a;
+  --gold-bright: #7d5c14;
+  --gold-deep: #6b4f12;
+  --qty-zero: #a03327;
+  --qty-low: #a8641a;
+  --qty-good: #2f6b40;
+  --danger: #a03327;
+
+  --font-display: Georgia, 'Times New Roman', serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'SF Mono', 'Courier New', monospace;
+  --radius-lg: clamp(14px, 2.2vw, 22px);
+  --radius-md: clamp(10px, 1.6vw, 14px);
+  --radius-sm: clamp(6px, 1vw, 9px);
+  --space-1: clamp(4px, 0.8vw, 6px);
+  --space-2: clamp(8px, 1.4vw, 12px);
+  --space-3: clamp(12px, 2vw, 18px);
+  --space-4: clamp(18px, 3vw, 28px);
+  --space-5: clamp(26px, 4.5vw, 42px);
+  --tap: 44px;
+  --nav-height: 60px;
+
+  /* ---- restrained neomorphic shadows (theme-aware) ---- */
+  --shadow-card: 4px 4px 12px rgba(120, 100, 60, 0.14), -4px -4px 12px rgba(255, 255, 255, 0.75);
+  --shadow-pop: 8px 8px 22px rgba(120, 100, 60, 0.18), -6px -6px 18px rgba(255, 255, 255, 0.6);
+  --shadow-raised: 3px 3px 8px rgba(120, 100, 60, 0.14), -3px -3px 8px rgba(255, 255, 255, 0.7);
+  --shadow-inset: inset 3px 3px 7px rgba(120, 100, 60, 0.12), inset -3px -3px 7px rgba(255, 255, 255, 0.6);
+  --shadow-well: 8px 8px 18px rgba(120, 100, 60, 0.16), -8px -8px 18px rgba(255, 255, 255, 0.7), inset 0 0 20px rgba(120, 100, 60, 0.06);
+  --shadow-well-inset: inset 3px 3px 8px rgba(120, 100, 60, 0.14), inset -3px -3px 8px rgba(255, 255, 255, 0.6);
+  --shadow-btn-raised: 4px 4px 10px rgba(120, 100, 60, 0.16), -4px -4px 10px rgba(255, 255, 255, 0.75);
+
+  /* ---- semantic aliases (component code should prefer these) ---- */
+  --bg: var(--charcoal-0);
+  --surface: var(--charcoal-1);
+  --surface-inset: var(--charcoal-2);
+  --text-primary: var(--paper);
+  --text-secondary: var(--paper-dim);
+  --border: var(--line);
+  --accent: var(--gold-bright);
+  --success: var(--qty-good);
+  --warning: var(--qty-low);
+  --input-bg: var(--charcoal-1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --charcoal-0: #121113;
+    --charcoal-1: #1a1819;
+    --charcoal-2: #221f20;
+    --charcoal-3: #2b2728;
+    --line: rgba(212, 175, 90, 0.14);
+    --line-strong: rgba(212, 175, 90, 0.28);
+    --paper: #f3ead9;
+    --paper-dim: #b3a996;
+    --paper-faint: #8a8073;
+    --ember-1: #e0592a;
+    --gold: #d4af37;
+    --gold-bright: #f0cf6b;
+    --gold-deep: #9c7a1f;
+    --qty-zero: #e0503f;
+    --qty-low: #e08a2b;
+    --qty-good: #4c9a5f;
+    --danger: #e0503f;
+    --shadow-card: 0 4px 18px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 255, 255, 0.02) inset;
+    --shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.6);
+    --shadow-raised: 4px 4px 10px rgba(0, 0, 0, 0.4), -4px -4px 10px rgba(255, 255, 255, 0.02);
+    --shadow-inset: inset 3px 3px 7px rgba(0, 0, 0, 0.35), inset -3px -3px 7px rgba(255, 255, 255, 0.02);
+    --shadow-well: 10px 10px 22px rgba(0, 0, 0, 0.35), -10px -10px 22px rgba(255, 255, 255, 0.02), inset 0 0 20px rgba(0, 0, 0, 0.25);
+    --shadow-well-inset: inset 3px 3px 9px rgba(0, 0, 0, 0.28), inset -3px -3px 9px rgba(255, 255, 255, 0.02);
+    --shadow-btn-raised: 4px 4px 10px rgba(0, 0, 0, 0.4), -4px -4px 10px rgba(255, 255, 255, 0.02);
+  }
+}
+
+:root[data-theme="dark"] {
   --charcoal-0: #121113;
   --charcoal-1: #1a1819;
   --charcoal-2: #221f20;
@@ -16,21 +109,13 @@
   --qty-low: #e08a2b;
   --qty-good: #4c9a5f;
   --danger: #e0503f;
-  --font-display: Georgia, 'Times New Roman', serif;
-  --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  --font-mono: 'SF Mono', 'Courier New', monospace;
-  --radius-lg: clamp(14px, 2.2vw, 22px);
-  --radius-md: clamp(10px, 1.6vw, 14px);
-  --radius-sm: clamp(6px, 1vw, 9px);
-  --space-1: clamp(4px, 0.8vw, 6px);
-  --space-2: clamp(8px, 1.4vw, 12px);
-  --space-3: clamp(12px, 2vw, 18px);
-  --space-4: clamp(18px, 3vw, 28px);
-  --space-5: clamp(26px, 4.5vw, 42px);
-  --tap: 44px;
-  --nav-height: 60px;
   --shadow-card: 0 4px 18px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 255, 255, 0.02) inset;
   --shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.6);
+  --shadow-raised: 4px 4px 10px rgba(0, 0, 0, 0.4), -4px -4px 10px rgba(255, 255, 255, 0.02);
+  --shadow-inset: inset 3px 3px 7px rgba(0, 0, 0, 0.35), inset -3px -3px 7px rgba(255, 255, 255, 0.02);
+  --shadow-well: 10px 10px 22px rgba(0, 0, 0, 0.35), -10px -10px 22px rgba(255, 255, 255, 0.02), inset 0 0 20px rgba(0, 0, 0, 0.25);
+  --shadow-well-inset: inset 3px 3px 9px rgba(0, 0, 0, 0.28), inset -3px -3px 9px rgba(255, 255, 255, 0.02);
+  --shadow-btn-raised: 4px 4px 10px rgba(0, 0, 0, 0.4), -4px -4px 10px rgba(255, 255, 255, 0.02);
 }
 
 * {
@@ -232,10 +317,7 @@ button {
   align-items: center;
   justify-content: center;
   background: linear-gradient(160deg, var(--charcoal-2), var(--charcoal-1));
-  box-shadow:
-    10px 10px 22px rgba(0, 0, 0, 0.35),
-    -10px -10px 22px rgba(255, 255, 255, 0.02),
-    inset 0 0 20px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--shadow-well);
   overflow: hidden;
 }
 
@@ -244,10 +326,8 @@ button {
   position: absolute;
   inset: clamp(8px, 3vw, 12px);
   border-radius: 50%;
-  border: 1px solid rgba(212, 175, 90, 0.14);
-  box-shadow:
-    inset 3px 3px 9px rgba(0, 0, 0, 0.28),
-    inset -3px -3px 9px rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-well-inset);
   pointer-events: none;
   z-index: 2;
 }
@@ -273,9 +353,7 @@ button {
   justify-content: center;
   overflow: hidden;
   flex-shrink: 0;
-  box-shadow:
-    4px 4px 10px rgba(0, 0, 0, 0.4),
-    -4px -4px 10px rgba(255, 255, 255, 0.02);
+  box-shadow: var(--shadow-btn-raised);
 }
 
 .auth-logo img {
@@ -330,9 +408,7 @@ button {
   font-size: clamp(0.82rem, 3vw, 0.95rem);
   font-weight: 500;
   letter-spacing: 0.2px;
-  box-shadow:
-    inset 4px 4px 8px rgba(0, 0, 0, 0.35),
-    inset -4px -4px 8px rgba(255, 255, 255, 0.02);
+  box-shadow: var(--shadow-well-inset);
   transition: box-shadow 0.35s cubic-bezier(.22, 1, .36, 1), transform 0.35s cubic-bezier(.22, 1, .36, 1);
 }
 
@@ -343,9 +419,7 @@ button {
 
 .auth-input:focus {
   transform: translateY(-2px);
-  box-shadow:
-    inset 3px 3px 6px rgba(0, 0, 0, 0.45),
-    inset -3px -3px 6px rgba(212, 175, 55, 0.08);
+  box-shadow: var(--shadow-well-inset), 0 0 0 3px var(--line-strong);
 }
 
 .auth-input:focus + svg,
@@ -377,9 +451,7 @@ button {
   text-transform: uppercase;
   color: var(--paper);
   background: var(--charcoal-3);
-  box-shadow:
-    4px 4px 10px rgba(0, 0, 0, 0.4),
-    -4px -4px 10px rgba(255, 255, 255, 0.02);
+  box-shadow: var(--shadow-btn-raised);
   transition: color 0.3s ease, background 0.3s ease, box-shadow 0.3s ease, transform 0.25s ease;
 }
 
@@ -411,9 +483,7 @@ button {
 
 .auth-btn:active {
   transform: translateY(0) scale(0.97);
-  box-shadow:
-    inset 5px 5px 10px rgba(0, 0, 0, 0.45),
-    inset -5px -5px 10px rgba(212, 175, 55, 0.08);
+  box-shadow: var(--shadow-well-inset);
 }
 
 .auth-btn:disabled {
@@ -543,9 +613,10 @@ button {
 }
 
 .export-btn,
-.logout-btn {
+.logout-btn,
+.theme-toggle-btn {
   background: none;
-  border: 1px solid rgba(212, 175, 55, 0.3);
+  border: 1px solid var(--line-strong);
   color: var(--gold-bright);
   cursor: pointer;
   width: var(--tap);
@@ -554,24 +625,40 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.15s ease, transform 0.1s ease;
+  transition: background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
   flex-shrink: 0;
 }
 
 .export-btn:hover,
-.logout-btn:hover {
-  background: rgba(212, 175, 55, 0.08);
+.logout-btn:hover,
+.theme-toggle-btn:hover {
+  background: var(--surface-inset);
+  box-shadow: var(--shadow-inset);
 }
 
 .export-btn:active,
-.logout-btn:active {
+.logout-btn:active,
+.theme-toggle-btn:active {
   transform: scale(0.92);
 }
 
 .export-btn svg,
-.logout-btn svg {
+.logout-btn svg,
+.theme-toggle-btn svg {
   width: 18px;
   height: 18px;
+}
+
+.theme-icon-sun {
+  display: none;
+}
+
+:root[data-theme="light"] .theme-icon-sun {
+  display: inline-flex;
+}
+
+:root[data-theme="light"] .theme-icon-moon {
+  display: none;
 }
 
 .conn-banner {
@@ -1344,7 +1431,7 @@ button {
 
 .modal-title {
   font-family: var(--font-display);
-  font-size: clamp(1.05rem, 4.2vw, 1.2rem);
+  font-size: clamp(1.05rem, 2.8vw, 1.3rem);
   font-weight: 700;
   margin: 0 0 var(--space-3);
   color: var(--gold-bright);
@@ -1857,9 +1944,7 @@ textarea.field-input {
     overflow-y: auto;
     overflow-x: hidden;
     z-index: 35;
-    box-shadow:
-      10px 10px 22px rgba(0, 0, 0, 0.32),
-      -6px -6px 16px rgba(255, 255, 255, 0.02);
+    box-shadow: var(--shadow-raised);
   }
 
   .bottom-nav-btn.nav-item {
@@ -1904,18 +1989,13 @@ textarea.field-input {
   .bottom-nav-btn.nav-item:not(.active):hover {
     color: var(--paper);
     background: var(--charcoal-2);
-    box-shadow:
-      inset 3px 3px 6px rgba(0, 0, 0, 0.32),
-      inset -3px -3px 6px rgba(255, 255, 255, 0.02);
+    box-shadow: var(--shadow-inset);
   }
 
   .bottom-nav-btn.nav-item.active {
     color: #1c1305;
     background: linear-gradient(145deg, var(--gold-bright), var(--gold-deep));
-    box-shadow:
-      inset 2px 2px 5px rgba(0, 0, 0, 0.28),
-      inset -2px -2px 5px rgba(255, 255, 255, 0.14),
-      6px 6px 14px rgba(0, 0, 0, 0.28);
+    box-shadow: var(--shadow-btn-raised);
     transform: translateY(-1px);
   }
 
@@ -2236,7 +2316,7 @@ textarea.field-input {
 
 .settings-detail-title {
   font-family: var(--font-display);
-  font-size: 1.15rem;
+  font-size: clamp(0.95rem, 2.4vw, 1.05rem);
   font-weight: 700;
   color: var(--gold-bright);
   margin-bottom: 4px;
@@ -2247,17 +2327,16 @@ textarea.field-input {
   color: var(--paper-faint);
 }
 
+/* Restrained neomorphic switch — same markup/classes as before
+   (input + label containing .thumb + a now-unused .lights element)
+   so no HTML/JS changes were needed to simplify it. */
 .toggle-3d {
-  --sz: 10px;
-  --on: #99dc39;
-  --of: #F44336;
-  --lg: var(--of);
+  --sz: 13px;
   position: relative;
-  width: calc(var(--sz) * 4);
+  width: calc(var(--sz) * 3.2);
   height: calc(var(--sz) * 2);
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   flex-shrink: 0;
   margin: 0 2px;
 }
@@ -2270,145 +2349,45 @@ textarea.field-input {
 
 .toggle-3d label {
   position: absolute;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(0deg, #12172080, #0d121780);
-  border-radius: var(--sz);
+  inset: 0;
+  background: var(--surface-inset);
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
   cursor: pointer;
-  box-shadow:
-    0 0 calc(var(--sz)/50) calc(var(--sz)/50) #0006,
-    0 calc(var(--sz)/-20) calc(var(--sz)/5) calc(var(--sz)/25) #0b0b10,
-    0 calc(var(--sz)/20) calc(var(--sz)/10) calc(var(--sz)/50) #f5f5f588,
-    0 calc(var(--sz)/-20) calc(var(--sz)/50) calc(var(--sz)/15) #00000060;
+  box-shadow: var(--shadow-inset);
+  transition: background 0.2s ease, border-color 0.2s ease;
 }
 
-.toggle-3d label:before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  box-shadow: 0 0 calc(var(--sz)/3) calc(var(--sz)/10) #000 inset;
-  background:
-    repeating-linear-gradient(45deg, #111 0 2px, transparent 3px 4px),
-    repeating-linear-gradient(-45deg, #000 0 2px, transparent 3px 4px);
+.toggle-3d input:checked+label {
+  background: linear-gradient(135deg, var(--gold-bright), var(--gold-deep));
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .toggle-3d .thumb {
   position: absolute;
-  width: calc(var(--sz)*2.5);
-  height: calc(calc(var(--sz)*2) - calc(var(--sz)/8));
-  top: calc(calc(var(--sz)/10) + calc(var(--sz)/-30));
-  left: calc(calc(var(--sz)/10) + calc(var(--sz)/-30));
-  background: linear-gradient(0deg, #212121, #474747);
-  border-radius: var(--sz);
-  z-index: 2;
-  overflow: hidden;
-  box-shadow:
-    calc(var(--sz)/-10) 0 calc(var(--sz)/10) calc(var(--sz)/-10) var(--lg),
-    calc(var(--sz)/10) 0 calc(var(--sz)/10) calc(var(--sz)/-10) var(--lg) inset,
-    calc(var(--sz)/-50) calc(var(--sz)/50) calc(var(--sz)/30) 0 #fff2 inset,
-    0 0 calc(var(--sz)/10) calc(var(--sz)/50) #000c,
-    0 calc(var(--sz)/4) calc(var(--sz)/5) 0 #000d;
-}
-
-.toggle-3d input:checked+label .thumb {
-  --lg: var(--on);
-  left: calc(calc(100% - calc(calc(var(--sz)*2) - calc(var(--sz)/3))) - calc(calc(var(--sz)/10) + calc(var(--sz)/1.25)));
-  box-shadow:
-    calc(var(--sz)/10) 0 calc(var(--sz)/10) calc(var(--sz)/-10) var(--lg),
-    calc(var(--sz)/-10) 0 calc(var(--sz)/10) calc(var(--sz)/-10) var(--lg) inset,
-    calc(var(--sz)/-50) calc(var(--sz)/50) calc(var(--sz)/30) 0 #fff2 inset,
-    0 0 calc(var(--sz)/10) calc(var(--sz)/50) #000c,
-    0 calc(var(--sz)/4) calc(var(--sz)/5) 0 #000d;
+  top: 2px;
+  left: 2px;
+  width: calc(var(--sz) * 2 - 4px);
+  height: calc(var(--sz) * 2 - 4px);
+  background: var(--surface);
+  border-radius: 50%;
+  box-shadow: var(--shadow-btn-raised);
+  transition: left 0.2s cubic-bezier(.4, 0, .2, 1), background 0.2s ease;
 }
 
 .toggle-3d .thumb:before,
 .toggle-3d .thumb:after {
-  content: "";
-  position: absolute;
-  width: 40%;
-  height: 90%;
-  margin-top: calc(var(--sz)/20);
-  background: linear-gradient(180deg, #00000012, #0004);
-  border-radius: var(--sz) calc(var(--sz)/5) calc(var(--sz)/5) var(--sz);
-  left: calc(var(--sz)/10);
-  filter: blur(1px);
-  box-shadow:
-    calc(var(--sz)/-10) 0 calc(var(--sz)/8) calc(var(--sz)/-10) var(--lg) inset,
-    calc(var(--sz)/10) 0 calc(var(--sz)/5) 0 #0008 inset;
+  content: none;
 }
 
-.toggle-3d input:checked+label .thumb:before {
-  --lg: #fff0;
-}
-
-.toggle-3d .thumb:after {
-  left: calc(var(--sz)/0.725);
-  border-radius: calc(var(--sz)/5) var(--sz) var(--sz) calc(var(--sz)/5);
-  --lg: #fff0;
-  box-shadow:
-    calc(var(--sz)/10) 0 calc(var(--sz)/8) calc(var(--sz)/-10) var(--lg) inset,
-    calc(var(--sz)/10) 0 calc(var(--sz)/5) 0 #0008 inset;
-}
-
-.toggle-3d input:checked+label .thumb:after {
-  --lg: var(--on);
+.toggle-3d input:checked+label .thumb {
+  left: calc(100% - (var(--sz) * 2 - 4px) - 2px);
+  background: #1c1305;
 }
 
 .toggle-3d .lights {
-  position: absolute;
-  width: calc(100% + calc(var(--sz)*2));
-  height: calc(var(--sz)/1.75);
-  display: flex;
-  justify-content: space-between;
-  z-index: 0;
-  pointer-events: none;
-}
-
-.toggle-3d .lights span {
-  width: calc(var(--sz)/1.75);
-  height: calc(var(--sz)/1.75);
-  background: #121212;
-  border-radius: 50%;
-  position: relative;
-  box-shadow:
-    0 0 calc(var(--sz)/50) calc(var(--sz)/50) #0008,
-    0 calc(var(--sz)/-20) calc(var(--sz)/10) calc(var(--sz)/500) #000,
-    0 calc(var(--sz)/20) calc(var(--sz)/10) calc(var(--sz)/500) #fff8,
-    0 0 calc(var(--sz)/20) calc(var(--sz)/25) #000;
-}
-
-.toggle-3d .lights span:after {
-  content: "";
-  position: absolute;
-  inset: calc(var(--sz)/30);
-  border-radius: 50%;
-  background: radial-gradient(circle at 50% 32%, #fff5 0 calc(var(--sz)/20), #000 calc(var(--sz)/3));
-}
-
-.toggle-3d .light-off:after {
-  box-shadow:
-    0 0 calc(var(--sz)/2.5) 0 var(--of),
-    0 0 calc(var(--sz)/3) calc(var(--sz)/20) var(--of) inset,
-    0 calc(var(--sz)/-20) calc(var(--sz)/10) calc(var(--sz)/10) #000 inset;
-  background: radial-gradient(circle at 50% 32%, #fff 0 calc(var(--sz)/20), #fff8 calc(var(--sz)/3));
-}
-
-.toggle-3d input:checked+label+.lights .light-off:after {
-  box-shadow: none;
-  background: radial-gradient(circle at 50% 32%, #fff5 0 calc(var(--sz)/20), #000 calc(var(--sz)/3));
-}
-
-.toggle-3d .light-on:after {
-  box-shadow: 0 0 calc(var(--sz)/3) 0 #00f56d20;
-}
-
-.toggle-3d input:checked+label+.lights .light-on:after {
-  box-shadow:
-    0 0 calc(var(--sz)/2.5) 0 var(--on),
-    0 0 calc(var(--sz)/3) calc(var(--sz)/20) var(--on) inset,
-    0 calc(var(--sz)/-20) calc(var(--sz)/10) calc(var(--sz)/10) #000 inset;
-  background: radial-gradient(circle at 50% 32%, #fff 0 calc(var(--sz)/20), #fff2 calc(var(--sz)/3));
+  display: none;
 }
 
 .toggle-row {
@@ -2492,7 +2471,7 @@ textarea.field-input {
 
 .pos-provider-name {
   font-family: var(--font-display);
-  font-size: 1.15rem;
+  font-size: clamp(0.95rem, 2.4vw, 1.05rem);
   font-weight: 700;
   color: var(--paper);
 }
@@ -2741,7 +2720,7 @@ textarea.field-input {
 
 .sales-summary-title {
   font-family: var(--font-display);
-  font-size: 1.1rem;
+  font-size: clamp(0.95rem, 2.4vw, 1.05rem);
   font-weight: 700;
   color: var(--paper);
   margin-bottom: 4px;
@@ -3153,7 +3132,7 @@ textarea.field-input {
 
 .purchase-register-title {
   font-family: var(--font-display);
-  font-size: 1.15rem;
+  font-size: clamp(0.95rem, 2.4vw, 1.05rem);
   font-weight: 700;
   color: var(--gold-bright);
 }
@@ -3422,9 +3401,117 @@ textarea.field-input {
 }
 
 input[type="date"].field-input {
+  color-scheme: light dark;
+}
+
+:root[data-theme="dark"] input[type="date"].field-input,
+:root:not([data-theme="light"]) input[type="date"].field-input {
   color-scheme: dark;
+}
+
+:root[data-theme="light"] input[type="date"].field-input {
+  color-scheme: light;
 }
 
 input[type="date"].field-input::-webkit-calendar-picker-indicator {
   opacity: 0.85;
+}
+
+/* ==================================================================
+   Item configuration — grouped, plain-language sections
+   (Edit Item / Add Custom Item modals)
+   ================================================================== */
+.config-group {
+  border-top: 1px solid var(--line);
+  padding: var(--space-3) 0;
+}
+
+.config-group:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.config-group-label {
+  font-family: var(--font-mono);
+  font-size: clamp(0.66rem, 1.8vw, 0.72rem);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--gold-bright);
+  margin-bottom: var(--space-1);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.config-group-optional {
+  font-family: var(--font-body);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--paper-faint);
+  font-weight: 500;
+  font-size: clamp(0.64rem, 1.7vw, 0.7rem);
+  background: var(--surface-inset);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.config-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+
+.field-help {
+  font-size: clamp(0.68rem, 1.7vw, 0.76rem);
+  color: var(--paper-faint);
+  line-height: 1.45;
+  margin-top: var(--space-1);
+}
+
+@media (max-width: 420px) {
+  .config-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==================================================================
+   Package Manager — live relationship preview
+   ================================================================== */
+.package-live-preview {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  margin-top: var(--space-2);
+  padding: 10px 14px;
+  background: var(--surface-inset);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: clamp(0.8rem, 2.4vw, 0.9rem);
+  color: var(--gold-bright);
+  font-weight: 600;
+}
+
+.package-live-preview.show {
+  display: flex;
+}
+
+/* ==================================================================
+   Pending Allocations
+   ================================================================== */
+.replace-row {
+  flex-wrap: wrap;
+}
+
+.replace-row .replace-need {
+  font-size: 0.72rem;
+  color: var(--paper-faint);
+  margin-top: 2px;
+}
+
+.alloc-empty-hint {
+  font-size: 0.78rem;
+  color: var(--paper-faint);
+  margin: 0 0 var(--space-3);
+  line-height: 1.5;
 }
