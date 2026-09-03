@@ -469,7 +469,7 @@ async function deleteItem(req, res) {
     if (item.rows.length === 0) return res.json({ ok: false, code: 'NOT_FOUND', error: 'Item not found' });
 
     await transaction(async (tx) => {
-      // Check if item is referenced in any recipe; if so, block deletion
+      // Check if item is referenced in any recipe; if so, block deletion.
       const refCheck = await tx(
         `SELECT id FROM recipe_ingredients WHERE inventory_item_id = $1 LIMIT 1`,
         [itemId]
@@ -477,9 +477,48 @@ async function deleteItem(req, res) {
       if (refCheck.rows.length > 0) {
         throw { code: 'ITEM_IN_USE', error: 'Item is used in one or more recipes. Remove it from recipes first.' };
       }
-      // Delete stocks first
+
+      // Check every other table with a foreign key on items.id for
+      // historical/operational records that must never be silently lost.
+      // A single round trip - this is a rare, interactive action, not a
+      // hot path, so clarity matters more than shaving a query here.
+      const depCheck = await tx(
+        `SELECT
+           EXISTS(SELECT 1 FROM sales_import_items WHERE item_id = $1) AS has_sales_import_items,
+           EXISTS(SELECT 1 FROM sales_import_effects WHERE item_id = $1) AS has_sales_import_effects,
+           EXISTS(SELECT 1 FROM stock_intake_items WHERE item_id = $1) AS has_stock_intake,
+           EXISTS(SELECT 1 FROM inventory_adjustments WHERE item_id = $1) AS has_adjustments,
+           EXISTS(SELECT 1 FROM pending_allocation_details WHERE inventory_item_id = $1) AS has_pending_allocations,
+           EXISTS(SELECT 1 FROM allocation_logs WHERE old_inventory_item_id = $1 OR new_inventory_item_id = $1) AS has_allocation_logs,
+           EXISTS(SELECT 1 FROM product_barcodes WHERE inventory_item_id = $1) AS has_barcodes`,
+        [itemId]
+      );
+
+      const dep = depCheck.rows[0];
+      const reasons = [];
+      if (dep.has_sales_import_items || dep.has_sales_import_effects) reasons.push('historical sales records');
+      if (dep.has_stock_intake) reasons.push('historical stock intake (purchase) records');
+      if (dep.has_adjustments) reasons.push('historical inventory adjustment records');
+      if (dep.has_pending_allocations || dep.has_allocation_logs) reasons.push('pending or resolved stock allocation records');
+      if (dep.has_barcodes) reasons.push('a saved barcode association');
+
+      if (reasons.length > 0) {
+        throw {
+          code: 'ITEM_IN_USE',
+          error: `This item cannot be deleted because it is already used in existing records (${reasons.join(', ')}). Remove those references first, or stop using this item going forward instead of deleting it.`
+        };
+      }
+
+      // A saved Sales product mapping is a routing pointer ("this POS
+      // product name resolves to this item"), not a record of anything
+      // that happened - safe to clean up as part of deleting its target,
+      // unlike the historical tables checked above.
+      await tx(`DELETE FROM sales_product_mappings WHERE item_id = $1`, [itemId]);
+
+      // Delete stocks first (also covered by ON DELETE CASCADE, kept
+      // explicit for clarity).
       await tx(`DELETE FROM stocks WHERE item_id = $1 AND restaurant_id = $2`, [itemId, restaurantId]);
-      // Delete the item
+      // Delete the item.
       await tx(`DELETE FROM items WHERE id = $1 AND restaurant_id = $2`, [itemId, restaurantId]);
     });
 
@@ -487,10 +526,24 @@ async function deleteItem(req, res) {
     res.json({ ok: true });
   } catch (err) {
     console.error('deleteItem error:', err);
-    if (err.code) {
+    if (err.code && err.error) {
       return res.json({ ok: false, code: err.code, error: err.error });
     }
-    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+    // A raw PostgreSQL error (e.g. an unforeseen foreign-key violation,
+    // code 23503) has a `.code` that is a SQLSTATE, not one of this
+    // app's error codes, and no `.error` message - previously this fell
+    // through to `res.json({ code: err.code, error: err.error })` with
+    // `error` undefined, which the frontend then displayed as the
+    // unhelpful generic "Request failed". Log the real technical detail
+    // for debugging, but tell the user something they can act on.
+    if (err.code === '23503') {
+      return res.json({
+        ok: false,
+        code: 'ITEM_IN_USE',
+        error: 'This item cannot be deleted because it is already used in existing records. Remove those references first, or stop using this item going forward instead of deleting it.'
+      });
+    }
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message || 'Failed to delete item.' });
   }
 }
 // -------------------------------------------------------------------

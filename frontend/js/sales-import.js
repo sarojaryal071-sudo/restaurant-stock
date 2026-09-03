@@ -97,13 +97,37 @@ async function handleSalesFileSelect(e) {
 function buildMappingOptionsHtml(item) {
   let html = '<option value="">-- Select --</option>';
 
+  // Duplicate item names can exist (e.g. the same product entered twice,
+  // one copy missing its serving configuration). Left unlabeled, two
+  // identically-named options are impossible to tell apart when mapping
+  // a POS product by hand, which is how a mapping can end up pointing at
+  // the wrong duplicate. Disambiguate any duplicate name with a short
+  // hint about its configured serving/unit - a display-only change, no
+  // effect on how mappings are resolved or which item ID is stored.
+  const nameCounts = new Map();
+  state.categories.forEach(cat => {
+    cat.items.forEach(it => {
+      const key = (it.name || '').trim().toLowerCase();
+      nameCounts.set(key, (nameCounts.get(key) || 0) + 1);
+    });
+  });
+
+  function disambiguatedLabel(it) {
+    const key = (it.name || '').trim().toLowerCase();
+    if ((nameCounts.get(key) || 0) < 2) return it.name;
+    const hint = it.servingName
+      ? `${it.servingName} ${it.salesVolume != null ? it.salesVolume : ''}${it.salesVolumeUnit || ''}`.trim()
+      : `${it.unit || 'unit'}, no serving configured`;
+    return `${it.name} — ${hint}`;
+  }
+
   // Inventory items grouped by category
   state.categories.forEach(cat => {
     const group = document.createElement('optgroup');
     group.label = cat.name || 'Uncategorised';
     cat.items.forEach(it => {
       const selected = item.matched && item.type === 'inventory' && item.itemId === it.id ? ' selected' : '';
-      group.innerHTML += `<option value="${it.id}" data-mapping-type="inventory"${selected}>${escapeHtml(it.name)}</option>`;
+      group.innerHTML += `<option value="${it.id}" data-mapping-type="inventory"${selected}>${escapeHtml(disambiguatedLabel(it))}</option>`;
     });
     if (group.children.length) {
       html += group.outerHTML;

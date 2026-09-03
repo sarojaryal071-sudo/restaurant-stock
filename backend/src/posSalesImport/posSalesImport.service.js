@@ -1,7 +1,7 @@
 const repository = require('./posSalesImport.repository');
 const salesResolver = require('../sales/salesResolver.service');
 const { v4: uuidv4 } = require('uuid');
-const { transaction } = require('../../database');
+const { query, transaction } = require('../../database');
 const XLSX = require('xlsx');
 const path = require('path');
 
@@ -214,8 +214,6 @@ function parseSalesFile(file) {
 }
 
 async function getItemDetails(restaurantId, itemId) {
-  const { query } = require('../../database');
-
   const res = await query(
     `SELECT id, name
      FROM items
@@ -227,8 +225,6 @@ async function getItemDetails(restaurantId, itemId) {
 }
 
 async function getRecipeDetails(restaurantId, recipeId) {
-  const { query } = require('../../database');
-
   const res = await query(
     `SELECT id, name
      FROM recipes
@@ -240,122 +236,213 @@ async function getRecipeDetails(restaurantId, recipeId) {
 }
 
 /**
- * Build preview items by resolving Product Name against inventory/recipes.
- * This function is read-only and has NO side effects.
+ * Bulk-load every item/recipe a set of POS product names could resolve
+ * to, in a small constant number of queries, instead of the previous
+ * per-row `getItemDetails`/`getRecipeDetails`/`resolveSalesProduct` calls
+ * (an N+1 pattern: 1-3 sequential DB round trips per unique product name
+ * in the report). Returns Maps so resolution can happen entirely in
+ * memory afterwards. Reproduces salesResolver.resolveSalesProduct's exact
+ * ambiguity semantics (2+ items or recipes sharing a name -> ambiguous)
+ * without re-querying per name - duplicate item names are handled the
+ * same way, just resolved from an already-fetched result set instead of
+ * a fresh query.
  */
-async function previewSales(restaurantId, file) {
-  const parsed = parseSalesFile(file);
-  const fileHash = repository.computeFileHash(file.buffer);
-  const mappings = await repository.getMappings(restaurantId);
-  const items = [];
+async function bulkResolveSalesProducts(restaurantId, mappings, productNames) {
+  const mappedItemIds = new Set();
+  const mappedRecipeIds = new Set();
+  const unmappedNames = new Set();
 
-  for (const sale of parsed) {
-    const sourceProductName = sale.productName;
-    const quantitySold = sale.quantity;
-    const salesUnit = sale.unit || null;
+  for (const name of productNames) {
+    const mapping = mappings[name] || null;
+    if (mapping && mapping.itemId) {
+      mappedItemIds.add(mapping.itemId);
+    } else if (mapping && mapping.recipeId) {
+      mappedRecipeIds.add(mapping.recipeId);
+    } else {
+      // No mapping, or a mapping with neither itemId nor recipeId set -
+      // both fall through to name-based resolution, same as before.
+      unmappedNames.add(salesResolver.normalizeName(name));
+    }
+  }
 
-    const mapping = mappings[sourceProductName] || null;
+  const itemsById = new Map();
+  const recipesById = new Map();
+  const itemsByName = new Map();
+  const recipesByName = new Map();
 
-    if (mapping) {
-      const mappedUnit = salesUnit || mapping.unit || null;
+  if (mappedItemIds.size > 0) {
+    const res = await query(
+      `SELECT id, name FROM items
+       WHERE restaurant_id = $1 AND is_deleted = FALSE AND id = ANY($2::uuid[])`,
+      [restaurantId, Array.from(mappedItemIds)]
+    );
+    for (const row of res.rows) itemsById.set(row.id, row);
+  }
 
-      if (mapping.itemId) {
-        const item = await getItemDetails(restaurantId, mapping.itemId);
+  if (mappedRecipeIds.size > 0) {
+    const res = await query(
+      `SELECT id, name FROM recipes
+       WHERE restaurant_id = $1 AND id = ANY($2::uuid[])`,
+      [restaurantId, Array.from(mappedRecipeIds)]
+    );
+    for (const row of res.rows) recipesById.set(row.id, row);
+  }
 
-        items.push({
-          sourceProductName,
-          itemId: item ? item.id : null,
-          itemName: item ? item.name : null,
-          recipeId: null,
-          recipeName: null,
-          quantitySold,
-          unit: item ? mappedUnit : null,
-          type: item ? 'inventory' : 'unresolved',
-          matched: !!item
-        });
+  if (unmappedNames.size > 0) {
+    const names = Array.from(unmappedNames);
 
-        continue;
-      }
-
-      if (mapping.recipeId) {
-        const recipe = await getRecipeDetails(restaurantId, mapping.recipeId);
-
-        items.push({
-          sourceProductName,
-          itemId: null,
-          itemName: null,
-          recipeId: mapping.recipeId,
-          recipeName: recipe ? recipe.name : null,
-          quantitySold,
-          unit: null,
-          type: recipe ? 'recipe' : 'unresolved',
-          matched: !!recipe
-        });
-
-        continue;
-      }
-
-      // If mapping exists but has neither itemId nor recipeId, fall through
-      // to normal name resolution.
+    const itemRes = await query(
+      `SELECT id, name FROM items
+       WHERE restaurant_id = $1 AND is_deleted = FALSE AND LOWER(name) = ANY($2::text[])`,
+      [restaurantId, names]
+    );
+    for (const row of itemRes.rows) {
+      const key = salesResolver.normalizeName(row.name);
+      if (!itemsByName.has(key)) itemsByName.set(key, []);
+      itemsByName.get(key).push(row);
     }
 
-    const resolution = await salesResolver.resolveSalesProduct(
-      restaurantId,
-      sourceProductName
+    const recipeRes = await query(
+      `SELECT id, name FROM recipes
+       WHERE restaurant_id = $1 AND LOWER(name) = ANY($2::text[])`,
+      [restaurantId, names]
     );
+    for (const row of recipeRes.rows) {
+      const key = salesResolver.normalizeName(row.name);
+      if (!recipesByName.has(key)) recipesByName.set(key, []);
+      recipesByName.get(key).push(row);
+    }
+  }
 
-    if (resolution.type === 'inventory') {
-      const item = await getItemDetails(restaurantId, resolution.id);
+  return { itemsById, recipesById, itemsByName, recipesByName };
+}
 
-      items.push({
+/**
+ * Resolve one already-parsed sale (in memory, no DB access) using the
+ * Maps built by bulkResolveSalesProducts. Mirrors the per-row branching
+ * previewSales used to do inline, just without any awaited query.
+ */
+function resolveSaleFromMaps(sourceProductName, quantitySold, salesUnit, mapping, maps) {
+  if (mapping) {
+    const mappedUnit = salesUnit || mapping.unit || null;
+
+    if (mapping.itemId) {
+      const item = maps.itemsById.get(mapping.itemId) || null;
+      return {
         sourceProductName,
         itemId: item ? item.id : null,
         itemName: item ? item.name : null,
         recipeId: null,
         recipeName: null,
         quantitySold,
-        unit: item ? salesUnit : null,
-        type: 'inventory',
-        matched: true
-      });
-    } else if (resolution.type === 'recipe') {
-      items.push({
+        unit: item ? mappedUnit : null,
+        type: item ? 'inventory' : 'unresolved',
+        matched: !!item
+      };
+    }
+
+    if (mapping.recipeId) {
+      const recipe = maps.recipesById.get(mapping.recipeId) || null;
+      return {
         sourceProductName,
         itemId: null,
         itemName: null,
-        recipeId: resolution.id,
-        recipeName: resolution.name,
+        recipeId: mapping.recipeId,
+        recipeName: recipe ? recipe.name : null,
         quantitySold,
         unit: null,
-        type: 'recipe',
-        matched: true
-      });
-    } else if (resolution.type === 'ambiguous') {
-      items.push({
-        sourceProductName,
-        itemId: null,
-        itemName: null,
-        recipeId: null,
-        recipeName: null,
-        quantitySold,
-        unit: salesUnit,
-        type: 'ambiguous',
-        matched: false
-      });
-    } else {
-      items.push({
-        sourceProductName,
-        itemId: null,
-        itemName: null,
-        recipeId: null,
-        recipeName: null,
-        quantitySold,
-        unit: salesUnit,
-        type: 'unresolved',
-        matched: false
-      });
+        type: recipe ? 'recipe' : 'unresolved',
+        matched: !!recipe
+      };
     }
+
+    // If mapping exists but has neither itemId nor recipeId, fall through
+    // to normal name resolution.
   }
+
+  const key = salesResolver.normalizeName(sourceProductName);
+  const itemMatches = maps.itemsByName.get(key) || [];
+  const recipeMatches = maps.recipesByName.get(key) || [];
+
+  if (itemMatches.length > 1 || recipeMatches.length > 1 || (itemMatches.length && recipeMatches.length)) {
+    return {
+      sourceProductName,
+      itemId: null,
+      itemName: null,
+      recipeId: null,
+      recipeName: null,
+      quantitySold,
+      unit: salesUnit,
+      type: 'ambiguous',
+      matched: false
+    };
+  }
+
+  if (itemMatches.length === 1) {
+    return {
+      sourceProductName,
+      itemId: itemMatches[0].id,
+      itemName: itemMatches[0].name,
+      recipeId: null,
+      recipeName: null,
+      quantitySold,
+      unit: salesUnit,
+      type: 'inventory',
+      matched: true
+    };
+  }
+
+  if (recipeMatches.length === 1) {
+    return {
+      sourceProductName,
+      itemId: null,
+      itemName: null,
+      recipeId: recipeMatches[0].id,
+      recipeName: recipeMatches[0].name,
+      quantitySold,
+      unit: null,
+      type: 'recipe',
+      matched: true
+    };
+  }
+
+  return {
+    sourceProductName,
+    itemId: null,
+    itemName: null,
+    recipeId: null,
+    recipeName: null,
+    quantitySold,
+    unit: salesUnit,
+    type: 'unresolved',
+    matched: false
+  };
+}
+
+/**
+ * Build preview items by resolving Product Name against inventory/recipes.
+ * This function is read-only and has NO side effects.
+ *
+ * Resolution is bulk-loaded once for every unique product name in the
+ * file (see bulkResolveSalesProducts), then applied in memory per row -
+ * a small constant number of DB queries regardless of file size, instead
+ * of the previous 1-3 sequential queries per unique product name.
+ */
+async function previewSales(restaurantId, file) {
+  const parsed = parseSalesFile(file);
+  const fileHash = repository.computeFileHash(file.buffer);
+  const mappings = await repository.getMappings(restaurantId);
+
+  const productNames = Array.from(new Set(parsed.map(sale => sale.productName)));
+  const maps = await bulkResolveSalesProducts(restaurantId, mappings, productNames);
+
+  const items = parsed.map(sale => resolveSaleFromMaps(
+    sale.productName,
+    sale.quantity,
+    sale.unit || null,
+    mappings[sale.productName] || null,
+    maps
+  ));
 
   return {
     fileHash,
@@ -578,5 +665,9 @@ module.exports = {
   applySalesImport,
   cancelSalesImport,
   listSalesImports,
-  saveProductMapping
+  saveProductMapping,
+  // Exported for testing the bulk-resolution logic without a live DB
+  // (resolveSaleFromMaps is a pure function once the Maps are built).
+  resolveSaleFromMaps,
+  bulkResolveSalesProducts
 };
