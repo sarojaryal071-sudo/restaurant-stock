@@ -772,6 +772,18 @@ async function runMigrations() {
     // unaffected.
     await tx(`ALTER TABLE items ADD COLUMN IF NOT EXISTS serving_name TEXT`);
 
+    // One-time data repair (idempotent, safe to run on every startup): a
+    // bug in updateItem's clear-the-field handling called String(null),
+    // which in JavaScript produces the literal text "null" rather than an
+    // empty string, and saved that as the actual serving_name for any
+    // item whose "Serving as" field was cleared and saved. This restores
+    // every affected row to a true NULL - the value they should have had
+    // all along - across every item and every restaurant, not a specific
+    // item. No item is dropped or renamed; this only clears one column
+    // back to its intended empty state. See resolveServingName in
+    // inventory.js for the actual code fix.
+    await tx(`UPDATE items SET serving_name = NULL WHERE serving_name = 'null'`);
+
     // Item purchase packages
     await tx(`
       CREATE TABLE IF NOT EXISTS item_packages (

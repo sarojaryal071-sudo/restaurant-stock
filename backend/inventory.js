@@ -331,6 +331,24 @@ async function addCustomItem(req, res) {
 }
 
 // -------------------------------------------------------------------
+// resolveServingName - the serving_name to save for an updateItem call.
+//
+// `servingName` is optional/nullable: omitted from the request means
+// "leave it as-is", while an empty string or an explicit `null` means
+// "the user cleared it". Those must never be handled with `String(x)` -
+// in JavaScript, String(null) is the literal text "null", not an empty
+// string, so a naive `String(servingName).trim() || null` would save the
+// actual word "null" into the database the moment someone cleared the
+// field. `(servingName || '').trim() || null` treats null/undefined/''
+// identically as "no value", which is the only correct behavior here.
+// -------------------------------------------------------------------
+function resolveServingName(servingName, existingServingName) {
+  return servingName !== undefined
+    ? ((servingName || '').trim() || null)
+    : (existingServingName || null);
+}
+
+// -------------------------------------------------------------------
 // updateItem
 // -------------------------------------------------------------------
 async function updateItem(req, res) {
@@ -361,7 +379,11 @@ async function updateItem(req, res) {
       return res.json({ ok: false, code: 'NOT_FOUND', error: 'Item not found' });
     }
 
-    const newName = name !== undefined ? String(name).trim() : existing.rows[0].name;
+    // Guard against the same null->"null" bug fixed in resolveServingName:
+    // `name || ''` before String() so an explicit null never survives as
+    // the literal text "null" (which would also slip past the "cannot be
+    // empty" check below, since a non-empty string is truthy).
+    const newName = name !== undefined ? String(name || '').trim() : existing.rows[0].name;
     const newUnit = unit !== undefined ? unit : existing.rows[0].unit;
     const newDefaultQty = defaultQuantity !== undefined ? parseFloat(defaultQuantity) || 0 : parseFloat(existing.rows[0].default_quantity) || 0;
     const newCategoryId = categoryId || existing.rows[0].category_id;
@@ -419,9 +441,7 @@ async function updateItem(req, res) {
       }
     }
 
-    const newServingName = servingName !== undefined
-      ? (String(servingName).trim() || null)
-      : (existing.rows[0].serving_name || null);
+    const newServingName = resolveServingName(servingName, existing.rows[0].serving_name);
 
     if (!newName) return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Item name cannot be empty' });
 
@@ -663,7 +683,8 @@ async function updateCategory(req, res) {
       return res.json({ ok: false, code: 'NOT_FOUND', error: 'Category not found' });
     }
 
-    const newName = name !== undefined ? String(name).trim() : existing.rows[0].name;
+    // Same null->"null" guard as updateItem's resolveServingName.
+    const newName = name !== undefined ? String(name || '').trim() : existing.rows[0].name;
     const newSortOrder = sortOrder !== undefined ? parseInt(sortOrder, 10) : existing.rows[0].sort_order;
 
     if (!newName) return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Category name cannot be empty' });
@@ -745,5 +766,7 @@ module.exports = {
   writeLog,
   // Exported for testing without a live DB - see backend/test/deleteItemSafety.test.js
   deleteItemTx,
-  mapDeleteError
+  mapDeleteError,
+  // Exported for testing - see backend/test/servingNameNullBug.test.js
+  resolveServingName
 };
