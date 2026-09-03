@@ -456,6 +456,124 @@ async function updateItem(req, res) {
 // -------------------------------------------------------------------
 // deleteItem – permanent deletion
 // -------------------------------------------------------------------
+// -------------------------------------------------------------------
+// deleteItemTx - the actual dependency-check + cleanup + delete logic,
+// factored out to take `tx` as a parameter (same pattern already used by
+// posSalesImport.repository.js:applyImport) so it can be exercised with
+// a mock transaction in tests, without a live database connection.
+// -------------------------------------------------------------------
+async function deleteItemTx(tx, itemId, restaurantId) {
+  // Check if item is referenced in any recipe; if so, block deletion.
+  const refCheck = await tx(
+    `SELECT id FROM recipe_ingredients WHERE inventory_item_id = $1 LIMIT 1`,
+    [itemId]
+  );
+  if (refCheck.rows.length > 0) {
+    throw { code: 'ITEM_IN_USE', error: 'Item is used in one or more recipes. Remove it from recipes first.' };
+  }
+
+  // Check every other table with a foreign key on items.id for
+  // historical/operational records that must never be silently lost.
+  // A single round trip - this is a rare, interactive action, not a
+  // hot path, so clarity matters more than shaving a query here.
+  // NOTE: inventory_adjustments is only the batch/header row (id,
+  // restaurant_id, user_id, created_at) - it has no item_id column.
+  // The actual per-item foreign key lives on inventory_adjustment_items.
+  const depCheck = await tx(
+    `SELECT
+       EXISTS(SELECT 1 FROM sales_import_items WHERE item_id = $1) AS has_sales_import_items,
+       EXISTS(SELECT 1 FROM sales_import_effects WHERE item_id = $1) AS has_sales_import_effects,
+       EXISTS(SELECT 1 FROM stock_intake_items WHERE item_id = $1) AS has_stock_intake,
+       EXISTS(SELECT 1 FROM inventory_adjustment_items WHERE item_id = $1) AS has_adjustment_items,
+       EXISTS(SELECT 1 FROM pending_allocation_details WHERE inventory_item_id = $1) AS has_pending_allocations,
+       EXISTS(SELECT 1 FROM allocation_logs WHERE old_inventory_item_id = $1 OR new_inventory_item_id = $1) AS has_allocation_logs,
+       EXISTS(SELECT 1 FROM product_barcodes WHERE inventory_item_id = $1) AS has_barcodes`,
+    [itemId]
+  );
+
+  const dep = depCheck.rows[0];
+  const reasons = [];
+  if (dep.has_sales_import_items || dep.has_sales_import_effects) reasons.push('historical sales records');
+  if (dep.has_stock_intake) reasons.push('historical stock intake (purchase) records');
+  if (dep.has_adjustment_items) reasons.push('historical inventory adjustment records');
+  if (dep.has_pending_allocations || dep.has_allocation_logs) reasons.push('pending or resolved stock allocation records');
+  if (dep.has_barcodes) reasons.push('a saved barcode association');
+
+  if (reasons.length > 0) {
+    throw {
+      code: 'ITEM_IN_USE',
+      error: `This item cannot be deleted because it is already used in existing records (${reasons.join(', ')}). Remove those references first, or stop using this item going forward instead of deleting it.`
+    };
+  }
+
+  // Current-state stock, not historical: a stocks row simply records
+  // "how much is on hand right now". A positive quantity means real
+  // inventory would be silently discarded, so that still blocks
+  // deletion - but a zero quantity is nothing but bookkeeping and is
+  // safe to clear as part of removing the item (Case D).
+  const stockRes = await tx(
+    `SELECT COALESCE(SUM(quantity), 0) AS total_quantity FROM stocks WHERE item_id = $1 AND restaurant_id = $2`,
+    [itemId, restaurantId]
+  );
+  const totalQuantity = parseFloat(stockRes.rows[0].total_quantity) || 0;
+
+  if (totalQuantity > 0) {
+    throw {
+      code: 'ITEM_HAS_STOCK',
+      error: `This item still has ${totalQuantity} in stock and cannot be deleted while stock remains. Reduce the stock to zero first, or keep the item instead of deleting it.`
+    };
+  }
+
+  // A saved Sales product mapping is a routing pointer ("this POS
+  // product name resolves to this item"), not a record of anything
+  // that happened - safe to clean up as part of deleting its target,
+  // unlike the historical tables checked above. Removed in the same
+  // transaction as the item delete, so a failure below rolls it back
+  // too - no partially-cleaned state.
+  await tx(`DELETE FROM sales_product_mappings WHERE item_id = $1`, [itemId]);
+
+  // The stocks row(s) are confirmed zero-quantity at this point (also
+  // covered by ON DELETE CASCADE, kept explicit for clarity).
+  await tx(`DELETE FROM stocks WHERE item_id = $1 AND restaurant_id = $2`, [itemId, restaurantId]);
+  // Delete the item.
+  await tx(`DELETE FROM items WHERE id = $1 AND restaurant_id = $2`, [itemId, restaurantId]);
+}
+
+// -------------------------------------------------------------------
+// mapDeleteError - turns a caught error from deleteItemTx into the
+// { status, code, error } response shape. Factored out so the mapping
+// itself (including the raw-PostgreSQL-error fallback) can be tested
+// directly with plain error objects, no HTTP or DB involved.
+// -------------------------------------------------------------------
+function mapDeleteError(err) {
+  // An error this module threw itself always carries both a semantic
+  // `.code` (e.g. 'ITEM_IN_USE') and a real `.error` message - safe to
+  // forward as-is, with a normal 200-with-ok:false response (it's an
+  // expected, handled outcome, not a server fault).
+  if (err.code && err.error) {
+    return { status: 200, code: err.code, error: err.error };
+  }
+
+  // A raw PostgreSQL error has a `.code` that is a SQLSTATE (e.g.
+  // '23503' for a foreign-key violation) and its message is on
+  // `.message`, not `.error` - never read `.error` off one of these,
+  // it doesn't exist there. 23503 specifically means some dependency
+  // this function's checks didn't anticipate still exists - handle it
+  // the same way as a known dependency instead of leaking a SQLSTATE.
+  if (err.code === '23503') {
+    return {
+      status: 200,
+      code: 'ITEM_IN_USE',
+      error: 'This item cannot be deleted because it is already used in existing records. Remove those references first, or stop using this item going forward instead of deleting it.'
+    };
+  }
+
+  // Genuinely unexpected error - a real HTTP 500, but still with a
+  // usable message in the body (the frontend now reads it - see
+  // frontend/js/api.js) instead of only a bare status code.
+  return { status: 500, code: 'SERVER_ERROR', error: err.message || 'Failed to delete item.' };
+}
+
 async function deleteItem(req, res) {
   const { restaurantId, userId } = req.auth;
   const { itemId } = req.body;
@@ -468,82 +586,14 @@ async function deleteItem(req, res) {
     );
     if (item.rows.length === 0) return res.json({ ok: false, code: 'NOT_FOUND', error: 'Item not found' });
 
-    await transaction(async (tx) => {
-      // Check if item is referenced in any recipe; if so, block deletion.
-      const refCheck = await tx(
-        `SELECT id FROM recipe_ingredients WHERE inventory_item_id = $1 LIMIT 1`,
-        [itemId]
-      );
-      if (refCheck.rows.length > 0) {
-        throw { code: 'ITEM_IN_USE', error: 'Item is used in one or more recipes. Remove it from recipes first.' };
-      }
-
-      // Check every other table with a foreign key on items.id for
-      // historical/operational records that must never be silently lost.
-      // A single round trip - this is a rare, interactive action, not a
-      // hot path, so clarity matters more than shaving a query here.
-      const depCheck = await tx(
-        `SELECT
-           EXISTS(SELECT 1 FROM sales_import_items WHERE item_id = $1) AS has_sales_import_items,
-           EXISTS(SELECT 1 FROM sales_import_effects WHERE item_id = $1) AS has_sales_import_effects,
-           EXISTS(SELECT 1 FROM stock_intake_items WHERE item_id = $1) AS has_stock_intake,
-           EXISTS(SELECT 1 FROM inventory_adjustments WHERE item_id = $1) AS has_adjustments,
-           EXISTS(SELECT 1 FROM pending_allocation_details WHERE inventory_item_id = $1) AS has_pending_allocations,
-           EXISTS(SELECT 1 FROM allocation_logs WHERE old_inventory_item_id = $1 OR new_inventory_item_id = $1) AS has_allocation_logs,
-           EXISTS(SELECT 1 FROM product_barcodes WHERE inventory_item_id = $1) AS has_barcodes`,
-        [itemId]
-      );
-
-      const dep = depCheck.rows[0];
-      const reasons = [];
-      if (dep.has_sales_import_items || dep.has_sales_import_effects) reasons.push('historical sales records');
-      if (dep.has_stock_intake) reasons.push('historical stock intake (purchase) records');
-      if (dep.has_adjustments) reasons.push('historical inventory adjustment records');
-      if (dep.has_pending_allocations || dep.has_allocation_logs) reasons.push('pending or resolved stock allocation records');
-      if (dep.has_barcodes) reasons.push('a saved barcode association');
-
-      if (reasons.length > 0) {
-        throw {
-          code: 'ITEM_IN_USE',
-          error: `This item cannot be deleted because it is already used in existing records (${reasons.join(', ')}). Remove those references first, or stop using this item going forward instead of deleting it.`
-        };
-      }
-
-      // A saved Sales product mapping is a routing pointer ("this POS
-      // product name resolves to this item"), not a record of anything
-      // that happened - safe to clean up as part of deleting its target,
-      // unlike the historical tables checked above.
-      await tx(`DELETE FROM sales_product_mappings WHERE item_id = $1`, [itemId]);
-
-      // Delete stocks first (also covered by ON DELETE CASCADE, kept
-      // explicit for clarity).
-      await tx(`DELETE FROM stocks WHERE item_id = $1 AND restaurant_id = $2`, [itemId, restaurantId]);
-      // Delete the item.
-      await tx(`DELETE FROM items WHERE id = $1 AND restaurant_id = $2`, [itemId, restaurantId]);
-    });
+    await transaction(tx => deleteItemTx(tx, itemId, restaurantId));
 
     await writeLog('DELETE_ITEM', `Item "${item.rows[0].name}" permanently deleted`, restaurantId, userId);
     res.json({ ok: true });
   } catch (err) {
     console.error('deleteItem error:', err);
-    if (err.code && err.error) {
-      return res.json({ ok: false, code: err.code, error: err.error });
-    }
-    // A raw PostgreSQL error (e.g. an unforeseen foreign-key violation,
-    // code 23503) has a `.code` that is a SQLSTATE, not one of this
-    // app's error codes, and no `.error` message - previously this fell
-    // through to `res.json({ code: err.code, error: err.error })` with
-    // `error` undefined, which the frontend then displayed as the
-    // unhelpful generic "Request failed". Log the real technical detail
-    // for debugging, but tell the user something they can act on.
-    if (err.code === '23503') {
-      return res.json({
-        ok: false,
-        code: 'ITEM_IN_USE',
-        error: 'This item cannot be deleted because it is already used in existing records. Remove those references first, or stop using this item going forward instead of deleting it.'
-      });
-    }
-    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message || 'Failed to delete item.' });
+    const mapped = mapDeleteError(err);
+    res.status(mapped.status).json({ ok: false, code: mapped.code, error: mapped.error });
   }
 }
 // -------------------------------------------------------------------
@@ -692,5 +742,8 @@ module.exports = {
   updateCategory,
   deleteCategory,
   restoreCategory,
-  writeLog
+  writeLog,
+  // Exported for testing without a live DB - see backend/test/deleteItemSafety.test.js
+  deleteItemTx,
+  mapDeleteError
 };

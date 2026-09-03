@@ -31,7 +31,20 @@ async function apiCall(method, path, body = null, responseType = 'json') {
     showLogin();
     throw new Error('Session expired. Please log in again.');
   }
-  if (!res.ok) throw new Error('Server error (HTTP ' + res.status + ')');
+  if (!res.ok) {
+    // The backend still sends a structured { ok:false, code, error } body
+    // on an unexpected-error (e.g. HTTP 500) response - read it instead
+    // of discarding it, so a real backend message reaches the user
+    // rather than always falling back to the generic HTTP-status text.
+    let data = null;
+    try { data = await res.json(); } catch (e) { /* body wasn't JSON - fall through */ }
+    if (data && data.error) {
+      const e = new Error(data.error);
+      e.code = data.code || null;
+      throw e;
+    }
+    throw new Error('Server error (HTTP ' + res.status + ')');
+  }
   if (responseType === 'blob') return await res.blob();
   if (responseType === 'text') return await res.text();
   let data;
