@@ -19,7 +19,6 @@ function showSettingsMenu() {
   const sections = [
     { key: 'inventoryConfig', title: 'Inventory Configuration', icon: '🗂️', desc: 'Categories, items, and purchase packages' },
     { key: 'inventory', title: 'Inventory Behaviour', icon: '📦', desc: 'Negative stock rules & warnings' },
-    { key: 'sales', title: 'Sales', icon: '📊', desc: 'Import POS sales and view summary' },
     { key: 'staff', title: 'Staff Management', icon: '👥', desc: 'Manage staff accounts' },
     { key: 'permissions', title: 'Staff Permissions', icon: '🔐', desc: 'Control staff access' }
   ];
@@ -49,7 +48,6 @@ function showSettingsDetail(sectionKey) {
   const titles = {
     inventoryConfig: 'Inventory Configuration',
     inventory: 'Inventory Behaviour',
-    sales: 'Sales',
     staff: 'Staff Management',
     permissions: 'Staff Permissions'
   };
@@ -57,7 +55,6 @@ function showSettingsDetail(sectionKey) {
   const descriptions = {
     inventoryConfig: 'Manage categories, items, and purchase packages.',
     inventory: 'Control how negative stock is handled and warned about.',
-    sales: 'Import POS sales reports and view sales summary.',
     staff: 'Create and manage staff accounts and their active status.',
     permissions: 'Control what staff members are allowed to do.'
   };
@@ -77,8 +74,6 @@ function showSettingsDetail(sectionKey) {
     showInventoryConfigDetail();
   } else if (sectionKey === 'inventory') {
     showInventoryBehaviourDetail();
-  } else if (sectionKey === 'sales') {
-    showSalesDetail();
   } else if (sectionKey === 'staff') {
     showStaffManagementDetail();
   } else if (sectionKey === 'permissions') {

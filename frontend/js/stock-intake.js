@@ -300,6 +300,7 @@ function renderPurchaseRegister(intakes) {
       grouped[key].forEach(intake => {
         const enteredDt = intake.createdAt ? new Date(intake.createdAt) : null;
         const enteredTime = enteredDt ? fmtTime(enteredDt) : '';
+        const enteredLabel = enteredDt ? `${fmtDate(enteredDt)} · ${enteredTime}` : '';
         const items = intake.items || [];
         const itemRows = items.map(it => {
           const f = findItem(it.itemId);
@@ -337,7 +338,7 @@ function renderPurchaseRegister(intakes) {
 
         html += `<div class="purchase-card" data-intake-id="${intake.id}">
           <div class="purchase-card-header">
-            <span class="purchase-card-time">${escapeHtml(enteredTime ? 'Entered ' + enteredTime : '')}</span>
+            <span class="purchase-card-time">${escapeHtml(enteredLabel ? 'Entered ' + enteredLabel : '')}</span>
             ${statusBadge}
             <span class="purchase-card-id">${intake.id ? '#' + intake.id.slice(0, 8) : ''}</span>
           </div>
@@ -382,8 +383,9 @@ function openPurchaseDetails(intake) {
   const dateLabel = !isNaN(purchaseDt) ? fmtDate(purchaseDt) : '';
   const enteredDt = intake.createdAt ? new Date(intake.createdAt) : null;
   const enteredTime = enteredDt ? fmtTime(enteredDt) : '';
+  const enteredLabel = enteredDt ? `${fmtDate(enteredDt)} · ${enteredTime}` : '';
   const items = intake.items || [];
-  let html = `<div style="font-size:0.85rem;color:var(--paper-dim);margin-bottom:var(--space-3);">${escapeHtml(dateLabel)}${enteredTime ? ' · Entered ' + escapeHtml(enteredTime) : ''}</div>`;
+  let html = `<div style="font-size:0.85rem;color:var(--paper-dim);margin-bottom:var(--space-3);">${escapeHtml(dateLabel)}${enteredLabel ? ' · Entered ' + escapeHtml(enteredLabel) : ''}</div>`;
   items.forEach(item => {
     const f = findItem(item.itemId);
     const stockUnit = f ? (f.item.unit || '') : '';

@@ -1,9 +1,16 @@
 'use strict';
 
 function showSalesDetail() {
-  const content = document.getElementById('settingsDetailContent');
+  const content = document.getElementById('salesContainer');
   if (!content) return;
   content.innerHTML = `
+    <div class="purchase-register-toolbar">
+      <div>
+        <div class="purchase-register-title">Sales</div>
+        <div class="purchase-register-subtitle">Import POS reports and track sales</div>
+      </div>
+    </div>
+
     <div id="salesUploadSection" class="sales-summary-card" style="margin-top:0;">
       <div class="sales-summary-header">
         <div class="sales-summary-title">Upload Sales CSV</div>

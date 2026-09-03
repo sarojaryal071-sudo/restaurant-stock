@@ -4,10 +4,12 @@ const pgInv = document.getElementById('pageInventory');
 const pgRec = document.getElementById('pageRecipes');
 const pgSet = document.getElementById('pageSettings');
 const pgSI = document.getElementById('pageStockIntake');
+const pgSales = document.getElementById('pageSales');
 const navInv = document.getElementById('navInventory');
 const navRec = document.getElementById('navRecipes');
 const navSet = document.getElementById('navSettings');
 const navSI = document.getElementById('navStockIntake');
+const navSales = document.getElementById('navSales');
 const fab = document.getElementById('fabAction');
 const fabLbl = document.getElementById('fabActionLabel');
 const svBtn = document.getElementById('saveBtn');
@@ -18,10 +20,12 @@ function switchPage(p) {
   pgRec.classList.add('hidden');
   pgSet.classList.add('hidden');
   pgSI.classList.add('hidden');
+  pgSales.classList.add('hidden');
   navInv.classList.remove('active');
   navRec.classList.remove('active');
   navSet.classList.remove('active');
   navSI.classList.remove('active');
+  navSales.classList.remove('active');
   fab.classList.add('hidden');
   svBtn.classList.add('hidden');
 
@@ -44,6 +48,11 @@ function switchPage(p) {
     navSI.classList.add('active');
     fab.classList.add('hidden');
     showStockIntakePage();
+  } else if (p === 'sales') {
+    pgSales.classList.remove('hidden');
+    navSales.classList.add('active');
+    fab.classList.add('hidden');
+    showSalesDetail();
   } else if (p === 'settings') {
     pgSet.classList.remove('hidden');
     navSet.classList.add('active');
@@ -67,11 +76,13 @@ function applyUIPermissions() {
   }
   navSet.classList.toggle('hidden', !can('settings', 'manage'));
   navSI.classList.toggle('hidden', !can('settings', 'manage'));
+  navSales.classList.toggle('hidden', !can('settings', 'manage'));
 }
 
 navInv.addEventListener('click', () => switchPage('inventory'));
 navRec.addEventListener('click', () => switchPage('recipes'));
 navSI.addEventListener('click', () => switchPage('stockintake'));
+navSales.addEventListener('click', () => switchPage('sales'));
 navSet.addEventListener('click', () => switchPage('settings'));
 
 fab.addEventListener('click', () => {
@@ -129,10 +140,12 @@ window.pgInv = pgInv;
 window.pgRec = pgRec;
 window.pgSet = pgSet;
 window.pgSI = pgSI;
+window.pgSales = pgSales;
 window.navInv = navInv;
 window.navRec = navRec;
 window.navSet = navSet;
 window.navSI = navSI;
+window.navSales = navSales;
 window.fab = fab;
 window.fabLbl = fabLbl;
 window.svBtn = svBtn;

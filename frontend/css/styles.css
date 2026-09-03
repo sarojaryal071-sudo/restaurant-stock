@@ -546,7 +546,7 @@ button {
 .header-row {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: clamp(6px, 2vw, var(--space-3));
   max-width: 760px;
   margin: 0 auto;
 }
@@ -619,8 +619,8 @@ button {
   border: 1px solid var(--line-strong);
   color: var(--gold-bright);
   cursor: pointer;
-  width: var(--tap);
-  height: var(--tap);
+  width: clamp(32px, 8.5vw, var(--tap));
+  height: clamp(32px, 8.5vw, var(--tap));
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -645,8 +645,8 @@ button {
 .export-btn svg,
 .logout-btn svg,
 .theme-toggle-btn svg {
-  width: 18px;
-  height: 18px;
+  width: clamp(14px, 4vw, 18px);
+  height: clamp(14px, 4vw, 18px);
 }
 
 .theme-icon-sun {
