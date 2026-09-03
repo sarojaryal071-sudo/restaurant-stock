@@ -73,6 +73,7 @@ function showSalesDetail() {
 
   loadSalesSummary('today');
   loadSalesImportHistory();
+  refreshServingNameSuggestionsFromServer();
 }
 
 async function handleSalesFileSelect(e) {
@@ -134,6 +135,44 @@ function buildUnitOptionsHtml(selectedUnit) {
   return html;
 }
 
+// Same restriction as the item-config "Sales volume unit" field
+// (inventory-config.js popSalesVolumeUnitSel) - the conversion engine
+// (amountToMl) only understands ml/cl/L, so the serving-volume unit
+// dropdown offers only those, never the full stock-unit list.
+function buildServingVolumeUnitOptionsHtml(selectedUnit) {
+  let html = '<option value="">--</option>';
+  (appConfig.units || []).filter(u => ['ml', 'cl', 'L'].includes(u.value)).forEach(u => {
+    const selected = u.value === selectedUnit ? ' selected' : '';
+    html += `<option value="${escapeHtml(u.value)}"${selected}>${escapeHtml(u.label)}</option>`;
+  });
+  return html;
+}
+
+/**
+ * Merge server-known serving names (item defaults + saved mapping
+ * overrides) into the shared "Serving name" datalist. Additive to
+ * whatever inventory-config.js already populated from loaded items;
+ * free typing is always allowed regardless of what's in the list.
+ */
+async function refreshServingNameSuggestionsFromServer() {
+  const list = document.getElementById('servingNameSuggestions');
+  if (!list) return;
+  try {
+    const data = await api.getSalesServingNames();
+    const names = (data && Array.isArray(data.names)) ? data.names : [];
+    const existing = new Set(Array.from(list.options).map(o => o.value));
+    names.forEach(n => {
+      if (n && !existing.has(n)) {
+        existing.add(n);
+        list.insertAdjacentHTML('beforeend', `<option value="${escapeHtml(n)}"></option>`);
+      }
+    });
+  } catch (err) {
+    // Suggestions are a convenience only - failing to fetch them never
+    // blocks typing a serving name manually.
+  }
+}
+
 function getSalesPreviewBadge(item) {
   if (item.type === 'inventory' && item.matched) {
     return '<span class="badge-active">📦 Inventory · ✓ Found</span>';
@@ -161,7 +200,7 @@ function renderSalesPreview() {
   }
 
   let html = `<table class="staff-table" style="margin-top:var(--space-2);">
-    <thead><tr><th>POS Product</th><th>Resolved To</th><th>Qty Sold</th><th>Unit</th><th>Status</th></tr></thead><tbody>`;
+    <thead><tr><th>POS Product</th><th>Resolved To</th><th>Qty Sold</th><th>Serving</th><th>Pour unit</th><th>Status</th></tr></thead><tbody>`;
 
   salesItems.forEach((item, idx) => {
     const badge = getSalesPreviewBadge(item);
@@ -177,26 +216,50 @@ function renderSalesPreview() {
 
     const mappingSelect = `<select class="field-select sales-map-select" id="mapSelect_${idx}" style="width:auto;min-width:160px;display:inline-block;padding:8px 10px;font-size:0.82rem;">${buildMappingOptionsHtml(item)}</select>`;
 
-    let defaultUnit = item.unit || '';
+    // Existing Flatpay/wine variable-pour raw-unit override. Only ever
+    // populated from a real CSV "Unit" column or a saved per-product
+    // mapping unit - never auto-filled from the item's stock unit, which
+    // is what previously made a configured serving unreachable (the
+    // "4 glass -> 4 kegs" bug).
+    const pourUnit = item.unit || '';
 
-    // If CSV unit is missing but product resolved to an inventory item, use item's stock unit
-    if (!defaultUnit && item.matched && item.type === 'inventory' && item.itemId) {
-      const resolvedItem = findItem(item.itemId);
-      if (resolvedItem && resolvedItem.item && resolvedItem.item.unit) {
-        defaultUnit = resolvedItem.item.unit;
-        item.unit = defaultUnit; // keep for apply payload
-      }
-    }
-
-    const unitControl = item.type === 'inventory'
-      ? `<select class="field-select sales-unit-select" id="unitSelect_${idx}" style="width:auto;min-width:100px;display:inline-block;padding:8px 10px;font-size:0.82rem;">${buildUnitOptionsHtml(defaultUnit)}</select>`
+    const pourUnitControl = item.type === 'inventory'
+      ? `<select class="field-select sales-unit-select" id="unitSelect_${idx}" style="width:auto;min-width:90px;display:inline-block;padding:8px 10px;font-size:0.82rem;">${buildUnitOptionsHtml(pourUnit)}</select>`
       : '—';
+
+    let servingControl = '—';
+
+    if (item.type === 'inventory') {
+      // Prefilled by the backend preview: saved mapping override, else the
+      // item's own configured default, else blank (unconfigured item -
+      // falls back to the item's stock unit at import time untouched).
+      const servingName = item.servingName || '';
+      const salesVolume = item.salesVolume != null ? item.salesVolume : '';
+      const salesVolumeUnit = item.salesVolumeUnit || '';
+
+      servingControl = `
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+          <input type="text" class="field-input sales-serving-name" id="servingName_${idx}"
+                 list="servingNameSuggestions" autocomplete="off" placeholder="e.g. Glass"
+                 value="${escapeHtml(servingName)}"
+                 style="width:110px;display:inline-block;padding:8px 10px;font-size:0.82rem;">
+          <input type="number" class="field-input sales-serving-volume" id="servingVolume_${idx}"
+                 min="0" step="0.01" placeholder="Vol" value="${salesVolume === '' ? '' : escapeHtml(String(salesVolume))}"
+                 style="width:64px;display:inline-block;padding:8px 8px;font-size:0.82rem;">
+          <select class="field-select sales-serving-unit" id="servingUnit_${idx}"
+                  style="width:auto;min-width:64px;display:inline-block;padding:8px 8px;font-size:0.82rem;">${buildServingVolumeUnitOptionsHtml(salesVolumeUnit)}</select>
+          <button type="button" class="btn btn-ghost btn-small sales-save-default-btn" id="saveDefault_${idx}"
+                  style="font-size:0.72rem;padding:6px 8px;white-space:nowrap;" ${item.itemId ? '' : 'disabled'}
+                  title="Save this serving as the default for this POS product">Save as default</button>
+        </div>`;
+    }
 
     html += `<tr>
       <td>${escapeHtml(item.sourceProductName)}</td>
       <td>${mappingSelect}</td>
       <td>${item.quantitySold}</td>
-      <td>${unitControl}</td>
+      <td>${servingControl}</td>
+      <td>${pourUnitControl}</td>
       <td>${badge}</td>
     </tr>`;
   });
@@ -227,6 +290,9 @@ function renderSalesPreview() {
             item.recipeId = value;
             item.recipeName = selectedOption.textContent;
             item.type = 'recipe';
+            item.servingName = null;
+            item.salesVolume = null;
+            item.salesVolumeUnit = null;
           } else {
             await api.saveSalesMapping(item.sourceProductName, value, null);
             item.itemId = value;
@@ -234,6 +300,15 @@ function renderSalesPreview() {
             item.recipeId = null;
             item.recipeName = null;
             item.type = 'inventory';
+
+            // Newly picked item wasn't part of the original preview
+            // response - pull its own configured serving default (if any)
+            // from already-loaded inventory data, same as the backend
+            // would for a fresh preview.
+            const resolvedItem = findItem(value);
+            item.servingName = (resolvedItem && resolvedItem.item.servingName) || null;
+            item.salesVolume = (resolvedItem && resolvedItem.item.salesVolume != null) ? resolvedItem.item.salesVolume : null;
+            item.salesVolumeUnit = (resolvedItem && resolvedItem.item.salesVolumeUnit) || null;
           }
 
           item.matched = true;
@@ -249,6 +324,54 @@ function renderSalesPreview() {
     if (unitSelect) {
       unitSelect.addEventListener('change', (e) => {
         item.unit = e.target.value || null;
+      });
+    }
+
+    const servingNameInput = document.getElementById(`servingName_${idx}`);
+    if (servingNameInput) {
+      servingNameInput.addEventListener('input', (e) => {
+        item.servingName = e.target.value.trim() || null;
+      });
+    }
+
+    const servingVolumeInput = document.getElementById(`servingVolume_${idx}`);
+    if (servingVolumeInput) {
+      servingVolumeInput.addEventListener('input', (e) => {
+        const v = e.target.value;
+        item.salesVolume = v === '' ? null : v;
+      });
+    }
+
+    const servingUnitSelect = document.getElementById(`servingUnit_${idx}`);
+    if (servingUnitSelect) {
+      servingUnitSelect.addEventListener('change', (e) => {
+        item.salesVolumeUnit = e.target.value || null;
+      });
+    }
+
+    const saveDefaultBtn = document.getElementById(`saveDefault_${idx}`);
+    if (saveDefaultBtn) {
+      saveDefaultBtn.addEventListener('click', async () => {
+        if (!item.itemId) return;
+        saveDefaultBtn.disabled = true;
+        const originalLabel = saveDefaultBtn.textContent;
+        saveDefaultBtn.textContent = 'Saving…';
+
+        try {
+          await api.saveSalesMapping(item.sourceProductName, item.itemId, null, {
+            unit: item.unit || null,
+            servingName: item.servingName || null,
+            salesVolume: item.salesVolume,
+            salesVolumeUnit: item.salesVolumeUnit
+          });
+          toast(`Saved "${item.servingName || item.salesVolumeUnit || 'serving'}" as the default for "${item.sourceProductName}".`);
+          refreshServingNameSuggestionsFromServer();
+        } catch (err) {
+          toast(err.message || 'Failed to save default serving', true);
+        } finally {
+          saveDefaultBtn.disabled = false;
+          saveDefaultBtn.textContent = originalLabel;
+        }
       });
     }
   });
@@ -272,7 +395,15 @@ function renderSalesPreview() {
             recipeId: it.recipeId || undefined,
             sourceProductName: it.sourceProductName,
             quantitySold: it.quantitySold,
-            unit: it.type === 'inventory' ? (it.unit || null) : null
+            // Existing Flatpay/wine variable-pour raw-unit override.
+            unit: it.type === 'inventory' ? (it.unit || null) : null,
+            // Serving definition currently shown for this sale - the
+            // item's/mapping's default unless the user edited it for this
+            // one sale. servingName is a label only; salesVolume/
+            // salesVolumeUnit are what the backend actually converts.
+            servingName: it.type === 'inventory' ? (it.servingName || null) : null,
+            salesVolume: it.type === 'inventory' ? (it.salesVolume != null && it.salesVolume !== '' ? it.salesVolume : null) : null,
+            salesVolumeUnit: it.type === 'inventory' ? (it.salesVolumeUnit || null) : null
           }))
         );
 

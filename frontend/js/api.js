@@ -145,12 +145,17 @@ const api = {
   createStaff: (name, pin) => apiCall('POST', '/staff', { name, pin }),
   updateStaff: (id, data) => apiCall('PATCH', `/staff/${id}`, data),
         getSalesSummary: (period) => apiCall('GET', '/pos/sales?period=' + encodeURIComponent(period)),
-        saveSalesMapping: (sourceProductName, itemId, recipeId) => {
+        saveSalesMapping: (sourceProductName, itemId, recipeId, extra) => {
           const payload = { sourceProductName };
           if (itemId) payload.itemId = itemId;
           if (recipeId) payload.recipeId = recipeId;
+          if (extra && extra.unit) payload.unit = extra.unit;
+          if (extra && extra.servingName) payload.servingName = extra.servingName;
+          if (extra && extra.salesVolume != null && extra.salesVolume !== '') payload.salesVolume = extra.salesVolume;
+          if (extra && extra.salesVolumeUnit) payload.salesVolumeUnit = extra.salesVolumeUnit;
           return apiCall('POST', '/pos/sales/mappings', payload);
         },
+        getSalesServingNames: () => apiCall('GET', '/pos/sales/serving-names'),
         applySalesImport: (fileHash, periodStart, periodEnd, items) => apiCall('POST', '/pos/sales/import/apply', { fileHash, periodStart, periodEnd, items }),
         getSalesImportHistory: () => apiCall('GET', '/pos/sales/import/history'),
         cancelSalesImport: (id) => apiCall('POST', `/pos/sales/import/${id}/cancel`, {})};

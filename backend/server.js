@@ -331,6 +331,12 @@ app.post('/api/pos/sales/mappings', (req, res, next) => {
   });
 });
 
+app.get('/api/pos/sales/serving-names', (req, res, next) => {
+  requireAuth(req, res, () => {
+    requirePermission('settings', 'manage')(req, res, () => posSalesImportActions.servingNames(req, res));
+  });
+});
+
 app.post('/api/pos/sales/import/apply', (req, res, next) => {
   requireAuth(req, res, () => {
     requirePermission('settings', 'manage')(req, res, () => posSalesImportActions.apply(req, res));

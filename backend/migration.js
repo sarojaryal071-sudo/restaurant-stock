@@ -658,6 +658,15 @@ async function runMigrations() {
     await tx(`ALTER TABLE sales_product_mappings ADD COLUMN IF NOT EXISTS unit TEXT;`);
     await tx(`ALTER TABLE sales_product_mappings ALTER COLUMN item_id DROP NOT NULL;`);
 
+    // Per-POS-product serving override (explicit "Save as default for this
+    // product" from the Sales screen). Distinct from items.serving_name /
+    // sales_volume / sales_volume_unit, which is the item's own permanent
+    // default - this is a per-mapping override that takes precedence over
+    // it. Additive and nullable; existing mapping rows are unaffected.
+    await tx(`ALTER TABLE sales_product_mappings ADD COLUMN IF NOT EXISTS serving_name TEXT;`);
+    await tx(`ALTER TABLE sales_product_mappings ADD COLUMN IF NOT EXISTS sales_volume DECIMAL(10,2);`);
+    await tx(`ALTER TABLE sales_product_mappings ADD COLUMN IF NOT EXISTS sales_volume_unit TEXT;`);
+
         // =================================================================
     // Product Barcode Cache (restaurant-scoped)
     // =================================================================
