@@ -97,13 +97,14 @@ async function handleSalesFileSelect(e) {
 function buildMappingOptionsHtml(item) {
   let html = '<option value="">-- Select --</option>';
 
-  // Duplicate item names can exist (e.g. the same product entered twice,
-  // one copy missing its serving configuration). Left unlabeled, two
-  // identically-named options are impossible to tell apart when mapping
-  // a POS product by hand, which is how a mapping can end up pointing at
-  // the wrong duplicate. Disambiguate any duplicate name with a short
-  // hint about its configured serving/unit - a display-only change, no
-  // effect on how mappings are resolved or which item ID is stored.
+  // Duplicate item names can exist (e.g. the same product entered twice).
+  // Left unlabeled, two identically-named options are impossible to tell
+  // apart when mapping a POS product by hand. Disambiguate only when a
+  // duplicate actually has a configured serving, by naming that serving -
+  // never with any "not configured" text: an item with no serving
+  // configuration is always shown as plain its stock name, exactly like
+  // any other (non-duplicate) item. Display-only, no effect on how
+  // mappings are resolved or which item ID is stored.
   const nameCounts = new Map();
   state.categories.forEach(cat => {
     cat.items.forEach(it => {
@@ -113,11 +114,10 @@ function buildMappingOptionsHtml(item) {
   });
 
   function disambiguatedLabel(it) {
+    if (!it.servingName) return it.name;
     const key = (it.name || '').trim().toLowerCase();
     if ((nameCounts.get(key) || 0) < 2) return it.name;
-    const hint = it.servingName
-      ? `${it.servingName} ${it.salesVolume != null ? it.salesVolume : ''}${it.salesVolumeUnit || ''}`.trim()
-      : `${it.unit || 'unit'}, no serving configured`;
+    const hint = `${it.servingName} ${it.salesVolume != null ? it.salesVolume : ''}${it.salesVolumeUnit || ''}`.trim();
     return `${it.name} — ${hint}`;
   }
 
