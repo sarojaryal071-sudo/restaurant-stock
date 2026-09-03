@@ -26,8 +26,8 @@
   --qty-good: #2f6b40;
   --danger: #a03327;
 
-  --font-display: Georgia, 'Times New Roman', serif;
-  --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --font-mono: 'SF Mono', 'Courier New', monospace;
   --radius-lg: clamp(14px, 2.2vw, 22px);
   --radius-md: clamp(10px, 1.6vw, 14px);
@@ -60,6 +60,12 @@
   --success: var(--qty-good);
   --warning: var(--qty-low);
   --input-bg: var(--charcoal-1);
+
+  /* Shared raised-surface gradient (already used ad hoc in several
+     places below) - a named token so it can be reused consistently.
+     Built from theme-aware tokens, so it resolves correctly in both
+     themes without needing its own dark-mode redefinition. */
+  --surface-gradient: linear-gradient(160deg, var(--charcoal-2), var(--charcoal-1));
 }
 
 @media (prefers-color-scheme: dark) {
@@ -762,6 +768,7 @@ button {
   padding: clamp(12px, 2.6vw, 15px) clamp(14px, 3vw, 18px) clamp(12px, 2.6vw, 15px) 44px;
   color: var(--paper);
   font-size: clamp(0.9rem, 2.6vw, 1rem);
+  box-shadow: var(--shadow-inset);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -771,7 +778,7 @@ button {
 
 .search-input:focus {
   border-color: var(--gold-deep);
-  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.12);
+  box-shadow: var(--shadow-inset), 0 0 0 3px rgba(212, 175, 55, 0.12);
   outline: none;
 }
 
@@ -825,12 +832,12 @@ button {
 }
 
 .cat-card {
-  background: var(--charcoal-1);
+  background: var(--surface-gradient);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: var(--shadow-card);
-  transition: border-color 0.25s ease;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
 }
 
 .cat-card.is-empty-search {
@@ -849,6 +856,11 @@ button {
   color: inherit;
   text-align: left;
   min-height: var(--tap);
+  transition: background 0.2s ease;
+}
+
+.cat-header:hover {
+  background: rgba(212, 175, 55, 0.05);
 }
 
 .cat-icon {
@@ -1462,6 +1474,8 @@ button {
   padding: clamp(10px, 2.6vw, 12px) clamp(10px, 3vw, 14px);
   color: var(--paper);
   font-size: clamp(0.85rem, 2.4vw, 0.95rem);
+  box-shadow: var(--shadow-inset);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 textarea.field-input {
@@ -1475,7 +1489,7 @@ textarea.field-input {
 .field-select:focus {
   outline: none;
   border-color: var(--gold-deep);
-  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.12);
+  box-shadow: var(--shadow-inset), 0 0 0 3px rgba(212, 175, 55, 0.12);
 }
 
 .field-select {
@@ -1504,7 +1518,11 @@ textarea.field-input {
   cursor: pointer;
   font-weight: 700;
   font-size: clamp(0.78rem, 2.6vw, 0.9rem);
-  transition: transform 0.1s ease, opacity 0.15s ease;
+  transition: transform 0.15s ease, opacity 0.15s ease, box-shadow 0.15s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
 }
 
 .btn:active {
@@ -1521,11 +1539,13 @@ textarea.field-input {
   background: var(--charcoal-3);
   color: var(--paper-dim);
   border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow-raised);
 }
 
 .btn-gold {
   background: linear-gradient(135deg, var(--gold-bright), var(--gold-deep));
   color: #1c1305;
+  box-shadow: var(--shadow-btn-raised);
 }
 
 .btn-danger {
