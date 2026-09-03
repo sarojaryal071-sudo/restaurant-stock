@@ -217,25 +217,13 @@ async function getItemDetails(restaurantId, itemId) {
   const { query } = require('../../database');
 
   const res = await query(
-    `SELECT id, name, unit, volume, volume_unit, serving_name, sales_volume, sales_volume_unit
+    `SELECT id, name
      FROM items
      WHERE id = $1 AND restaurant_id = $2 AND is_deleted = FALSE`,
     [itemId, restaurantId]
   );
 
-  if (!res.rows[0]) return null;
-
-  const row = res.rows[0];
-  return {
-    id: row.id,
-    name: row.name,
-    unit: row.unit || null,
-    volume: row.volume != null ? parseFloat(row.volume) : null,
-    volumeUnit: row.volume_unit || null,
-    servingName: row.serving_name || null,
-    salesVolume: row.sales_volume != null ? parseFloat(row.sales_volume) : null,
-    salesVolumeUnit: row.sales_volume_unit || null
-  };
+  return res.rows[0] || null;
 }
 
 async function getRecipeDetails(restaurantId, recipeId) {
@@ -274,13 +262,6 @@ async function previewSales(restaurantId, file) {
       if (mapping.itemId) {
         const item = await getItemDetails(restaurantId, mapping.itemId);
 
-        // A saved per-product mapping override outranks the item's own
-        // configured default; if neither is set, the fields stay null and
-        // the fallback (quantity -> item.unit) applies untouched.
-        const servingName = item ? (mapping.servingName || item.servingName) : null;
-        const salesVolume = item ? (mapping.salesVolume != null ? mapping.salesVolume : item.salesVolume) : null;
-        const salesVolumeUnit = item ? (mapping.salesVolumeUnit || item.salesVolumeUnit) : null;
-
         items.push({
           sourceProductName,
           itemId: item ? item.id : null,
@@ -289,10 +270,6 @@ async function previewSales(restaurantId, file) {
           recipeName: null,
           quantitySold,
           unit: item ? mappedUnit : null,
-          servingName,
-          salesVolume,
-          salesVolumeUnit,
-          stockUnit: item ? item.unit : null,
           type: item ? 'inventory' : 'unresolved',
           matched: !!item
         });
@@ -330,8 +307,6 @@ async function previewSales(restaurantId, file) {
     if (resolution.type === 'inventory') {
       const item = await getItemDetails(restaurantId, resolution.id);
 
-      // No saved mapping for this product name yet - the item's own
-      // configured serving (if any) is the only available default.
       items.push({
         sourceProductName,
         itemId: item ? item.id : null,
@@ -340,10 +315,6 @@ async function previewSales(restaurantId, file) {
         recipeName: null,
         quantitySold,
         unit: item ? salesUnit : null,
-        servingName: item ? item.servingName : null,
-        salesVolume: item ? item.salesVolume : null,
-        salesVolumeUnit: item ? item.salesVolumeUnit : null,
-        stockUnit: item ? item.unit : null,
         type: 'inventory',
         matched: true
       });
@@ -437,25 +408,7 @@ async function applySalesImport(
       ''
     ).trim();
 
-    // Existing Flatpay/wine variable-pour raw-unit override - unchanged.
     const salesUnit = it.unit || null;
-
-    // Per-sale serving override (or a resolved default already prefilled
-    // by the frontend from the item's/mapping's config). servingName is a
-    // label only; salesVolume/salesVolumeUnit are what actually feed the
-    // conversion in the repository layer.
-    let salesVolume = null;
-    if (it.salesVolume !== undefined && it.salesVolume !== null && it.salesVolume !== '') {
-      salesVolume = parseFloat(it.salesVolume);
-      if (isNaN(salesVolume) || salesVolume <= 0) {
-        throw {
-          code: 'VALIDATION_ERROR',
-          error: `Sales volume must be a positive number for "${productName || 'this item'}".`
-        };
-      }
-    }
-    const salesVolumeUnit = it.salesVolumeUnit || null;
-    const servingName = (it.servingName && String(it.servingName).trim()) || null;
 
     if (it.itemId) {
       const item = await getItemDetails(restaurantId, it.itemId);
@@ -469,10 +422,7 @@ async function applySalesImport(
         itemId: item.id,
         sourceProductName: productName || item.name,
         quantitySold: qty,
-        salesUnit,
-        servingName,
-        salesVolume,
-        salesVolumeUnit
+        salesUnit
       });
 
       continue;
@@ -513,10 +463,7 @@ async function applySalesImport(
         itemId: item.id,
         sourceProductName: productName,
         quantitySold: qty,
-        salesUnit,
-        servingName,
-        salesVolume,
-        salesVolumeUnit
+        salesUnit
       });
     } else if (resolution.type === 'recipe') {
       resolvedItems.push({
@@ -572,14 +519,8 @@ async function applySalesImport(
  * Save or update a product mapping after validating:
  * - one of itemId or recipeId is provided, never both
  * - item/recipe belongs to the authenticated restaurant
- *
- * `serving`, when provided, is the explicit "Save as default for this
- * product" override: { servingName, salesVolume, salesVolumeUnit }. It is
- * stored on the mapping row only - the item's own permanent
- * serving_name/sales_volume/sales_volume_unit configuration is never
- * touched by this call.
  */
-async function saveProductMapping(restaurantId, sourceProductName, itemId = null, recipeId = null, unit = null, serving = null) {
+async function saveProductMapping(restaurantId, sourceProductName, itemId = null, recipeId = null, unit = null) {
   if (!sourceProductName || !String(sourceProductName).trim()) {
     throw { code: 'VALIDATION_ERROR', error: 'sourceProductName is required.' };
   }
@@ -591,10 +532,8 @@ async function saveProductMapping(restaurantId, sourceProductName, itemId = null
     };
   }
 
-  let item = null;
-
   if (itemId) {
-    item = await getItemDetails(restaurantId, itemId);
+    const item = await getItemDetails(restaurantId, itemId);
 
     if (!item) {
       throw { code: 'ITEM_NOT_FOUND', error: `Item not found: ${itemId}` };
@@ -609,58 +548,13 @@ async function saveProductMapping(restaurantId, sourceProductName, itemId = null
     }
   }
 
-  let servingToSave = {};
-
-  if (serving && (serving.servingName || serving.salesVolume != null)) {
-    const salesVolume = serving.salesVolume != null && serving.salesVolume !== ''
-      ? parseFloat(serving.salesVolume)
-      : null;
-
-    if (serving.salesVolume != null && serving.salesVolume !== '' && (isNaN(salesVolume) || salesVolume <= 0)) {
-      throw { code: 'VALIDATION_ERROR', error: 'Sales volume must be a positive number.' };
-    }
-
-    const salesVolumeUnit = (serving.salesVolumeUnit || '').trim() || null;
-
-    // Same safeguard as saving an item's own default serving (see
-    // backend/inventory.js): a serving volume in a unit different from the
-    // item's stock unit can only be converted with the item's physical
-    // Volume/Volume Unit already known. Refuse to save an override that
-    // would silently fail at import time.
-    if (salesVolume !== null && salesVolumeUnit && item) {
-      const sameAsStockUnit = salesVolumeUnit.trim().toLowerCase() === (item.unit || '').trim().toLowerCase();
-      if (!sameAsStockUnit && (item.volume === null || !item.volumeUnit)) {
-        throw {
-          code: 'VALIDATION_ERROR',
-          error: `A serving size in a different unit than "${item.name}"'s stock unit requires that item's Volume and Volume Unit to be set first.`
-        };
-      }
-    }
-
-    servingToSave = {
-      servingName: (serving.servingName && String(serving.servingName).trim()) || null,
-      salesVolume,
-      salesVolumeUnit
-    };
-  }
-
   await repository.saveProductMapping(
     restaurantId,
     String(sourceProductName).trim(),
     itemId || null,
     recipeId || null,
-    unit || null,
-    'flatpay',
-    servingToSave
+    unit || null
   );
-}
-
-/**
- * Distinct serving names known to this restaurant (item defaults + saved
- * mapping overrides), for populating the Sales "Serving name" datalist.
- */
-async function getKnownServingNames(restaurantId) {
-  return repository.getKnownServingNames(restaurantId);
 }
 
 /**
@@ -684,6 +578,5 @@ module.exports = {
   applySalesImport,
   cancelSalesImport,
   listSalesImports,
-  saveProductMapping,
-  getKnownServingNames
+  saveProductMapping
 };

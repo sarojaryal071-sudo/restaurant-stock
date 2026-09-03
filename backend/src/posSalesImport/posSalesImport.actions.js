@@ -33,10 +33,7 @@ async function saveMapping(req, res) {
       sourceProductName,
       itemId = null,
       recipeId = null,
-      unit = null,
-      servingName = null,
-      salesVolume = null,
-      salesVolumeUnit = null
+      unit = null
     } = req.body;
 
     if (!sourceProductName) {
@@ -52,24 +49,13 @@ async function saveMapping(req, res) {
       sourceProductName,
       itemId || null,
       recipeId || null,
-      unit || null,
-      { servingName, salesVolume, salesVolumeUnit }
+      unit || null
     );
 
     res.json({ ok: true });
   } catch (err) {
     if (err.code) return res.json({ ok: false, code: err.code, error: err.error });
     console.error('mapping error:', err);
-    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
-  }
-}
-
-async function servingNames(req, res) {
-  try {
-    const names = await service.getKnownServingNames(req.auth.restaurantId);
-    res.json({ ok: true, names });
-  } catch (err) {
-    console.error('serving names error:', err);
     res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
   }
 }
@@ -134,7 +120,6 @@ async function history(req, res) {
 module.exports = {
   preview,
   saveMapping,
-  servingNames,
   apply,
   cancel,
   history

@@ -59,12 +59,11 @@ test('Test 5b - applyImport hardening: throws instead of silently falling back',
     path.join(__dirname, '..', 'src', 'posSalesImport', 'posSalesImport.repository.js'),
     'utf8'
   );
-  // The unified serving branch (item default OR a per-sale/mapping
-  // override - see effectiveSalesVolume/effectiveSalesVolumeUnit) must
-  // still throw SERVING_CONVERSION_FAILED on a failed conversion rather
-  // than falling through to stockReduction = quantitySold.
-  const branchMatch = src.match(/else if \(effectiveSalesVolume[\s\S]*?\n    \}/);
-  assert.ok(branchMatch, 'serving conversion branch not found in applyImport');
+  // The configured-serving branch (Unit selected == item's own
+  // serving_name) must throw SERVING_CONVERSION_FAILED on a failed
+  // conversion rather than falling through to stockReduction = quantitySold.
+  const branchMatch = src.match(/if \(isConfiguredServing\)[\s\S]*?\n    \}/);
+  assert.ok(branchMatch, 'configured-serving conversion branch not found in applyImport');
   assert.match(
     branchMatch[0],
     /throw \{\s*code: 'SERVING_CONVERSION_FAILED'/,

@@ -13,31 +13,23 @@ function computeFileHash(buffer) {
 /**
  * Save or update a product mapping.
  *
- * Accepts either itemId or recipeId, plus an optional raw unit (existing
- * Flatpay/wine variable-pour override) and an optional serving override
- * (servingName/salesVolume/salesVolumeUnit) - the "Save as default for
- * this product" case. Both are independent of the item's own permanent
- * serving_name/sales_volume/sales_volume_unit configuration.
+ * Accepts either itemId or recipeId, plus an optional unit (existing
+ * Flatpay/wine variable-pour override). Serving configuration lives only
+ * on items (serving_name/sales_volume/sales_volume_unit) - there is no
+ * separate per-mapping serving override.
  */
-async function saveProductMapping(restaurantId, sourceProductName, itemId = null, recipeId = null, unit = null, source = 'flatpay', serving = {}) {
-  const servingName = serving.servingName || null;
-  const salesVolume = serving.salesVolume != null && serving.salesVolume !== '' ? serving.salesVolume : null;
-  const salesVolumeUnit = serving.salesVolumeUnit || null;
-
+async function saveProductMapping(restaurantId, sourceProductName, itemId = null, recipeId = null, unit = null, source = 'flatpay') {
   await query(
     `INSERT INTO sales_product_mappings
-       (restaurant_id, source, source_product_name, item_id, recipe_id, unit, serving_name, sales_volume, sales_volume_unit)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       (restaurant_id, source, source_product_name, item_id, recipe_id, unit)
+     VALUES ($1, $2, $3, $4, $5, $6)
      ON CONFLICT (restaurant_id, source, source_product_name)
      DO UPDATE SET
        item_id = EXCLUDED.item_id,
        recipe_id = EXCLUDED.recipe_id,
        unit = EXCLUDED.unit,
-       serving_name = EXCLUDED.serving_name,
-       sales_volume = EXCLUDED.sales_volume,
-       sales_volume_unit = EXCLUDED.sales_volume_unit,
        updated_at = NOW()`,
-    [restaurantId, source, sourceProductName, itemId, recipeId, unit, servingName, salesVolume, salesVolumeUnit]
+    [restaurantId, source, sourceProductName, itemId, recipeId, unit]
   );
 }
 
@@ -45,12 +37,11 @@ async function saveProductMapping(restaurantId, sourceProductName, itemId = null
  * Get all mappings for a restaurant + source.
  *
  * Returns an object keyed by source_product_name.
- * Each value contains itemId, recipeId, unit, and the saved serving
- * override (servingName/salesVolume/salesVolumeUnit), if any.
+ * Each value contains itemId, recipeId, and unit.
  */
 async function getMappings(restaurantId, source = 'flatpay') {
   const res = await query(
-    `SELECT source_product_name, item_id, recipe_id, unit, serving_name, sales_volume, sales_volume_unit
+    `SELECT source_product_name, item_id, recipe_id, unit
      FROM sales_product_mappings
      WHERE restaurant_id = $1 AND source = $2`,
     [restaurantId, source]
@@ -62,33 +53,11 @@ async function getMappings(restaurantId, source = 'flatpay') {
     map[row.source_product_name] = {
       itemId: row.item_id || null,
       recipeId: row.recipe_id || null,
-      unit: row.unit || null,
-      servingName: row.serving_name || null,
-      salesVolume: row.sales_volume != null ? parseFloat(row.sales_volume) : null,
-      salesVolumeUnit: row.sales_volume_unit || null
+      unit: row.unit || null
     };
   }
 
   return map;
-}
-
-/**
- * Distinct serving names known to this restaurant, for populating the
- * "Serving name" datalist: the item's own configured names plus any
- * previously saved per-product mapping overrides. Read-only, additive.
- */
-async function getKnownServingNames(restaurantId) {
-  const res = await query(
-    `SELECT DISTINCT serving_name FROM (
-       SELECT serving_name FROM items WHERE restaurant_id = $1 AND serving_name IS NOT NULL AND is_deleted = FALSE
-       UNION
-       SELECT serving_name FROM sales_product_mappings WHERE restaurant_id = $1 AND serving_name IS NOT NULL
-     ) names
-     ORDER BY serving_name ASC`,
-    [restaurantId]
-  );
-
-  return res.rows.map(r => r.serving_name);
 }
 
 /**
@@ -109,19 +78,25 @@ async function importExists(restaurantId, fileHash) {
  * Runs inside an existing transaction.
  *
  * items may contain:
- *   { type: 'inventory', itemId, sourceProductName, quantitySold, salesUnit?,
- *     servingName?, salesVolume?, salesVolumeUnit? }
+ *   { type: 'inventory', itemId, sourceProductName, quantitySold, salesUnit? }
  *   { type: 'recipe', recipeId, sourceProductName, quantitySold }
  *
- * Resolution order for an inventory item (unified, reuses the same
- * conversion engine for every case - see recipes.js):
- *   1. salesUnit (existing Flatpay/wine variable-pour raw-unit override -
- *      quantitySold is already a volume expressed in salesUnit)
- *   2. servingName/salesVolume/salesVolumeUnit sent with this sale - a
- *      per-sale/mapping serving override - or, if none was sent, the
- *      item's own configured serving_name/sales_volume/sales_volume_unit
- *   3. no configuration at all - quantitySold is deducted directly
- *      against the item's stock unit
+ * salesUnit is the single value shown/edited in the Sales "Unit" column.
+ * Item Configuration (items.serving_name/sales_volume/sales_volume_unit)
+ * is the only source of truth for what a configured serving means - Sales
+ * never stores its own copy of that configuration. Resolution order for
+ * an inventory item (reuses the same conversion engine for every case -
+ * see recipes.js, no product names are ever hardcoded here):
+ *   1. salesUnit matches this item's configured serving_name (case-
+ *      insensitive) - quantitySold means "servings sold"; convert via the
+ *      item's own sales_volume/sales_volume_unit. Always either converts
+ *      or refuses (SERVING_CONVERSION_FAILED) - never silently falls
+ *      through to a raw stock-unit deduction.
+ *   2. otherwise, salesUnit is a raw physical unit and the item has a
+ *      physical volume - existing Flatpay/wine variable-pour path,
+ *      unchanged: quantitySold is already a volume expressed in salesUnit.
+ *   3. otherwise - normal stock-unit sale; quantitySold is deducted
+ *      directly against the item's stock unit.
  */
 async function applyImport(tx, importId, restaurantId, userId, items, fileHash, periodStart, periodEnd) {
   await tx(
@@ -179,21 +154,41 @@ async function applyImport(tx, importId, restaurantId, userId, items, fileHash, 
 
     const dbItem = itemRes.rows[0];
 
-    // A serving override travels with the sale itself (per-sale edit, or a
-    // saved "default for this product" mapping resolved by the service
-    // layer before this call) and takes precedence over the item's own
-    // permanent configuration. servingName is a label only - it never
-    // participates in the conversion, only salesVolume/salesVolumeUnit do.
-    const effectiveSalesVolume = item.salesVolume != null && item.salesVolume !== ''
-      ? item.salesVolume
-      : dbItem.sales_volume;
-    const effectiveSalesVolumeUnit = item.salesVolumeUnit || dbItem.sales_volume_unit;
-    const effectiveServingName = item.servingName || dbItem.serving_name;
+    // Does the selected Unit match this item's own configured serving
+    // name? Item Configuration is the only source of truth for what a
+    // serving means - never a product-specific rule, just a string
+    // comparison against whatever this item's serving_name happens to be.
+    const configuredServingName = dbItem.serving_name ? String(dbItem.serving_name).trim() : '';
+    const isConfiguredServing = !!salesUnit && !!configuredServingName &&
+      salesUnit.trim().toLowerCase() === configuredServingName.toLowerCase();
 
     let stockReduction = quantitySold;
-    let displayUnit = dbItem.unit;
+    let displayUnit = salesUnit || dbItem.unit;
 
-    if (salesUnit && dbItem.volume != null && dbItem.volume_unit) {
+    if (isConfiguredServing) {
+      // Configured-serving path: quantitySold means "servings sold" -
+      // convert via the item's own sales_volume/sales_volume_unit. Always
+      // either converts or refuses; never falls through to a raw
+      // stock-unit deduction.
+      const converted = stockUnitsFromSalesServing(
+        quantitySold,
+        dbItem.sales_volume,
+        dbItem.sales_volume_unit,
+        dbItem.volume,
+        dbItem.volume_unit,
+        dbItem.unit
+      );
+
+      if (converted === null || isNaN(converted)) {
+        throw {
+          code: 'SERVING_CONVERSION_FAILED',
+          error: `Cannot convert the configured serving size for "${dbItem.name}" into stock units. Set the item's physical Volume and Volume Unit, then try importing again.`
+        };
+      }
+
+      stockReduction = converted;
+      displayUnit = configuredServingName;
+    } else if (salesUnit && dbItem.volume != null && dbItem.volume_unit) {
       // Existing Flatpay/wine variable-pour path - unchanged. quantitySold
       // is already a volume expressed in salesUnit (e.g. a 175ml pour).
       const converted = stockUnitsFromServing(
@@ -208,34 +203,8 @@ async function applyImport(tx, importId, restaurantId, userId, items, fileHash, 
       }
 
       displayUnit = salesUnit;
-    } else if (effectiveSalesVolume != null && effectiveSalesVolumeUnit) {
-      // A serving is configured - either as a per-sale/mapping override or
-      // as the item's own default. quantitySold means "servings sold",
-      // not "stock units sold".
-      const converted = stockUnitsFromSalesServing(
-        quantitySold,
-        effectiveSalesVolume,
-        effectiveSalesVolumeUnit,
-        dbItem.volume,
-        dbItem.volume_unit,
-        dbItem.unit
-      );
-
-      // If the conversion can't actually be computed (most likely a
-      // missing or incompatible physical Volume), refuse to guess rather
-      // than silently deducting the raw sold count as if it were stock
-      // units - this applies just as much to a per-sale override as it
-      // does to the item's own configured default.
-      if (converted === null || isNaN(converted)) {
-        throw {
-          code: 'SERVING_CONVERSION_FAILED',
-          error: `Cannot convert the serving size for "${dbItem.name}" into stock units. Set the item's physical Volume and Volume Unit, then try importing again.`
-        };
-      }
-
-      stockReduction = converted;
-      displayUnit = effectiveServingName || effectiveSalesVolumeUnit;
     }
+    // else: normal stock-unit sale - quantitySold deducted as-is.
 
     await tx(
       `INSERT INTO sales_import_items (id, import_id, item_id, source_product_name, quantity_sold)
@@ -402,7 +371,6 @@ module.exports = {
   computeFileHash,
   saveProductMapping,
   getMappings,
-  getKnownServingNames,
   importExists,
   applyImport,
   cancelImport,
