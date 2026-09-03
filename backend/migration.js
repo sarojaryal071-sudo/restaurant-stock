@@ -757,6 +757,12 @@ async function runMigrations() {
     await tx(`ALTER TABLE items ADD COLUMN IF NOT EXISTS sales_volume DECIMAL(10,2)`);
     await tx(`ALTER TABLE items ADD COLUMN IF NOT EXISTS sales_volume_unit TEXT`);
 
+    // Human-readable label for the sales_volume/sales_volume_unit pair
+    // above (e.g. "glass", "shot"). Metadata only - never read by any
+    // stock calculation; additive and nullable, existing rows are
+    // unaffected.
+    await tx(`ALTER TABLE items ADD COLUMN IF NOT EXISTS serving_name TEXT`);
+
     // Item purchase packages
     await tx(`
       CREATE TABLE IF NOT EXISTS item_packages (

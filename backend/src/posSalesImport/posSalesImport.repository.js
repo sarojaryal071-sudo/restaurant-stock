@@ -157,9 +157,19 @@ async function applyImport(tx, importId, restaurantId, userId, items, fileHash, 
         dbItem.unit
       );
 
-      if (converted !== null && !isNaN(converted)) {
-        stockReduction = converted;
+      // The item has a serving size configured, so the manager intends
+      // quantitySold to mean "servings", not "stock units". If the
+      // conversion can't actually be computed (most likely a missing or
+      // incompatible physical Volume), refuse to guess rather than
+      // silently deducting the raw sold count as if it were stock units.
+      if (converted === null || isNaN(converted)) {
+        throw {
+          code: 'SERVING_CONVERSION_FAILED',
+          error: `Cannot convert the configured serving size for "${dbItem.name}" into stock units. Set the item's physical Volume and Volume Unit, then try importing again.`
+        };
       }
+
+      stockReduction = converted;
     }
 
     await tx(

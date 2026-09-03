@@ -306,12 +306,15 @@
 
       <div class="config-group" id="editItemServingGroup">
         <div class="config-group-label">Default serving size<span class="config-group-optional">Optional</span></div>
+        <label class="field-label" for="editItemServingName">Serving as</label>
+        <input class="field-input" id="editItemServingName" type="text" maxlength="40" placeholder="e.g. glass, shot, pint"
+          list="servingNameSuggestions" autocomplete="off">
         <div class="config-row">
-          <div><label class="field-label" for="editItemSalesVolume">Serving size</label><input class="field-input" id="editItemSalesVolume"
+          <div><label class="field-label" for="editItemSalesVolume">Serving quantity</label><input class="field-input" id="editItemSalesVolume"
               type="number" min="0" step="0.01" placeholder="e.g. 16"></div>
-          <div><label class="field-label" for="editItemSalesVolumeUnit">Unit</label><select class="field-select" id="editItemSalesVolumeUnit"></select></div>
+          <div><label class="field-label" for="editItemSalesVolumeUnit">Serving unit</label><select class="field-select" id="editItemSalesVolumeUnit"></select></div>
         </div>
-        <div class="field-help">The normal pour size when this item is sold on its own, outside of a recipe — e.g. a 16&nbsp;cl glass.</div>
+        <div class="field-help">The normal pour size when this item is sold on its own, outside of a recipe — e.g. a "glass" of 16&nbsp;cl. Only the quantity and unit are used to calculate stock deductions; the name is just a label.</div>
       </div>
 
       <div class="config-group">
@@ -374,12 +377,15 @@
 
       <div class="config-group" id="newItemServingGroup">
         <div class="config-group-label">Default serving size<span class="config-group-optional">Optional</span></div>
+        <label class="field-label" for="newItemServingName">Serving as</label>
+        <input class="field-input" id="newItemServingName" type="text" maxlength="40" placeholder="e.g. glass, shot, pint"
+          list="servingNameSuggestions" autocomplete="off">
         <div class="config-row">
-          <div><label class="field-label" for="newItemSalesVolume">Serving size</label><input class="field-input" id="newItemSalesVolume"
+          <div><label class="field-label" for="newItemSalesVolume">Serving quantity</label><input class="field-input" id="newItemSalesVolume"
               type="number" min="0" step="0.01" placeholder="e.g. 16"></div>
-          <div><label class="field-label" for="newItemSalesVolumeUnit">Unit</label><select class="field-select" id="newItemSalesVolumeUnit"></select></div>
+          <div><label class="field-label" for="newItemSalesVolumeUnit">Serving unit</label><select class="field-select" id="newItemSalesVolumeUnit"></select></div>
         </div>
-        <div class="field-help">The normal pour size when this item is sold on its own, outside of a recipe — e.g. a 16&nbsp;cl glass.</div>
+        <div class="field-help">The normal pour size when this item is sold on its own, outside of a recipe — e.g. a "glass" of 16&nbsp;cl. Only the quantity and unit are used to calculate stock deductions; the name is just a label.</div>
       </div>
 
       <div class="field-help" style="margin-top:var(--space-2);">Purchase packages (e.g. "Case = 6 Bottles") can be added right after — the Package Manager opens automatically once this item is created.</div>
@@ -532,6 +538,11 @@
       </div>
     </div>
   </div>
+
+  <!-- Shared "Serving as" name suggestions — populated from already-loaded
+       item data (see refreshServingNameSuggestions in inventory-config.js).
+       No dedicated lookup table; free typing is always allowed. -->
+  <datalist id="servingNameSuggestions"></datalist>
 
   <div class="toast-stack" id="toastStack"></div>
 

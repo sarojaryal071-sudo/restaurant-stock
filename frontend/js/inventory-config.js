@@ -7,6 +7,21 @@ const eiu = document.getElementById('editItemUnit');
 const eicf = document.getElementById('editItemConfirm');
 const eiVol = document.getElementById('editItemVolume'), eiVolUnit = document.getElementById('editItemVolumeUnit');
 const eiSalesVol = document.getElementById('editItemSalesVolume'), eiSalesVolUnit = document.getElementById('editItemSalesVolumeUnit');
+const eiServingName = document.getElementById('editItemServingName');
+
+/**
+ * Populate the shared "Serving as" <datalist> from serving names already
+ * present on loaded items. Pure suggestion list — no dedicated table, no
+ * backend call; free typing is always allowed regardless of what's here.
+ */
+function refreshServingNameSuggestions() {
+  const list = document.getElementById('servingNameSuggestions');
+  if (!list) return;
+  const names = Array.from(new Set(
+    state.categories.flatMap(c => c.items.map(i => i.servingName)).filter(Boolean)
+  )).sort((a, b) => a.localeCompare(b));
+  list.innerHTML = names.map(n => `<option value="${escapeHtml(n)}"></option>`).join('');
+}
 
 function popEditCat(sel) {
   eic.innerHTML = '';
@@ -55,6 +70,8 @@ async function openEditItem(it) {
           eiSalesVolUnit.appendChild(extra);
         }
         eiSalesVolUnit.value = it.salesVolumeUnit || '';
+        eiServingName.value = it.servingName || '';
+        refreshServingNameSuggestions();
   try { await loadPackagesIfNeeded(); } catch (e) { }
   renderEditItemPackageSummary(it.id);
   syncServingVisibility();
@@ -84,6 +101,7 @@ eicf.addEventListener('click', async () => {
         const salesVolRaw = eiSalesVol.value;
         const salesVol = salesVolRaw ? parseFloat(salesVolRaw) : null;
         const salesVolUnit = salesVol ? (eiSalesVolUnit.value || null) : null;
+        const servingName = eiServingName.value.trim() || null;
   if (vol !== undefined && (isNaN(vol) || vol <= 0)) {
     toast('Volume must be greater than 0.', true);
     return;
@@ -99,13 +117,14 @@ eicf.addEventListener('click', async () => {
   eicf.disabled = true;
   eicf.textContent = 'Saving…';
   try {
-          await api.updateItem(editingItemId, { name, categoryId: cid, unit, volume: vol, volumeUnit: volUnit, salesVolume: salesVol, salesVolumeUnit: salesVolUnit });
+          await api.updateItem(editingItemId, { name, categoryId: cid, unit, volume: vol, volumeUnit: volUnit, salesVolume: salesVol, salesVolumeUnit: salesVolUnit, servingName });
           item.name = name;
           item.unit = unit;
           item.volume = vol;
           item.volumeUnit = volUnit;
           item.salesVolume = salesVol;
           item.salesVolumeUnit = salesVolUnit;
+          item.servingName = servingName;
     if (cid !== oid) moveItem(editingItemId, oid, cid);
     else refreshItem(editingItemId);
     updateOverview();
@@ -219,6 +238,7 @@ const niq = document.getElementById('newItemQty');
 const acf = document.getElementById('addModalConfirm');
 const niUnit = document.getElementById('newItemUnit'), niVol = document.getElementById('newItemVolume'), niVolUnit = document.getElementById('newItemVolumeUnit');
 const niSalesVol = document.getElementById('newItemSalesVolume'), niSalesVolUnit = document.getElementById('newItemSalesVolumeUnit');
+const niServingName = document.getElementById('newItemServingName');
 
 function popCatSel() {
   cs.innerHTML = '';
@@ -271,10 +291,11 @@ acf.addEventListener('click', async () => {
   const salesVolRaw = niSalesVol.value;
   const salesVol = salesVolRaw ? parseFloat(salesVolRaw) : null;
   const salesVolUnit = salesVol ? (niSalesVolUnit.value || null) : null;
+  const servingName = niServingName.value.trim() || null;
   acf.disabled = true;
   acf.textContent = 'Adding…';
   try {
-    const r = await api.addCustomItem(cid, name, q, { unit, volume: vol, volumeUnit: volUnit, salesVolume: salesVol, salesVolumeUnit: salesVolUnit });
+    const r = await api.addCustomItem(cid, name, q, { unit, volume: vol, volumeUnit: volUnit, salesVolume: salesVol, salesVolumeUnit: salesVolUnit, servingName });
     const ni = (r && r.item) ? r.item : { id: uid(), name, q, custom: true };
     ni.custom = true;
     ni.lastConfirmedQty = ni.qty;
@@ -283,6 +304,7 @@ acf.addEventListener('click', async () => {
     ni.volumeUnit = volUnit;
     ni.salesVolume = salesVol;
     ni.salesVolumeUnit = salesVolUnit;
+    ni.servingName = servingName;
     appendItem(cid, ni);
     closeModal(ao);
     toast('Added "' + name + '"');
@@ -305,4 +327,5 @@ window.popStockUnitSel = popStockUnitSel;
 window.popVolumeUnitSel = popVolumeUnitSel;
 window.popSalesVolumeUnitSel = popSalesVolumeUnitSel;
 window.syncServingVisibility = syncServingVisibility;
+window.refreshServingNameSuggestions = refreshServingNameSuggestions;
 window.updateCatSelects = updateCatSelects;

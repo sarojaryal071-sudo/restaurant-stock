@@ -165,9 +165,11 @@ function renderInventoryConfig() {
     document.getElementById('newItemQty').value = 0;
     document.getElementById('newItemVolume').value = '';
     document.getElementById('newItemSalesVolume').value = '';
+    document.getElementById('newItemServingName').value = '';
     popStockUnitSel(document.getElementById('newItemUnit'));
     popVolumeUnitSel(document.getElementById('newItemVolumeUnit'));
     popSalesVolumeUnitSel(document.getElementById('newItemSalesVolumeUnit'));
+    refreshServingNameSuggestions();
     syncServingVisibility();
     openModal(document.getElementById('addModalOverlay'));
   });
