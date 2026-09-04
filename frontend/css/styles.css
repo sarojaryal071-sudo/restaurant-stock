@@ -1218,18 +1218,25 @@ button {
   flex-direction: column;
 }
 
+/* Groups one ingredient's row together with its optional inline "set
+   cost" editor, so the divider falls after the whole group and the
+   editor visually belongs to the ingredient above it, not a stray row
+   between two ingredients. */
+.recipe-cost-ing-item {
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.recipe-cost-ing-item:last-child {
+  border-bottom: none;
+}
+
 .recipe-cost-ing-row {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-2);
   flex-wrap: wrap;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.recipe-cost-ing-row:last-child {
-  border-bottom: none;
 }
 
 .recipe-cost-ing-info {
@@ -1255,17 +1262,28 @@ button {
   margin-top: 2px;
 }
 
+/* Right-hand column of an ingredient row: the calculated value and/or
+   status badges stack here, right-aligned, instead of competing for one
+   line - so "€1.43" and "Not in inventory" can both show cleanly. */
+.recipe-cost-ing-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  margin-left: auto;
+}
+
 .recipe-cost-ing-value {
   color: var(--gold-bright);
   font-family: var(--font-mono);
   font-weight: 700;
   white-space: nowrap;
-  margin-left: auto;
 }
 
-/* Status badge for missing/unavailable ingredient cost - a neutral
-   "needs attention" tone (same family as the low-stock indicator),
-   not the danger/error color, per design requirement. */
+/* Status badges. Warning = something needs configuring (amber, same
+   family as the low-stock indicator, never the danger/error color).
+   Neutral = informational only (e.g. "this ingredient isn't an
+   inventory item"), shown even once a manual cost is set. */
 .recipe-cost-badge {
   display: inline-block;
   padding: 2px 10px;
@@ -1273,7 +1291,6 @@ button {
   font-size: 0.7rem;
   font-weight: 700;
   white-space: nowrap;
-  margin-left: auto;
 }
 
 .recipe-cost-badge-warning {
@@ -1281,13 +1298,18 @@ button {
   color: var(--warning);
 }
 
+.recipe-cost-badge-neutral {
+  background: var(--charcoal-3);
+  color: var(--paper-faint);
+  font-weight: 600;
+}
+
 .recipe-cost-set-cost {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex: 1 1 100%;
   justify-content: flex-end;
-  margin-top: 2px;
+  margin-top: 6px;
 }
 
 .recipe-cost-set-cost .field-input-group {

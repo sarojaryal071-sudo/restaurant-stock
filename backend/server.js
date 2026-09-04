@@ -242,6 +242,11 @@ app.all('/api', async (req, res, next) => {
           requirePermission('recipes', 'edit')(req, res, () => recipeCost.saveRecipeCosting(req, res));
         });
         break;
+      case 'setIngredientCost':
+        requireAuth(req, res, () => {
+          requirePermission('recipes', 'edit')(req, res, () => recipeCost.setIngredientCost(req, res));
+        });
+        break;
 
       // ---------- Allocations (staff accessible) ----------
       case 'listPendingAllocations':

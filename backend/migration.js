@@ -889,6 +889,17 @@ async function runMigrations() {
     `);
     await tx(`CREATE INDEX IF NOT EXISTS idx_recipe_costs_recipe ON recipe_costs(recipe_id);`);
 
+    // Manual cost override for a custom/unlinked recipe ingredient
+    // (inventory_item_id IS NULL - a free-text ingredient with no
+    // matching item). There is no items row for these, so there is
+    // nothing to derive a cost from and nothing to "reuse across
+    // recipes" - the cost is inherently specific to this one recipe
+    // line, unlike items.purchase_cost. Nullable: NULL means not yet
+    // entered (still shown as a missing-cost state), never defaulted to
+    // 0. Ignored/not applicable when inventory_item_id is set - that
+    // case always costs from the linked item's purchase_cost instead.
+    await tx(`ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS manual_cost DECIMAL(10,2)`);
+
     console.log('Migrations completed successfully.');
   });
 }

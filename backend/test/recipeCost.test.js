@@ -89,6 +89,25 @@ test('ingredient cost: unlinked/custom ingredient (no item)', () => {
   assert.equal(cost, null);
 });
 
+test('ingredient cost: unlinked/custom ingredient with a manually entered cost', () => {
+  const { cost, status } = computeIngredientCost(4, 'cl', null, 0.30);
+  assert.equal(status, 'ok');
+  assert.equal(cost, 0.30);
+});
+
+test('ingredient cost: unlinked ingredient manual cost of exactly 0 is a legitimate value', () => {
+  const { cost, status } = computeIngredientCost(4, 'cl', null, 0);
+  assert.equal(status, 'ok');
+  assert.equal(cost, 0);
+});
+
+test('ingredient cost: manualCost is ignored when an item is present (never a competing source)', () => {
+  const item = { unit: 'bottle', volume: 70, volumeUnit: 'cl', purchaseCost: 25 };
+  const { cost, status } = computeIngredientCost(4, 'cl', item, 999);
+  assert.equal(status, 'ok');
+  assert.equal(cost.toFixed(2), '1.43');
+});
+
 test('ingredient cost: incompatible/missing volume info is not convertible', () => {
   const item = { unit: 'bottle', volume: null, volumeUnit: null, purchaseCost: 25 };
   const { cost, status } = computeIngredientCost(4, 'cl', item);

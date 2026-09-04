@@ -11,13 +11,23 @@ const { amountToMl } = require('./recipes');
 // { unit, volume, volumeUnit, purchaseCost }, where purchaseCost is the
 // price of ONE physical stock unit of `item.unit` (e.g. one bottle).
 //
+// manualCost applies only when item is null: a custom/unlinked
+// ingredient has no items row, so there is nothing to derive a per-unit
+// cost from and nothing to "reuse across recipes" (it's specific to this
+// one recipe line already) - a directly entered line cost is the only
+// option, stored on recipe_ingredients.manual_cost. It is ignored
+// whenever item is present (an inventory-linked ingredient always costs
+// from the linked item, never a manual override).
+//
 // Reuses amountToMl (backend/recipes.js) for the same-unit-else-volume
 // conversion shape already established by stockUnitsFromServing /
 // stockUnitsFromSalesServing - no second conversion system.
 //
 // Returns { cost, status }:
-//   status 'ok'              -> cost is a number
-//   status 'not_linked'      -> custom/unlinked ingredient, no item to cost
+//   status 'ok'              -> cost is a number (from the item, or from
+//                                manualCost when there is no item)
+//   status 'not_linked'      -> custom/unlinked ingredient with no
+//                                manualCost entered yet
 //   status 'missing_cost'    -> item exists but purchaseCost is NULL
 //                                (distinct from a legitimate 0)
 //   status 'not_convertible' -> units are incompatible / item has no
@@ -27,14 +37,17 @@ const { amountToMl } = require('./recipes');
 // cost is null whenever status !== 'ok'. Never silently returns a wrong
 // number.
 // -------------------------------------------------------------------
-function computeIngredientCost(amount, unit, item) {
+function computeIngredientCost(amount, unit, item, manualCost) {
   const amt = parseFloat(amount);
   if (isNaN(amt) || amt < 0) {
     return { cost: null, status: 'invalid_amount' };
   }
 
   if (!item) {
-    return { cost: null, status: 'not_linked' };
+    if (manualCost === null || manualCost === undefined) {
+      return { cost: null, status: 'not_linked' };
+    }
+    return { cost: manualCost, status: 'ok' };
   }
 
   // Distinguish "not configured" (null/undefined) from a legitimate 0.
@@ -120,7 +133,7 @@ async function getRecipeCost(req, res) {
     if (recipe.rows.length === 0) return res.json({ ok: false, code: 'NOT_FOUND', error: 'Recipe not found' });
 
     const ingRows = await query(
-      `SELECT ri.id, ri.inventory_item_id, ri.ingredient_name, ri.amount, ri.unit,
+      `SELECT ri.id, ri.inventory_item_id, ri.ingredient_name, ri.amount, ri.unit, ri.manual_cost,
               i.name AS item_name, i.unit AS item_unit, i.volume, i.volume_unit, i.purchase_cost
        FROM recipe_ingredients ri
        LEFT JOIN items i ON i.id = ri.inventory_item_id
@@ -137,8 +150,11 @@ async function getRecipeCost(req, res) {
         volumeUnit: row.volume_unit,
         purchaseCost: row.purchase_cost !== null && row.purchase_cost !== undefined ? parseFloat(row.purchase_cost) : null
       } : null;
+      const manualCost = (!row.inventory_item_id && row.manual_cost !== null && row.manual_cost !== undefined)
+        ? parseFloat(row.manual_cost)
+        : null;
 
-      const { cost, status } = computeIngredientCost(amount, row.unit, item);
+      const { cost, status } = computeIngredientCost(amount, row.unit, item, manualCost);
       if (status === 'ok') ingredientCost += cost;
 
       return {
@@ -149,6 +165,7 @@ async function getRecipeCost(req, res) {
         unit: row.unit,
         cost,
         status,
+        manualCost,
         // Already-fetched cost-basis fields (no new query, no new
         // calculation) - purely so the UI can display "€25.00 / 70 cl"
         // style basis text without recomputing it client-side.
@@ -285,10 +302,62 @@ async function saveRecipeCosting(req, res) {
   }
 }
 
+// -------------------------------------------------------------------
+// setIngredientCost
+// -------------------------------------------------------------------
+// Sets the manual cost override for one custom/unlinked recipe
+// ingredient line (recipe_ingredients.manual_cost). Only valid for
+// ingredients with no inventory_item_id - an inventory-linked
+// ingredient's cost always comes from the linked item's purchase_cost,
+// never a manual override, so this rejects that case rather than
+// silently creating a second, conflicting cost source for it.
+// -------------------------------------------------------------------
+async function setIngredientCost(req, res) {
+  const { restaurantId } = req.auth;
+  const { recipeId, ingredientId, manualCost } = req.body;
+
+  if (!recipeId || !ingredientId) {
+    return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Missing recipeId or ingredientId' });
+  }
+
+  try {
+    const recipe = await query(`SELECT id FROM recipes WHERE id = $1 AND restaurant_id = $2`, [recipeId, restaurantId]);
+    if (recipe.rows.length === 0) return res.json({ ok: false, code: 'NOT_FOUND', error: 'Recipe not found' });
+
+    const ing = await query(
+      `SELECT id, inventory_item_id FROM recipe_ingredients WHERE id = $1 AND recipe_id = $2`,
+      [ingredientId, recipeId]
+    );
+    if (ing.rows.length === 0) return res.json({ ok: false, code: 'NOT_FOUND', error: 'Ingredient not found' });
+    if (ing.rows[0].inventory_item_id) {
+      return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'This ingredient is linked to an inventory item; set its cost from Inventory instead.' });
+    }
+
+    let newManualCost = null;
+    if (manualCost !== undefined && manualCost !== null && manualCost !== '') {
+      newManualCost = parseFloat(manualCost);
+      if (isNaN(newManualCost) || newManualCost < 0) {
+        return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Cost must be a non-negative number.' });
+      }
+    }
+
+    await query(`UPDATE recipe_ingredients SET manual_cost = $1 WHERE id = $2`, [newManualCost, ingredientId]);
+
+    // Re-derive and return the full costing view, same shape as
+    // getRecipeCost, so the frontend can re-render from this response.
+    req.body.recipeId = recipeId;
+    return getRecipeCost(req, res);
+  } catch (err) {
+    console.error('setIngredientCost error:', err);
+    res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });
+  }
+}
+
 module.exports = {
   computeIngredientCost,
   computePricing,
   sellingPriceFromTargetMargin,
   getRecipeCost,
-  saveRecipeCosting
+  saveRecipeCosting,
+  setIngredientCost
 };

@@ -145,7 +145,6 @@ function fmtPercent(fraction) {
 }
 
 const ING_STATUS_LABEL = {
-  not_linked: 'Not linked to inventory',
   missing_cost: 'Cost not set',
   not_convertible: 'Needs item Volume set',
   invalid_amount: 'Invalid amount'
@@ -202,22 +201,43 @@ function renderRecipeCostPane(paneEl, recipeId, data) {
 
   let ingHtml = '<div class="recipe-detail recipe-cost-section"><strong>Ingredient Cost</strong><div class="recipe-cost-ing-list">';
   (data.ingredients || []).forEach(ing => {
+    const isCustom = !ing.inventoryItemId;
     const basis = ing.status === 'ok' ? ingredientBasisText(ing) : '';
+
+    // Row + its optional inline "set cost" editor are grouped in one
+    // container so the editor visually belongs to this ingredient, not
+    // a stray row between it and the next one.
+    ingHtml += '<div class="recipe-cost-ing-item">';
     ingHtml += '<div class="recipe-cost-ing-row" data-ing-id="' + escapeHtml(ing.id) + '">';
     ingHtml += '<div class="recipe-cost-ing-info">';
     ingHtml += `<span><span class="recipe-cost-ing-name">${escapeHtml(ing.name || 'Unknown')}</span> <span class="recipe-cost-ing-qty">${ing.amount ?? ''} ${escapeHtml(ing.unit || '')}</span></span>`;
     if (basis) ingHtml += `<span class="recipe-cost-ing-basis">${escapeHtml(basis)}</span>`;
     ingHtml += '</div>';
+    ingHtml += '<div class="recipe-cost-ing-right">';
     if (ing.status === 'ok') {
       ingHtml += `<span class="recipe-cost-ing-value">${fmtMoney(ing.cost)}</span>`;
-    } else {
+    } else if (ing.status !== 'not_linked') {
       const label = ING_STATUS_LABEL[ing.status] || 'Unavailable';
       ingHtml += `<span class="recipe-cost-badge recipe-cost-badge-warning">${escapeHtml(label)}</span>`;
     }
-    ingHtml += '</div>';
+    // "Not in inventory" is informational, not a warning - shown
+    // whenever the ingredient is custom/unlinked, whether or not a
+    // manual cost has been entered for it yet.
+    if (isCustom) {
+      ingHtml += `<span class="recipe-cost-badge recipe-cost-badge-neutral">Not in inventory</span>`;
+    }
+    ingHtml += '</div></div>';
+
     if (ing.status === 'missing_cost' && ing.inventoryItemId && itemEditAllowed) {
       ingHtml += `<div class="recipe-cost-set-cost"><div class="field-input-group has-prefix"><span class="field-affix">€</span><input type="number" min="0" step="0.01" class="field-input ing-set-cost-input" placeholder="0.00"></div><button type="button" class="btn btn-ghost btn-small ing-set-cost-btn" data-item-id="${escapeHtml(ing.inventoryItemId)}">Save</button></div>`;
+    } else if (isCustom && editAllowed) {
+      // Custom ingredients have no items row to attach a cost to, so the
+      // cost is entered directly on this recipe's ingredient line
+      // (recipe_ingredients.manual_cost) instead of via Inventory.
+      const prefill = (ing.manualCost !== null && ing.manualCost !== undefined) ? ing.manualCost : '';
+      ingHtml += `<div class="recipe-cost-set-cost"><div class="field-input-group has-prefix"><span class="field-affix">€</span><input type="number" min="0" step="0.01" class="field-input ing-set-manual-cost-input" placeholder="0.00" value="${prefill}"></div><button type="button" class="btn btn-ghost btn-small ing-set-manual-cost-btn" data-ingredient-id="${escapeHtml(ing.id)}">Save</button></div>`;
     }
+    ingHtml += '</div>';
   });
   ingHtml += `</div><div class="recipe-cost-total-row"><span>Ingredient Cost</span><span>${fmtMoney(data.ingredientCost)}</span></div></div>`;
 
@@ -396,6 +416,29 @@ function wireRecipeCostPaneEvents(paneEl, recipeId) {
         await refreshRecipeCostPane(recipeId, paneEl);
       } catch (e) {
         toast(e.message || 'Failed to save item cost.', true);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  });
+
+  // Custom/unlinked ingredients: cost is entered directly on the recipe
+  // ingredient line (no items row exists to attach it to).
+  const setManualCostBtns = paneEl.querySelectorAll('.ing-set-manual-cost-btn');
+  setManualCostBtns.forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const row = btn.closest('.recipe-cost-set-cost');
+      const input = row.querySelector('.ing-set-manual-cost-input');
+      const val = parseFloat(input.value);
+      if (isNaN(val) || val < 0) { toast('Enter a valid, non-negative cost.', true); return; }
+      const ingredientId = btn.dataset.ingredientId;
+      btn.disabled = true;
+      try {
+        await api.setIngredientCost(recipeId, ingredientId, val);
+        toast('Cost saved.');
+        await refreshRecipeCostPane(recipeId, paneEl);
+      } catch (e) {
+        toast(e.message || 'Failed to save cost.', true);
       } finally {
         btn.disabled = false;
       }
