@@ -80,6 +80,11 @@ async function preloadWorkspace() {
   saveCache();
 
   recipeState.recipes = (recipesRes && Array.isArray(recipesRes.recipes)) ? recipesRes.recipes : (recipesRes && Array.isArray(recipesRes) ? recipesRes : []);
+  // Preload Cost data for every recipe as part of this same workspace
+  // preload (same lifecycle as recipes/stock/config above), not gated
+  // behind the user opening a recipe card and clicking the Cost tab.
+  // Not awaited - recipe costing shouldn't slow down login.
+  loadRecipeCostsFor(recipeState.recipes);
 
   appConfig.units = (configRes && configRes.inventory && Array.isArray(configRes.inventory.units)) ? configRes.inventory.units : [];
   appConfig.adjustmentReasons = (configRes && configRes.inventory && configRes.inventory.adjustmentReasons) ? configRes.inventory.adjustmentReasons : { increase: [], decrease: [] };

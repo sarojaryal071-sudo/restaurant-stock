@@ -148,7 +148,14 @@ async function getRecipeCost(req, res) {
         amount,
         unit: row.unit,
         cost,
-        status
+        status,
+        // Already-fetched cost-basis fields (no new query, no new
+        // calculation) - purely so the UI can display "€25.00 / 70 cl"
+        // style basis text without recomputing it client-side.
+        itemUnit: item ? item.unit : null,
+        itemVolume: item ? item.volume : null,
+        itemVolumeUnit: item ? item.volumeUnit : null,
+        purchaseCost: item ? item.purchaseCost : null
       };
     });
 

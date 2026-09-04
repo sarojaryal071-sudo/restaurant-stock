@@ -1201,62 +1201,228 @@ button {
   color: var(--paper-faint);
 }
 
-.recipe-cost-row {
+.recipe-cost-section {
+  padding-bottom: var(--space-2);
+}
+
+.recipe-cost-section strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+/* Ingredient Cost rows: name/qty + basis on the left, calculated cost
+   (or a status badge) on the right - mirrors .ingredient-row's layout
+   so the Cost tab reads as the same family as Ingredients. */
+.recipe-cost-ing-list {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+}
+
+.recipe-cost-ing-row {
+  display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-2);
-  padding: 4px 0;
-  font-size: 0.85rem;
-  color: var(--paper-dim);
+  flex-wrap: wrap;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
 }
 
-.recipe-cost-value {
+.recipe-cost-ing-row:last-child {
+  border-bottom: none;
+}
+
+.recipe-cost-ing-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.recipe-cost-ing-name {
   color: var(--paper);
-  font-family: var(--font-mono);
+  font-weight: 600;
 }
 
-.recipe-cost-status {
-  color: var(--danger);
-  font-size: 0.78rem;
-  text-align: right;
+.recipe-cost-ing-qty {
+  color: var(--paper-dim);
+  font-weight: 400;
+}
+
+.recipe-cost-ing-basis {
+  font-size: 0.74rem;
+  color: var(--paper-faint);
+  font-family: var(--font-mono);
+  margin-top: 2px;
+}
+
+.recipe-cost-ing-value {
+  color: var(--gold-bright);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+/* Status badge for missing/unavailable ingredient cost - a neutral
+   "needs attention" tone (same family as the low-stock indicator),
+   not the danger/error color, per design requirement. */
+.recipe-cost-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.recipe-cost-badge-warning {
+  background: rgba(168, 100, 26, 0.14);
+  color: var(--warning);
 }
 
 .recipe-cost-set-cost {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 4px;
   flex: 1 1 100%;
   justify-content: flex-end;
+  margin-top: 2px;
 }
 
-.ing-set-cost-input {
-  width: 80px;
+.recipe-cost-set-cost .field-input-group {
+  max-width: 110px;
 }
 
-.recipe-cost-total {
+/* Sub-totals (Ingredient Cost, Other Costs) */
+.recipe-cost-total-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 0 4px;
+  padding-top: 8px;
   margin-top: 4px;
   border-top: 1px solid var(--line);
   font-weight: 700;
   color: var(--paper);
 }
 
-.recipe-cost-total-main {
-  font-size: 1rem;
+/* Total Cost - the one figure in this tab that should visually lead,
+   without turning into a decorated hero card. */
+.recipe-cost-grand-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-4);
+  margin: 0 0 var(--space-1);
+  background: var(--charcoal-2);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
 }
 
-.recipe-cost-total-main .recipe-cost-total-value {
+.recipe-cost-grand-total-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--paper-dim);
+  font-weight: 700;
+}
+
+.recipe-cost-grand-total-value {
+  font-family: var(--font-display);
+  font-size: clamp(1.1rem, 3.6vw, 1.35rem);
+  font-weight: 700;
   color: var(--gold-bright);
 }
 
-.recipe-cost-field-row input.recipe-cost-input {
-  width: 90px;
-  text-align: right;
+/* Editable field grid (Wastage/Garnish/Other, Target Margin/Selling
+   Price/VAT) - reuses .field-label/.field-input, laid out the same way
+   as the existing stock-intake line-item grid. */
+.recipe-cost-field-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-2);
+}
+
+@media(min-width:520px) {
+  .recipe-cost-field-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.recipe-cost-field {
+  min-width: 0;
+}
+
+.recipe-cost-field .field-label {
+  margin: 0 0 4px;
+}
+
+.field-input-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.field-input-group .field-input {
+  width: 100%;
+}
+
+.field-input-group.has-prefix .field-input {
+  padding-left: 26px;
+}
+
+.field-input-group.has-suffix .field-input {
+  padding-right: 28px;
+}
+
+.field-affix {
+  position: absolute;
+  color: var(--paper-faint);
+  font-size: 0.85rem;
+  pointer-events: none;
+}
+
+.field-input-group.has-prefix .field-affix {
+  left: 12px;
+}
+
+.field-input-group.has-suffix .field-affix {
+  right: 12px;
+}
+
+/* Calculated/read-only pricing outputs - deliberately plain text (no
+   input border/background) so they read as non-editable at a glance. */
+.recipe-cost-readout-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-2) var(--space-3);
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px dashed var(--line);
+}
+
+@media(min-width:520px) {
+  .recipe-cost-readout-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.recipe-cost-readout {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.recipe-cost-readout .field-label {
+  margin: 0 0 2px;
+}
+
+.recipe-cost-readout-value {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--paper);
+  font-size: 0.95rem;
 }
 
 #contextMenu {

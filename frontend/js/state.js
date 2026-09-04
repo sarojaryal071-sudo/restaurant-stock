@@ -30,7 +30,10 @@ let confirmCallback = null;
 let activeItemId = null;
 let authToken = null;
 let restaurantData = null;
-let recipeState = { recipes: [] };
+// costs: recipe id -> last-loaded getRecipeCost() response, populated as
+// part of the normal recipe load lifecycle (see loadRecipeCostsFor in
+// recipes.js) rather than fetched on demand per Cost-tab click.
+let recipeState = { recipes: [], costs: {} };
 let editingRecipeId = null;
 let currentPage = 'inventory';
 let pendingAllocations = [];

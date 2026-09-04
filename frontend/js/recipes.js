@@ -5,9 +5,31 @@ async function loadRecipes() {
     const d = await api.listRecipes();
     recipeState.recipes = (d && Array.isArray(d.recipes)) ? d.recipes : (d && Array.isArray(d) ? d : []);
     renderRecipes();
+    // Preload costing for every recipe as part of this same load, same
+    // as auth.js's preloadWorkspace() does on login/session restore -
+    // not awaited, so the Ingredients view above never waits on it.
+    loadRecipeCostsFor(recipeState.recipes);
   } catch (e) {
     toast('Could not load recipes.', true);
   }
+}
+
+// Fetches getRecipeCost for each given recipe in parallel and caches the
+// results in recipeState.costs, keyed by recipe id. This is the single
+// place both entry points that populate recipeState.recipes (this file's
+// loadRecipes, and auth.js's preloadWorkspace on login/session restore)
+// trigger a costing preload from, so Cost data is initialized as part of
+// the normal recipe lifecycle instead of a separate per-tab-click fetch.
+// Failures are left uncached rather than surfaced - the Cost tab falls
+// back to fetching that one recipe on demand if it's opened before this
+// resolves (see fetchRecipeCostPane).
+async function loadRecipeCostsFor(recipes) {
+  const list = Array.isArray(recipes) ? recipes : [];
+  await Promise.allSettled(list.map(async r => {
+    try {
+      recipeState.costs[r.id] = await api.getRecipeCost(r.id);
+    } catch (e) { /* left uncached; on-demand fallback covers this */ }
+  }));
 }
 
 function renderRecipes() {
@@ -76,6 +98,17 @@ function renderRecipeCard(r) {
   const tabBtns = bi.querySelectorAll('.recipe-tab-control .segmented-btn');
   const ingPane = bi.querySelector('.recipe-tab-pane[data-pane="ingredients"]');
   const costPane = bi.querySelector('.recipe-tab-pane[data-pane="cost"]');
+
+  // Costing data is preloaded as part of the normal recipe load lifecycle
+  // (see loadRecipeCostsFor) rather than fetched when the tab is opened.
+  // If it's already in recipeState.costs, render it now so the pane is
+  // ready before the user ever clicks "Cost" - the click handler below
+  // only has to fall back to an on-demand fetch on a cache miss (e.g. a
+  // recipe created after the preload ran, or a slow/failed preload).
+  if (recipeState.costs[r.id]) {
+    renderRecipeCostPane(costPane, r.id, recipeState.costs[r.id]);
+  }
+
   tabBtns.forEach(btn => {
     btn.addEventListener('click', ev => {
       ev.stopPropagation();
@@ -83,7 +116,9 @@ function renderRecipeCard(r) {
       const tab = btn.dataset.tab;
       ingPane.hidden = tab !== 'ingredients';
       costPane.hidden = tab !== 'cost';
-      if (tab === 'cost') loadRecipeCostTab(r.id, costPane);
+      if (tab === 'cost' && !costPane.dataset.rendered) {
+        fetchRecipeCostPane(r.id, costPane);
+      }
     });
   });
 
@@ -95,12 +130,14 @@ function renderRecipeCard(r) {
 // -------------------------------------------------------------------
 // Recipe Cost tab
 // -------------------------------------------------------------------
-// Module-scoped cache (not global app state) so re-opening a card's Cost
-// tab doesn't refetch until a save happens.
-const recipeCostCache = new Map();
+// Costing data lives in recipeState.costs (recipe id -> last-loaded
+// getRecipeCost() response) - the same state object/lifecycle Recipe
+// ingredients already use (recipeState.recipes), populated by
+// loadRecipeCostsFor() as part of the normal recipe-load flow rather
+// than a separate cache fetched only when the Cost tab is opened.
 
 function fmtMoney(n) {
-  return (n === null || n === undefined || isNaN(n)) ? '—' : Number(n).toFixed(2);
+  return (n === null || n === undefined || isNaN(n)) ? '—' : '€' + Number(n).toFixed(2);
 }
 
 function fmtPercent(fraction) {
@@ -109,23 +146,53 @@ function fmtPercent(fraction) {
 
 const ING_STATUS_LABEL = {
   not_linked: 'Not linked to inventory',
-  missing_cost: 'Cost not configured',
-  not_convertible: "Can't convert — item needs Volume set",
+  missing_cost: 'Cost not set',
+  not_convertible: 'Needs item Volume set',
   invalid_amount: 'Invalid amount'
 };
 
-async function loadRecipeCostTab(recipeId, paneEl, force = false) {
-  if (!force && recipeCostCache.has(recipeId)) {
-    renderRecipeCostPane(paneEl, recipeId, recipeCostCache.get(recipeId));
-    return;
+// Formats the "€25.00 / 70 cl" (or "€25.00 / bottle") cost-basis text
+// from the already-fetched, already-computed fields getRecipeCost
+// returns per ingredient - no extra request, no recomputation.
+function ingredientBasisText(ing) {
+  if (ing.purchaseCost === null || ing.purchaseCost === undefined) return '';
+  const priceStr = fmtMoney(ing.purchaseCost);
+  const recipeUnitNorm = String(ing.unit || '').trim().toLowerCase();
+  const itemUnitNorm = String(ing.itemUnit || '').trim().toLowerCase();
+  if (recipeUnitNorm && itemUnitNorm && recipeUnitNorm === itemUnitNorm) {
+    return `${priceStr} / ${ing.itemUnit}`;
   }
+  if (ing.itemVolume !== null && ing.itemVolume !== undefined && ing.itemVolumeUnit) {
+    return `${priceStr} / ${ing.itemVolume} ${ing.itemVolumeUnit}`;
+  }
+  return '';
+}
+
+// On-demand fallback fetch: only reached when a recipe's cost wasn't
+// already preloaded (recipeState.costs cache miss) - e.g. a recipe
+// created after the initial load, or the background preload hasn't
+// resolved yet. Normal tab switches never reach this.
+async function fetchRecipeCostPane(recipeId, paneEl) {
   paneEl.innerHTML = '<div class="recipe-cost-loading">Loading…</div>';
   try {
     const data = await api.getRecipeCost(recipeId);
-    recipeCostCache.set(recipeId, data);
+    recipeState.costs[recipeId] = data;
     renderRecipeCostPane(paneEl, recipeId, data);
   } catch (e) {
     paneEl.innerHTML = `<div class="recipe-cost-loading">${escapeHtml(e.message || 'Could not load costing.')}</div>`;
+  }
+}
+
+// Re-fetches and re-renders one recipe's costing (used after an action
+// that changes it outside of the Save Costing button, e.g. setting an
+// item's purchase cost inline).
+async function refreshRecipeCostPane(recipeId, paneEl) {
+  try {
+    const data = await api.getRecipeCost(recipeId);
+    recipeState.costs[recipeId] = data;
+    renderRecipeCostPane(paneEl, recipeId, data);
+  } catch (e) {
+    toast(e.message || 'Could not refresh costing.', true);
   }
 }
 
@@ -133,42 +200,45 @@ function renderRecipeCostPane(paneEl, recipeId, data) {
   const editAllowed = can('recipes', 'edit');
   const itemEditAllowed = can('inventory', 'edit');
 
-  let ingHtml = '<div class="recipe-detail"><strong>Ingredient Cost</strong>';
+  let ingHtml = '<div class="recipe-detail recipe-cost-section"><strong>Ingredient Cost</strong><div class="recipe-cost-ing-list">';
   (data.ingredients || []).forEach(ing => {
-    ingHtml += '<div class="recipe-cost-row" data-ing-id="' + escapeHtml(ing.id) + '">';
-    ingHtml += `<span>${escapeHtml(ing.name || 'Unknown')} — ${ing.amount ?? ''} ${escapeHtml(ing.unit || '')}</span>`;
+    const basis = ing.status === 'ok' ? ingredientBasisText(ing) : '';
+    ingHtml += '<div class="recipe-cost-ing-row" data-ing-id="' + escapeHtml(ing.id) + '">';
+    ingHtml += '<div class="recipe-cost-ing-info">';
+    ingHtml += `<span><span class="recipe-cost-ing-name">${escapeHtml(ing.name || 'Unknown')}</span> <span class="recipe-cost-ing-qty">${ing.amount ?? ''} ${escapeHtml(ing.unit || '')}</span></span>`;
+    if (basis) ingHtml += `<span class="recipe-cost-ing-basis">${escapeHtml(basis)}</span>`;
+    ingHtml += '</div>';
     if (ing.status === 'ok') {
-      ingHtml += `<span class="recipe-cost-value">${fmtMoney(ing.cost)}</span>`;
+      ingHtml += `<span class="recipe-cost-ing-value">${fmtMoney(ing.cost)}</span>`;
     } else {
       const label = ING_STATUS_LABEL[ing.status] || 'Unavailable';
-      ingHtml += `<span class="recipe-cost-status">${escapeHtml(label)}</span>`;
-      if (ing.status === 'missing_cost' && ing.inventoryItemId && itemEditAllowed) {
-        ingHtml += `<span class="recipe-cost-set-cost"><input type="number" min="0" step="0.01" class="ing-set-cost-input" placeholder="Set cost"><button type="button" class="btn btn-ghost btn-small ing-set-cost-btn" data-item-id="${escapeHtml(ing.inventoryItemId)}">Save</button></span>`;
-      }
+      ingHtml += `<span class="recipe-cost-badge recipe-cost-badge-warning">${escapeHtml(label)}</span>`;
     }
     ingHtml += '</div>';
+    if (ing.status === 'missing_cost' && ing.inventoryItemId && itemEditAllowed) {
+      ingHtml += `<div class="recipe-cost-set-cost"><div class="field-input-group has-prefix"><span class="field-affix">€</span><input type="number" min="0" step="0.01" class="field-input ing-set-cost-input" placeholder="0.00"></div><button type="button" class="btn btn-ghost btn-small ing-set-cost-btn" data-item-id="${escapeHtml(ing.inventoryItemId)}">Save</button></div>`;
+    }
   });
-  ingHtml += `<div class="recipe-cost-total"><span>Ingredient Cost</span><span>${fmtMoney(data.ingredientCost)}</span></div>`;
-  ingHtml += '</div>';
+  ingHtml += `</div><div class="recipe-cost-total-row"><span>Ingredient Cost</span><span>${fmtMoney(data.ingredientCost)}</span></div></div>`;
 
-  let otherHtml = '<div class="recipe-detail"><strong>Other Costs</strong>';
-  otherHtml += costFieldRow('Wastage', 'wastage', data.wastageCost, editAllowed);
-  otherHtml += costFieldRow('Garnish', 'garnish', data.garnishCost, editAllowed);
-  otherHtml += costFieldRow('Other', 'other', data.otherCost, editAllowed);
-  otherHtml += `<div class="recipe-cost-total"><span>Other Costs</span><span class="recipe-cost-other-total">${fmtMoney(data.otherCostsTotal)}</span></div>`;
-  otherHtml += '</div>';
+  let otherHtml = '<div class="recipe-detail recipe-cost-section"><strong>Other Costs</strong><div class="recipe-cost-field-grid">';
+  otherHtml += costFieldHtml('Wastage', 'wastage', data.wastageCost, editAllowed, '€', 'prefix', 2);
+  otherHtml += costFieldHtml('Garnish', 'garnish', data.garnishCost, editAllowed, '€', 'prefix', 2);
+  otherHtml += costFieldHtml('Other', 'other', data.otherCost, editAllowed, '€', 'prefix', 2);
+  otherHtml += `</div><div class="recipe-cost-total-row"><span>Other Costs</span><span class="recipe-cost-other-total">${fmtMoney(data.otherCostsTotal)}</span></div></div>`;
 
-  const totalHtml = `<div class="recipe-detail recipe-cost-total recipe-cost-total-main"><span>Total Cost</span><span class="recipe-cost-total-value">${fmtMoney(data.totalCost)}</span></div>`;
+  const totalHtml = `<div class="recipe-cost-grand-total"><span class="recipe-cost-grand-total-label">Total Cost</span><span class="recipe-cost-grand-total-value recipe-cost-total-value">${fmtMoney(data.totalCost)}</span></div>`;
 
   const targetMarginPct = data.targetMargin !== null && data.targetMargin !== undefined ? (data.targetMargin * 100) : '';
-  let pricingHtml = '<div class="recipe-detail"><strong>Pricing</strong>';
-  pricingHtml += costFieldRow('Target Margin (%)', 'targetMargin', targetMarginPct, editAllowed, true);
-  pricingHtml += costFieldRow('Selling Price', 'sellingPrice', data.sellingPrice, editAllowed);
-  pricingHtml += costFieldRow('VAT (%)', 'vatPercent', data.vatPercent, editAllowed, true);
-  pricingHtml += `<div class="recipe-cost-row"><span>Customer Price</span><span class="recipe-cost-customer-price">${fmtMoney(data.customerPrice)}</span></div>`;
-  pricingHtml += `<div class="recipe-cost-row"><span>Gross Profit</span><span class="recipe-cost-gross-profit">${fmtMoney(data.grossProfit)}</span></div>`;
-  pricingHtml += `<div class="recipe-cost-row"><span>Gross Margin</span><span class="recipe-cost-gross-margin">${fmtPercent(data.grossMargin)}</span></div>`;
-  pricingHtml += '</div>';
+  let pricingHtml = '<div class="recipe-detail recipe-cost-section"><strong>Pricing</strong><div class="recipe-cost-field-grid">';
+  pricingHtml += costFieldHtml('Target Margin', 'targetMargin', targetMarginPct, editAllowed, '%', 'suffix', 1);
+  pricingHtml += costFieldHtml('Selling Price', 'sellingPrice', data.sellingPrice, editAllowed, '€', 'prefix', 2);
+  pricingHtml += costFieldHtml('VAT', 'vatPercent', data.vatPercent, editAllowed, '%', 'suffix', 1);
+  pricingHtml += '</div><div class="recipe-cost-readout-grid">';
+  pricingHtml += `<div class="recipe-cost-readout"><span class="field-label">Customer Price</span><span class="recipe-cost-customer-price recipe-cost-readout-value">${fmtMoney(data.customerPrice)}</span></div>`;
+  pricingHtml += `<div class="recipe-cost-readout"><span class="field-label">Gross Profit</span><span class="recipe-cost-gross-profit recipe-cost-readout-value">${fmtMoney(data.grossProfit)}</span></div>`;
+  pricingHtml += `<div class="recipe-cost-readout"><span class="field-label">Gross Margin</span><span class="recipe-cost-gross-margin recipe-cost-readout-value">${fmtPercent(data.grossMargin)}</span></div>`;
+  pricingHtml += '</div></div>';
 
   const saveHtml = editAllowed
     ? '<div class="recipe-card-actions"><button type="button" class="btn btn-gold btn-small recipe-cost-save-btn">Save Costing</button></div>'
@@ -176,16 +246,26 @@ function renderRecipeCostPane(paneEl, recipeId, data) {
 
   paneEl.innerHTML = ingHtml + otherHtml + totalHtml + pricingHtml + saveHtml;
   paneEl.dataset.ingredientCost = String(data.ingredientCost || 0);
+  paneEl.dataset.rendered = '1';
 
   wireRecipeCostPaneEvents(paneEl, recipeId);
 }
 
-function costFieldRow(label, key, value, editable, allowZeroPlaceholder) {
+// Builds one labeled field: an editable .field-input with a currency/
+// percent affix when the user can edit it, or a plain read-only value
+// otherwise (matching .field-input:disabled's muted, non-interactive
+// look without being an actual disabled input).
+function costFieldHtml(label, key, value, editable, affix, affixSide, decimals) {
   const displayVal = (value === null || value === undefined || value === '') ? '' : value;
   if (!editable) {
-    return `<div class="recipe-cost-row"><span>${escapeHtml(label)}</span><span>${displayVal === '' ? '—' : Number(displayVal).toFixed(allowZeroPlaceholder ? 1 : 2)}</span></div>`;
+    const shown = displayVal === '' ? '—' : Number(displayVal).toFixed(decimals);
+    const text = displayVal === '' ? '—' : (affixSide === 'prefix' ? affix + shown : shown + affix);
+    return `<div class="recipe-cost-field"><span class="field-label">${escapeHtml(label)}</span><span class="recipe-cost-readout-value">${text}</span></div>`;
   }
-  return `<div class="recipe-cost-row recipe-cost-field-row"><span>${escapeHtml(label)}</span><input type="number" min="0" step="0.01" class="recipe-cost-input" data-key="${key}" value="${displayVal}"></div>`;
+  const affixHtml = `<span class="field-affix">${affix}</span>`;
+  const inputHtml = `<input type="number" min="0" step="0.01" class="field-input recipe-cost-input" data-key="${key}" value="${displayVal}">`;
+  const inner = affixSide === 'prefix' ? affixHtml + inputHtml : inputHtml + affixHtml;
+  return `<div class="recipe-cost-field"><label class="field-label">${escapeHtml(label)}</label><div class="field-input-group has-${affixSide}">${inner}</div></div>`;
 }
 
 function wireRecipeCostPaneEvents(paneEl, recipeId) {
@@ -313,7 +393,7 @@ function wireRecipeCostPaneEvents(paneEl, recipeId) {
           purchaseCost: val
         });
         toast('Item cost saved.');
-        await loadRecipeCostTab(recipeId, paneEl, true);
+        await refreshRecipeCostPane(recipeId, paneEl);
       } catch (e) {
         toast(e.message || 'Failed to save item cost.', true);
       } finally {
@@ -338,7 +418,7 @@ function wireRecipeCostPaneEvents(paneEl, recipeId) {
       saveBtn.textContent = 'Saving…';
       try {
         const data = await api.saveRecipeCosting(recipeId, payload);
-        recipeCostCache.set(recipeId, data);
+        recipeState.costs[recipeId] = data;
         renderRecipeCostPane(paneEl, recipeId, data);
         toast('Costing saved.');
       } catch (e) {
@@ -385,6 +465,7 @@ function delRecipe(r) {
     try {
       await api.deleteRecipe(r.id);
       recipeState.recipes = recipeState.recipes.filter(x => x.id !== r.id);
+      delete recipeState.costs[r.id];
       renderRecipes();
       toast('Recipe deleted.');
     } catch (e) {
@@ -628,6 +709,7 @@ rmf.addEventListener('click', async () => {
 });
 
 window.loadRecipes = loadRecipes;
+window.loadRecipeCostsFor = loadRecipeCostsFor;
 window.renderRecipes = renderRecipes;
 window.renderRecipeCard = renderRecipeCard;
 window.applyRecipeSearch = applyRecipeSearch;
