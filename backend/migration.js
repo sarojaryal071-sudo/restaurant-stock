@@ -853,7 +853,42 @@ async function runMigrations() {
         sort_order = EXCLUDED.sort_order,
         enabled = TRUE;
     `);
-    
+
+    // =================================================================
+    // NEW: Recipe Cost feature
+    // =================================================================
+
+    // Purchase cost of ONE physical stock unit of this item (the same
+    // unit as `items.unit`, e.g. one bottle). Nullable and distinct from
+    // 0: NULL means "not configured yet" (shown as a missing-cost state),
+    // 0 means a legitimate free/zero-cost item. Never defaulted to 0.
+    await tx(`ALTER TABLE items ADD COLUMN IF NOT EXISTS purchase_cost DECIMAL(10,2)`);
+
+    // One-to-one recipe costing record. Only the raw inputs a user can
+    // actually edit are persisted here - Ingredient Cost, Other Costs
+    // total, Total Cost, Gross Profit, Gross Margin and Customer Price
+    // are always derived at read time from recipe_ingredients + items
+    // and are never stored. wastage_cost/garnish_cost/other_cost are
+    // recipe-specific costing figures, unrelated to the existing free-text
+    // recipes.garnish description column. target_margin is stored as a
+    // fraction (0.70 = 70%); vat_percent is stored as the actual percent
+    // number (14 = 14%), per product decision.
+    await tx(`
+      CREATE TABLE IF NOT EXISTS recipe_costs (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        recipe_id UUID NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+        wastage_cost DECIMAL(10,2) NOT NULL DEFAULT 0,
+        garnish_cost DECIMAL(10,2) NOT NULL DEFAULT 0,
+        other_cost DECIMAL(10,2) NOT NULL DEFAULT 0,
+        target_margin DECIMAL(6,4),
+        selling_price DECIMAL(10,2),
+        vat_percent DECIMAL(6,2) NOT NULL DEFAULT 0,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        UNIQUE (recipe_id)
+      );
+    `);
+    await tx(`CREATE INDEX IF NOT EXISTS idx_recipe_costs_recipe ON recipe_costs(recipe_id);`);
+
     console.log('Migrations completed successfully.');
   });
 }

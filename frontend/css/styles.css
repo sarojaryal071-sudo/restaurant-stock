@@ -1187,6 +1187,78 @@ button {
   border-top: 1px solid var(--line);
 }
 
+.recipe-tab-control {
+  margin: var(--space-2) var(--space-4) 0;
+}
+
+.recipe-tab-pane[hidden] {
+  display: none;
+}
+
+.recipe-cost-loading {
+  padding: var(--space-3) var(--space-4);
+  font-size: 0.85rem;
+  color: var(--paper-faint);
+}
+
+.recipe-cost-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 4px 0;
+  font-size: 0.85rem;
+  color: var(--paper-dim);
+}
+
+.recipe-cost-value {
+  color: var(--paper);
+  font-family: var(--font-mono);
+}
+
+.recipe-cost-status {
+  color: var(--danger);
+  font-size: 0.78rem;
+  text-align: right;
+}
+
+.recipe-cost-set-cost {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  flex: 1 1 100%;
+  justify-content: flex-end;
+}
+
+.ing-set-cost-input {
+  width: 80px;
+}
+
+.recipe-cost-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0 4px;
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  font-weight: 700;
+  color: var(--paper);
+}
+
+.recipe-cost-total-main {
+  font-size: 1rem;
+}
+
+.recipe-cost-total-main .recipe-cost-total-value {
+  color: var(--gold-bright);
+}
+
+.recipe-cost-field-row input.recipe-cost-input {
+  width: 90px;
+  text-align: right;
+}
+
 #contextMenu {
   position: fixed;
   z-index: 90;

@@ -364,7 +364,8 @@ async function updateItem(req, res) {
     volumeUnit,
     salesVolume,
     salesVolumeUnit,
-    servingName
+    servingName,
+    purchaseCost
   } = req.body;
 
   if (!itemId) return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Missing itemId' });
@@ -459,14 +460,37 @@ async function updateItem(req, res) {
       return res.json({ ok: false, code: 'VALIDATION_ERROR', error: `Invalid unit: ${newUnit}` });
     }
 
+    // Purchase cost (Recipe Cost feature): price of ONE physical stock
+    // unit of this item (same unit as `unit` above). Preserved if
+    // omitted (same "not sent = unchanged" pattern as containerVolume/
+    // defaultQuantity, since not every caller of updateItem knows about
+    // this field - e.g. the item-edit modal doesn't send it). Explicit
+    // null/'' clears it back to "not configured". 0 is a valid,
+    // distinct value (a free/zero-cost item) and must never be confused
+    // with "not configured" (null) - so it is never defaulted to 0.
+    let newPurchaseCost;
+    const existingPurchaseCost = existing.rows[0].purchase_cost !== null && existing.rows[0].purchase_cost !== undefined
+      ? parseFloat(existing.rows[0].purchase_cost)
+      : null;
+    if (purchaseCost === undefined) {
+      newPurchaseCost = existingPurchaseCost;
+    } else if (purchaseCost === null || purchaseCost === '') {
+      newPurchaseCost = null;
+    } else {
+      newPurchaseCost = parseFloat(purchaseCost);
+      if (isNaN(newPurchaseCost) || newPurchaseCost < 0) {
+        return res.json({ ok: false, code: 'VALIDATION_ERROR', error: 'Purchase cost must be a non-negative number.' });
+      }
+    }
+
     await query(
-      `UPDATE items SET name = $1, category_id = $2, unit = $3, default_quantity = $4, container_volume = $5, volume = $6, volume_unit = $7, sales_volume = $8, sales_volume_unit = $9, serving_name = $10
-       WHERE id = $11 AND restaurant_id = $12`,
-      [newName, newCategoryId, newUnit, newDefaultQty, newContainerVolume, newVolume, newVolumeUnit, newSalesVolume, newSalesVolumeUnit, newServingName, itemId, restaurantId]
+      `UPDATE items SET name = $1, category_id = $2, unit = $3, default_quantity = $4, container_volume = $5, volume = $6, volume_unit = $7, sales_volume = $8, sales_volume_unit = $9, serving_name = $10, purchase_cost = $11
+       WHERE id = $12 AND restaurant_id = $13`,
+      [newName, newCategoryId, newUnit, newDefaultQty, newContainerVolume, newVolume, newVolumeUnit, newSalesVolume, newSalesVolumeUnit, newServingName, newPurchaseCost, itemId, restaurantId]
     );
 
     await writeLog('UPDATE_ITEM', `Item "${newName}" updated`, restaurantId, userId);
-    res.json({ ok: true, item: { id: itemId, name: newName, unit: newUnit, defaultQuantity: newDefaultQty, categoryId: newCategoryId, containerVolume: newContainerVolume, volume: newVolume, volumeUnit: newVolumeUnit, salesVolume: newSalesVolume, salesVolumeUnit: newSalesVolumeUnit, servingName: newServingName } });
+    res.json({ ok: true, item: { id: itemId, name: newName, unit: newUnit, defaultQuantity: newDefaultQty, categoryId: newCategoryId, containerVolume: newContainerVolume, volume: newVolume, volumeUnit: newVolumeUnit, salesVolume: newSalesVolume, salesVolumeUnit: newSalesVolumeUnit, servingName: newServingName, purchaseCost: newPurchaseCost } });
   } catch (err) {
     console.error('updateItem error:', err);
     res.status(500).json({ ok: false, code: 'SERVER_ERROR', error: err.message });

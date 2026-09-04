@@ -7,6 +7,7 @@ const { login, logout, requireAuth, validateSession, getRestaurant } = require('
 const requirePermission = require('./src/middleware/requirePermission');
 const inventory = require('./inventory');
 const recipes = require('./recipes');
+const recipeCost = require('./recipeCost');
 const allocations = require('./allocations');
 const { simulateSale } = require('./src/pos/simulator');
 const settingsController = require('./src/settings/settings.controller');
@@ -231,6 +232,14 @@ app.all('/api', async (req, res, next) => {
       case 'recordSale':
         requireAuth(req, res, () => {
           requirePermission('pos', 'sale')(req, res, () => recipes.recordSale(req, res));
+        });
+        break;
+      case 'getRecipeCost':
+        requireAuth(req, res, () => recipeCost.getRecipeCost(req, res));
+        break;
+      case 'saveRecipeCosting':
+        requireAuth(req, res, () => {
+          requirePermission('recipes', 'edit')(req, res, () => recipeCost.saveRecipeCosting(req, res));
         });
         break;
 

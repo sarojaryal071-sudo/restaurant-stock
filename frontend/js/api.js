@@ -117,6 +117,8 @@ const api = {
   updateRecipe: (recipeId, data) => apiCall('POST', '/', { action: 'updateRecipe', recipeId, ...data }),
   deleteRecipe: (recipeId) => apiCall('POST', '/', { action: 'deleteRecipe', recipeId }),
   recordSale: (recipeId, quantity) => apiCall('POST', '/', { action: 'recordSale', recipeId, quantity }),
+  getRecipeCost: (recipeId) => apiCall('GET', '/?action=getRecipeCost&recipeId=' + encodeURIComponent(recipeId)),
+  saveRecipeCosting: (recipeId, data) => apiCall('POST', '/', { action: 'saveRecipeCosting', recipeId, ...data }),
   getConfig: () => apiCall('GET', '/?action=getConfig'),
   getInventoryConfig: () => apiCall('GET', '/config'),
   exportInventory: () => apiCall('GET', '/?action=exportInventory', null, 'blob'),
